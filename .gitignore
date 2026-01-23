@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+__init__.py
+*.pyc
+*.pyo
+*.pyd
+logs/
+airflow.db
+airflow.cfg.bak
+simple_auth_manager_passwords.json.generated
+
+.vscode/
+.idea/
+
+.DS_Store
+Thumbs.db
