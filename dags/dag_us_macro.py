@@ -476,9 +476,9 @@ with DAG(
         task_id='compute_economic_quadrants',
         application=os.path.join(os.path.dirname(__file__), '..', 'spark_jobs', 'compute_quadrants.py'),
         name="compute_economic_quadrants",
-            application_args=[INDICATORS_PARQUET, QUADRANT_OUTPUT, QUADRANT_CSV],
+        application_args=[INDICATORS_PARQUET, QUADRANT_OUTPUT, QUADRANT_CSV],
         conn_id="spark_local",
-        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-17.0.13.0.11-3.fc39.x86_64'},
+        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64'},
         conf={
             "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
@@ -492,13 +492,13 @@ with DAG(
         task_id='compute_assets_performance',
         application=os.path.join(os.path.dirname(__file__), '..', 'spark_jobs', 'compute_assets_performance.py'),
         name="compute_assets_performance",
+        conn_id="spark_local",
+        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64'},
         application_args=[
             QUADRANT_OUTPUT,
             "{{ ti.xcom_pull(task_ids='format_assets_data') }}",
             ASSETS_PERF_OUTPUT
         ],
-        conn_id="spark_local",
-        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-17.0.13.0.11-3.fc39.x86_64'},
         conf={
             "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
@@ -519,7 +519,7 @@ with DAG(
             BACKTEST_OUTPUT
         ],
         conn_id="spark_local",
-        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-17.0.13.0.11-3.fc39.x86_64'},
+        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64'},
         conf={
             "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
