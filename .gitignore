@@ -1,16 +1,50 @@
-venv/
+# Python
 __pycache__/
-__init__.py
+*.py[cod]
+*$py.class
 *.pyc
 *.pyo
 *.pyd
-logs/
-airflow.db
-airflow.cfg.bak
-simple_auth_manager_passwords.json.generated
+.Python
 
+# Virtual Environment
+airflow_venv/
+venv/
+env/
+ENV/
+
+# Airflow
+airflow.db
+airflow-webserver.pid
+airflow.cfg
+standalone_admin_password.txt
+logs/
+*.log
+webserver_config.py
+
+# Data files - On garde les données mais pas les fichiers temporaires
+
+data/US/backup/
+data/EU/backup
+
+
+# (Vous pouvez commenter cette section si les données sont trop lourdes)
+
+# Spark
+metastore_db/
+spark-warehouse/
+derby.log
+
+# IDE
 .vscode/
 .idea/
-
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
+
+# Elasticsearch
+.env
+
+data/EU/
+spark_jobs/optimize_window.py
