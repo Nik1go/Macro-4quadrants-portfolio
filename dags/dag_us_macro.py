@@ -480,6 +480,7 @@ with DAG(
         conn_id="spark_local",
         env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64'},
         conf={
+	    "spark.master": "local[*]",
             "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.driver.extraJavaOptions": "-Djava.security.manager=allow",
@@ -500,6 +501,7 @@ with DAG(
             ASSETS_PERF_OUTPUT
         ],
         conf={
+	    "spark.master": "local[*]",
             "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.driver.extraJavaOptions": "-Djava.security.manager=allow",
@@ -519,8 +521,9 @@ with DAG(
             BACKTEST_OUTPUT
         ],
         conn_id="spark_local",
-        env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64'},
+	env_vars={'JAVA_HOME': '/usr/lib/jvm/java-17-openjdk-amd64'},
         conf={
+	    "spark.master": "local[*]",	
             "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
             "spark.driver.extraJavaOptions": "-Djava.security.manager=allow",
