@@ -744,15 +744,6 @@ with DAG(
         },
         verbose=False
     )
-    index_to_elasticsearch = BashOperator(
-        task_id='index_to_elasticsearch',
-        bash_command=f"""
-            cd {AIRFLOW_HOME}/index_jobs && \
-            source {AIRFLOW_HOME}_venv/bin/activate && \
-            python indexe.py
-        """,
-    )
-
     ibkr_execute_task = PythonOperator(
         task_id='ibkr_execute',
         python_callable=airflow_execute_strategy,
@@ -771,4 +762,4 @@ with DAG(
     [compute_quadrant_task, format_assets_task] >> compute_assets_performance_task
     [compute_quadrant_task, format_forex_task] >> compute_forex_performance_task
     [compute_assets_performance_task,
-        compute_forex_performance_task] >> backtest_task >> ibkr_execute_task >> index_to_elasticsearch
+        compute_forex_performance_task] >> backtest_task >> ibkr_execute_task
