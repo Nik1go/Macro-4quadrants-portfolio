@@ -4,5 +4,5 @@ set -a
 source .env
 set +a
 echo $JAVA_HOME
-source "$BASE_DIR/venv/bin/activate"
+source "$BASE_DIR/airflow_venv/bin/activate"
 /usr/bin/env python -m airflow standalone

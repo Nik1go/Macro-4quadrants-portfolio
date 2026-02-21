@@ -1,3 +1,5 @@
+from ibkr.config import DRY_RUN_DEFAULT, REBALANCE_THRESHOLD
+from ibkr.executor import airflow_execute_strategy
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
@@ -7,6 +9,21 @@ import os
 import yfinance as yf
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 from fredapi import Fred
+import sys
+import numpy as np
+
+# === Dynamic Paths Configuration ===
+# Uses AIRFLOW_HOME env variable, falls back to ~/airflow
+AIRFLOW_HOME = os.environ.get('AIRFLOW_HOME')
+SPARK_JOBS_DIR = os.path.join(AIRFLOW_HOME + '/../spark_jobs')
+VENV_PYTHON = os.path.join(AIRFLOW_HOME + '/../airflow_venv',
+                           'bin', 'python')  # airflow_venv/bin/python
+
+# Add AIRFLOW_HOME to path for ibkr module imports
+if AIRFLOW_HOME not in sys.path:
+    sys.path.insert(0, AIRFLOW_HOME)
+
+# IBKR Integration
 
 """ Pipeline Airflow : macro_trading_dag.py
 
@@ -34,8 +51,7 @@ Les fichiers sont sauvegardés dans `~/airflow/data` :
 Ce DAG constitue le cœur du projet : il gère toute la chaîne de collecte, traitement et modélisation pour construire un outil d’analyse macro-financière automatisé.
 
 venv activate 
-airflow dags trigger macro_trading_dag
-
+airflow dags trigger dag_us_macro
 """
 
 FRED_API_KEY = 'c4caaa1267e572ae636ff75a2a600f3d'
@@ -46,13 +62,26 @@ FRED_SERIES_MAPPING = {
     '10-2Year_Treasury_Yield_Bond': 'T10Y2Y',
     'CONSUMER_SENTIMENT': 'UMCSENT',
     'TAUX_FED': 'FEDFUNDS',
-    'Real_Gross_Domestic_Product': 'GDPC1',  # A191RP1Q027SBEA POUR LA VAR Q
+    'Real_Gross_Domestic_Product': 'GDPC1',
     'INITIAL_CLAIMS': 'ICSA',
     'VIX': 'VIXCLS',
     'HOUSING_PERMITS': 'PERMIT',
     'IND_PRODUCTION': 'INDPRO',
-    # Daily WTI Spot Price - Leading indicator of inflation
-    'WTI_CRUDE_OIL': 'DCOILWTICO'
+    'WTI_CRUDE_OIL': 'DCOILWTICO',
+    'BREAKEVEN_10Y': 'T10YIE',
+    # Philadelphia Fed Coincident Index - Ground Truth for Growth (ML Target)
+    'USPHCI': 'USPHCI',
+    # Net Liquidity Components
+    'WALCL': 'WALCL',        # Fed Total Assets (Weekly - Wednesday)
+    'WTREGEN': 'WTREGEN',    # Treasury General Account (Daily)
+    'RRPONTSYD': 'RRPONTSYD',  # Reverse Repo Agreements (Daily)
+    # Foreign Central Bank / Interbank Rates
+    # Euro Interbank (Monthly, Active, Starts 1994)
+    'TAUX_ECB': 'IRSTCI01EZM156N',
+    'TAUX_BOJ': 'IRSTCI01JPM156N',       # Japan Interbank
+    'TAUX_BOC': 'IRSTCI01CAM156N',       # Canada Interbank
+    'TAUX_RBA': 'IRSTCI01AUM156N',       # Australia Interbank
+    'TAUX_BCB': 'IRSTCI01BRM156N'        # Brazil Interbank
 }
 
 # Yahoo Finance INDICATORS
@@ -79,8 +108,19 @@ YF_SERIES_MAPPING = {
     "OBLIGATION ENTREPRISE": {'ticker': 'LQD', "series_id": "OBLIGATION"},
     # Inception 1999
     'NASDAQ_100': {'ticker': 'QQQ', 'series_id': 'NASDAQ_100'},
-    # Broad Commodities (Historical proxy for SXRS.DE)
-    'COMMODITIES': {'ticker': 'DBC', 'series_id': 'COMMODITIES'}
+    # Broad Commodities
+    'COMMODITIES': {'ticker': 'DBC', 'series_id': 'COMMODITIES'},
+    # ProShares Short S&P500 (Inception 2006) - Inverse ETF
+    'SHORT_SP500': {'ticker': 'SH', 'series_id': 'SHORT_SP500'}
+}
+
+# Yahoo Finance FOREX pairs (currency rates for forex analysis)
+YF_FOREX_MAPPING = {
+    'USD_EUR': {'ticker': 'USDEUR=X', 'series_id': 'USD_EUR'},
+    'USD_BRL': {'ticker': 'USDBRL=X', 'series_id': 'USD_BRL'},
+    'USD_JPY': {'ticker': 'USDJPY=X', 'series_id': 'USD_JPY'},
+    'USD_CAD': {'ticker': 'USDCAD=X', 'series_id': 'USD_CAD'},
+    'USD_AUD': {'ticker': 'USDAUD=X', 'series_id': 'USD_AUD'},
 }
 
 default_args = {
@@ -94,7 +134,7 @@ default_args = {
 
 def fetch_and_save_data(**kwargs):
     fred = Fred(api_key=FRED_API_KEY)
-    base_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'US')
+    base_dir = os.path.join(AIRFLOW_HOME, 'data', 'US')
 
     # --- Données FRED (Indicators) ---
     for name, series_id in FRED_SERIES_MAPPING.items():
@@ -142,7 +182,9 @@ def fetch_and_save_data(**kwargs):
         else:
             start_date = datetime(2005, 1, 1)
 
-        end_date = datetime.today() - timedelta(days=1)
+        # FIX: enable fetching today's data (for intraday/live usage)
+        # yfinance end_date is exclusive, so we need tomorrow to include today
+        end_date = datetime.today() + timedelta(days=1)
         start_date = min(start_date, end_date)
 
         if start_date.date() > end_date.date():
@@ -150,8 +192,13 @@ def fetch_and_save_data(**kwargs):
                   name} ({meta['series_id']})")
             continue
 
-        data = yf.download(meta['ticker'], start=start_date,
-                           end=end_date, progress=False, auto_adjust=True)
+        try:
+            data = yf.download(meta['ticker'], start=start_date,
+                               end=end_date, progress=False, auto_adjust=True)
+        except Exception as e:
+            print(f"Erreur téléchargement {name} : {
+                  e} (Probablement pas de données weekend/férié)")
+            continue
 
         if not data.empty:
             df = data[['Close']].reset_index()
@@ -186,7 +233,8 @@ def fetch_and_save_data(**kwargs):
         else:
             start_date = datetime(2005, 1, 1)
 
-        end_date = datetime.today() - timedelta(days=1)
+        # FIX: enable fetching today's data
+        end_date = datetime.today() + timedelta(days=1)
         start_date = min(start_date, end_date)
 
         if start_date.date() > end_date.date():
@@ -194,8 +242,13 @@ def fetch_and_save_data(**kwargs):
                   name} ({meta['series_id']})")
             continue
 
-        data = yf.download(meta['ticker'], start=start_date,
-                           end=end_date, progress=False, auto_adjust=True)
+        try:
+            data = yf.download(meta['ticker'], start=start_date,
+                               end=end_date, progress=False, auto_adjust=True)
+        except Exception as e:
+            print(f"Erreur téléchargement {name} : {
+                  e} (Probablement pas de données weekend/férié)")
+            continue
 
         if not data.empty:
             df = data[['Close']].reset_index()
@@ -215,6 +268,56 @@ def fetch_and_save_data(**kwargs):
                   name} ({meta['series_id']})")
         else:
             print(f"Aucune nouvelle donnée actif pour {
+                  name} ({meta['series_id']})")
+
+    # --- Données Yahoo Finance FOREX ---
+    for name, meta in YF_FOREX_MAPPING.items():
+        backup_path = os.path.join(base_dir, 'backup', 'forex', f"{name}.csv")
+        os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+
+        existing_data = pd.DataFrame()
+        if os.path.exists(backup_path):
+            existing_data = pd.read_csv(backup_path, parse_dates=['date'])
+            last_date = pd.to_datetime(existing_data['date'].max())
+            start_date = last_date + pd.Timedelta(days=1)
+        else:
+            start_date = datetime(2005, 1, 1)
+
+        # FIX: enable fetching today's data
+        end_date = datetime.today() + timedelta(days=1)
+        start_date = min(start_date, end_date)
+
+        if start_date.date() > end_date.date():
+            print(f"Pas de nouvelles données à récupérer pour {
+                  name} ({meta['series_id']})")
+            continue
+
+        try:
+            data = yf.download(meta['ticker'], start=start_date,
+                               end=end_date, progress=False, auto_adjust=True)
+        except Exception as e:
+            print(f"Erreur téléchargement {name} : {
+                  e} (Probablement pas de données weekend/férié)")
+            continue
+
+        if not data.empty:
+            df = data[['Close']].reset_index()
+            df.columns = ['date', 'value']
+            df['date'] = pd.to_datetime(df['date']).dt.date
+
+            if not existing_data.empty:
+                existing_data['date'] = pd.to_datetime(
+                    existing_data['date']).dt.date
+                combined = pd.concat([existing_data, df])
+                combined = combined.drop_duplicates('date').sort_values('date')
+            else:
+                combined = df
+
+            combined.to_csv(backup_path, index=False)
+            print(f"Données forex mises à jour pour {
+                  name} ({meta['series_id']})")
+        else:
+            print(f"Aucune nouvelle donnée forex pour {
                   name} ({meta['series_id']})")
 
 
@@ -242,7 +345,16 @@ def prepare_indicators_data(base_dir):
         'VIX',
         'HOUSING_PERMITS',
         'IND_PRODUCTION',
-        'WTI_CRUDE_OIL'
+        'WTI_CRUDE_OIL',
+        'BREAKEVEN_10Y',
+        'WALCL',      # Net Liquidity component (weekly)
+        'WTREGEN',    # Net Liquidity component (daily)
+        'RRPONTSYD',   # Net Liquidity component (daily)
+        'TAUX_ECB',
+        'TAUX_BOJ',
+        'TAUX_BOC',
+        'TAUX_RBA',
+        'TAUX_BCB'
     ]
 
     yf_indicators = list(YF_INDICATORS_MAPPING.keys()
@@ -254,7 +366,6 @@ def prepare_indicators_data(base_dir):
 
     for indicator in fred_indicators:
         file_path = os.path.join(backup_dir, f"{indicator}.csv")
-        print(file_path)
         if os.path.exists(file_path):
             df = pd.read_csv(file_path, parse_dates=['date'])
             df = df.rename(columns={'value': indicator})
@@ -306,6 +417,32 @@ def prepare_indicators_data(base_dir):
     else:
         raise ValueError("No indicator data found!")
 
+    # ========================================
+    # CALCULATE NET LIQUIDITY
+    # ========================================
+    # Net Liquidity = WALCL - (WTREGEN + RRPONTSYD)
+    # WALCL is weekly (Wed), TGA/RRP are daily → need to resample WALCL
+
+    if all(col in combined_df.columns for col in ['WALCL', 'WTREGEN', 'RRPONTSYD']):
+        print("\n📊 Calculating Net Liquidity...")
+
+        # WALCL is weekly - forward fill to propagate Wednesday values
+        combined_df['WALCL'] = combined_df['WALCL'].ffill()
+        combined_df['RRPONTSYD'] = combined_df['RRPONTSYD'].replace(np.nan, 0)
+        # Calculate Net Liquidity
+        combined_df['NET_LIQUIDITY'] = (
+            combined_df['WALCL'] -
+            (combined_df['WTREGEN'] + combined_df['RRPONTSYD'])
+        )
+
+        # Forward fill any gaps
+        combined_df['NET_LIQUIDITY'] = combined_df['NET_LIQUIDITY'].ffill()
+
+        print(f"   ✅ Net Liquidity calculated")
+        print(f"   Latest: ${combined_df['NET_LIQUIDITY'].iloc[-1]:,.0f}B")
+    else:
+        print("\n⚠️ Missing Net Liquidity components - skipping calculation")
+
     # Final Clean Up - ffill for holidays, dropna for warm-up period
     combined_df = combined_df.ffill()  # Handle any remaining holidays
     # Remove initialization period (first rows with NaN)
@@ -314,7 +451,7 @@ def prepare_indicators_data(base_dir):
     combined_df = combined_df.reset_index()
     combined_df = combined_df.sort_values('date')
 
-    print(f"Final combined indicators: {combined_df.shape[0]} dense rows")
+    print(f"\nFinal combined indicators: {combined_df.shape[0]} dense rows")
     print(f"   Date range: {combined_df['date'].min()} → {
           combined_df['date'].max()}")
     print(f"   Colonnes: {combined_df.columns.tolist()}")
@@ -352,6 +489,33 @@ def prepare_assets_data(base_dir):
     output_path = os.path.join(output_dir, 'combined_assets.csv')
     combined_df.to_csv(output_path, index=False)
     print(f"Fichier combiné des actifs créé: {output_path}")
+    return output_path
+
+
+def prepare_forex_data(base_dir):
+    """Combine les paires forex en un seul DataFrame"""
+    backup_dir = os.path.join(base_dir, 'backup', 'forex')
+    forex_pairs = list(YF_FOREX_MAPPING.keys())
+
+    combined_df = pd.DataFrame()
+
+    for pair in forex_pairs:
+        file_path = os.path.join(backup_dir, f"{pair}.csv")
+        if os.path.exists(file_path):
+            df = pd.read_csv(file_path, parse_dates=['date'])
+            pair_name = YF_FOREX_MAPPING[pair]['series_id']
+            df = df.rename(columns={'value': pair_name})
+
+            if combined_df.empty:
+                combined_df = df
+            else:
+                combined_df = pd.merge(combined_df, df, on='date', how='outer')
+
+    output_dir = os.path.join(base_dir, 'output_dag')
+    os.makedirs(output_dir, exist_ok=True)
+    output_path = os.path.join(output_dir, 'combined_forex.csv')
+    combined_df.to_csv(output_path, index=False)
+    print(f"Fichier combiné des forex créé: {output_path}")
     return output_path
 
 
@@ -416,7 +580,7 @@ def format_and_clean_data_daily(base_dir, input_path, data_type):
 
 
 # === Configuration du DAG ===
-base_dir = os.path.join(os.path.dirname(__file__), '..', 'data', 'US')
+base_dir = os.path.join(AIRFLOW_HOME, 'data', 'US')
 
 with DAG(
     dag_id='dag_us_macro',
@@ -444,6 +608,12 @@ with DAG(
         op_kwargs={'base_dir': base_dir}
     )
 
+    prepare_forex_task = PythonOperator(
+        task_id='prepare_forex_data',
+        python_callable=prepare_forex_data,
+        op_kwargs={'base_dir': base_dir}
+    )
+
     format_indicators_task = PythonOperator(
         task_id='format_indicators_data',
         python_callable=format_and_clean_data,
@@ -464,56 +634,101 @@ with DAG(
         }
     )
 
+    format_forex_task = PythonOperator(
+        task_id='format_forex_data',
+        python_callable=format_and_clean_data_daily,
+        op_kwargs={
+            'base_dir': base_dir,
+            'input_path': "{{ ti.xcom_pull(task_ids='prepare_forex_data') }}",
+            'data_type': 'Forex'
+        }
+    )
+
     OUTPUT_DIR = os.path.join(base_dir, "output_dag")
     ASSETS_PERF_OUTPUT = os.path.join(
         OUTPUT_DIR, "assets_performance_by_quadrant.parquet")
-    INDICATORS_PARQUET = os.path.join(OUTPUT_DIR, "Indicators.parquet")
+    FOREX_PERF_OUTPUT = os.path.join(
+        OUTPUT_DIR, "forex_performance_by_quadrant.parquet")
+    ASSETS_PERF_TARGET_OUTPUT = os.path.join(
+        OUTPUT_DIR, "assets_performance_by_target_quadrant.parquet")
+    FOREX_PERF_TARGET_OUTPUT = os.path.join(
+        OUTPUT_DIR, "forex_performance_by_target_quadrant.parquet")
+    INDICATORS_PARQUET = os.path.join(OUTPUT_DIR, "combined_indicators.csv")
+    ML_PIPELINE_PKL = os.path.join(OUTPUT_DIR, "ml_pipeline.pkl")
     QUADRANT_OUTPUT = os.path.join(OUTPUT_DIR, "quadrants.parquet")
     QUADRANT_CSV = os.path.join(OUTPUT_DIR, "quadrants.csv")
     BACKTEST_OUTPUT = os.path.join(base_dir, "backtest_results")
 
-    compute_quadrant_task = SparkSubmitOperator(
-        task_id='compute_economic_quadrants',
-        application=os.path.join(os.path.dirname(
-            __file__), '..', 'spark_jobs', 'compute_quadrants.py'),
-        name="compute_economic_quadrants",
-        application_args=[INDICATORS_PARQUET, QUADRANT_OUTPUT, QUADRANT_CSV],
+    train_model_task = SparkSubmitOperator(
+        task_id='train_ml_model',
+        application=os.path.join(SPARK_JOBS_DIR, 'train_model.py'),
+        name="train_ml_model",
+        application_args=[INDICATORS_PARQUET, OUTPUT_DIR],
         conn_id="spark_local",
         conf={
-            "spark.master": "local[*]",
-            "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
-            "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
-            "spark.driver.extraJavaOptions": "-Djava.security.manager=allow",
-            "spark.sql.ansi.enabled": "false"
+            "spark.pyspark.python": VENV_PYTHON,
+            "spark.pyspark.driver.python": VENV_PYTHON
+        },
+        verbose=False
+    )
+
+    compute_quadrant_task = SparkSubmitOperator(
+        task_id='compute_economic_quadrants',
+        application=os.path.join(SPARK_JOBS_DIR, 'compute_quadrants.py'),
+        name="compute_economic_quadrants",
+        application_args=[INDICATORS_PARQUET,
+                          ML_PIPELINE_PKL, QUADRANT_OUTPUT, QUADRANT_CSV],
+        conn_id="spark_local",
+        conf={
+            "spark.pyspark.python": VENV_PYTHON,
+            "spark.pyspark.driver.python": VENV_PYTHON
         },
         verbose=False
     )
 
     compute_assets_performance_task = SparkSubmitOperator(
         task_id='compute_assets_performance',
-        application=os.path.join(os.path.dirname(
-            __file__), '..', 'spark_jobs', 'compute_assets_performance.py'),
+        application=os.path.join(
+            SPARK_JOBS_DIR, 'compute_assets_performance.py'),
         name="compute_assets_performance",
-        conn_id="spark_local",
         application_args=[
             QUADRANT_OUTPUT,
             "{{ ti.xcom_pull(task_ids='format_assets_data') }}",
-            ASSETS_PERF_OUTPUT
+            ASSETS_PERF_OUTPUT,
+            ASSETS_PERF_TARGET_OUTPUT,
+            INDICATORS_PARQUET
         ],
+        conn_id="spark_local",
         conf={
-            "spark.master": "local[*]",
-            "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
-            "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
-            "spark.driver.extraJavaOptions": "-Djava.security.manager=allow",
-            "spark.sql.ansi.enabled": "false"
+            "spark.pyspark.python": VENV_PYTHON,
+            "spark.pyspark.driver.python": VENV_PYTHON
+        },
+        verbose=False
+    )
+
+    compute_forex_performance_task = SparkSubmitOperator(
+        task_id='compute_forex_performance',
+        application=os.path.join(
+            SPARK_JOBS_DIR, 'compute_assets_performance.py'),
+        name="compute_forex_performance",
+        application_args=[
+            QUADRANT_OUTPUT,
+            "{{ ti.xcom_pull(task_ids='format_forex_data') }}",
+            FOREX_PERF_OUTPUT,
+            FOREX_PERF_TARGET_OUTPUT,
+            INDICATORS_PARQUET
+        ],
+        conn_id="spark_local",
+        conf={
+            "spark.pyspark.python": VENV_PYTHON,
+            "spark.pyspark.driver.python": VENV_PYTHON
         },
         verbose=False
     )
 
     backtest_task = SparkSubmitOperator(
         task_id='backtest_strategy',
-        application=os.path.join(os.path.dirname(
-            __file__), '..', 'spark_jobs', 'backtest_strategy.py'),
+        application=os.path.join(SPARK_JOBS_DIR, 'backtest_strategy.py'),
         name="backtest_strategy",
         application_args=[
             QUADRANT_CSV,
@@ -523,25 +738,36 @@ with DAG(
         ],
         conn_id="spark_local",
         conf={
-            "spark.master": "local[*]",
-            "spark.pyspark.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
-            "spark.pyspark.driver.python": os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'python'),
-            "spark.driver.extraJavaOptions": "-Djava.security.manager=allow",
-            "spark.sql.ansi.enabled": "false"
+            "spark.pyspark.python": VENV_PYTHON,
+            "spark.pyspark.driver.python": VENV_PYTHON
         },
         verbose=False
     )
     index_to_elasticsearch = BashOperator(
         task_id='index_to_elasticsearch',
         bash_command=f"""
-            cd {os.path.join(os.path.dirname(__file__), '..', 'index_jobs')} && \
-            source {os.path.join(os.path.dirname(__file__), '..', 'venv', 'bin', 'activate')} && \
+            cd {AIRFLOW_HOME}/index_jobs && \
+            source {AIRFLOW_HOME}_venv/bin/activate && \
             python indexe.py
         """,
     )
 
-    fetch_task >> [prepare_indicators_task, prepare_assets_task]
-    prepare_indicators_task >> format_indicators_task >> compute_quadrant_task
+    ibkr_execute_task = PythonOperator(
+        task_id='ibkr_execute',
+        python_callable=airflow_execute_strategy,
+        op_kwargs={
+            'backtest_output_dir': BACKTEST_OUTPUT,
+            'dry_run': DRY_RUN_DEFAULT,
+            'rebalance_threshold': REBALANCE_THRESHOLD
+        }
+    )
+
+    fetch_task >> [prepare_indicators_task,
+                   prepare_assets_task, prepare_forex_task]
+    prepare_indicators_task >> format_indicators_task >> train_model_task >> compute_quadrant_task
     prepare_assets_task >> format_assets_task
+    prepare_forex_task >> format_forex_task
     [compute_quadrant_task, format_assets_task] >> compute_assets_performance_task
-    compute_assets_performance_task >> backtest_task >> index_to_elasticsearch
+    [compute_quadrant_task, format_forex_task] >> compute_forex_performance_task
+    [compute_assets_performance_task,
+        compute_forex_performance_task] >> backtest_task >> ibkr_execute_task >> index_to_elasticsearch
