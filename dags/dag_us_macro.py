@@ -15,13 +15,14 @@ import numpy as np
 # === Dynamic Paths Configuration ===
 # Uses AIRFLOW_HOME env variable, falls back to ~/airflow
 AIRFLOW_HOME = os.environ.get('AIRFLOW_HOME')
-SPARK_JOBS_DIR = os.path.join(AIRFLOW_HOME + '/../spark_jobs')
-VENV_PYTHON = os.path.join(AIRFLOW_HOME + '/../airflow_venv',
-                           'bin', 'python')  # airflow_venv/bin/python
+# Project root is one level above AIRFLOW_HOME (which is <project>/airflow)
+PROJECT_ROOT = os.path.abspath(os.path.join(AIRFLOW_HOME, '..'))
+SPARK_JOBS_DIR = os.path.join(PROJECT_ROOT, 'spark_jobs')
+VENV_PYTHON = os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'python')
 
-# Add AIRFLOW_HOME to path for ibkr module imports
-if AIRFLOW_HOME not in sys.path:
-    sys.path.insert(0, AIRFLOW_HOME)
+# Add PROJECT_ROOT to path for ibkr module imports
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 # IBKR Integration
 
@@ -134,7 +135,7 @@ default_args = {
 
 def fetch_and_save_data(**kwargs):
     fred = Fred(api_key=FRED_API_KEY)
-    base_dir = os.path.join(AIRFLOW_HOME, 'data', 'US')
+    base_dir = os.path.join(PROJECT_ROOT, 'data', 'US')
 
     # --- Données FRED (Indicators) ---
     for name, series_id in FRED_SERIES_MAPPING.items():
@@ -580,7 +581,7 @@ def format_and_clean_data_daily(base_dir, input_path, data_type):
 
 
 # === Configuration du DAG ===
-base_dir = os.path.join(AIRFLOW_HOME, 'data', 'US')
+base_dir = os.path.join(PROJECT_ROOT, 'data', 'US')
 
 with DAG(
     dag_id='dag_us_macro',
