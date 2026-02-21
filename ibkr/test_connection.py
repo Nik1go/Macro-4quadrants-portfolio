@@ -9,8 +9,11 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 
 # Configuration - WSL to Windows connection
-IBKR_HOST = '172.22.112.1'  # Windows vEthernet IP (destination)
-IBKR_PORT = 7497            # Paper trading port
+from ibkr.config import HOST, PAPER_PORT
+
+# Configuration
+IBKR_HOST = HOST
+IBKR_PORT = PAPER_PORT           # Paper trading port
 CLIENT_ID = 2
 TIMEOUT = 30                # Longer timeout for handshake
 

@@ -5,9 +5,9 @@ Configuration settings for Interactive Brokers API connection.
 """
 
 # ===== CONNECTION SETTINGS =====
-HOST = "172.22.112.1"       # Windows vEthernet IP (WSL → Windows)
-PAPER_PORT = 7497           # Paper trading port (TWS default)
-LIVE_PORT = 7496            # Live trading port (TWS default)
+HOST = "127.0.0.1"          # Localhost (IB Gateway runs on the same VPS via Docker)
+PAPER_PORT = 4002           # Paper trading port (IB Gateway default)
+LIVE_PORT = 4001            # Live trading port (IB Gateway default)
 CLIENT_ID = 1               # Unique client ID for this application
 CONNECTION_TIMEOUT = 30     # Timeout in seconds for API connection
 

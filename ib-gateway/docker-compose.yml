@@ -1,0 +1,9 @@
+version: '3'
+services:
+  ib-gateway:
+    image: ghcr.io/gnzsnz/ib-gateway:latest
+    restart: always
+    env_file:
+      - .env
+    network_mode: host
+
