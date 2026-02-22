@@ -14,3 +14,5 @@ simple_auth_manager_passwords.json.generated
 
 .DS_Store
 Thumbs.db
+
+ib-gateway/

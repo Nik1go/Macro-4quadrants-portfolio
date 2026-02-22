@@ -194,3 +194,89 @@ def render(data):
         recent = data['quadrants'].tail(20)[['date', 'assigned_quadrant', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']]
         recent['Regime'] = recent['assigned_quadrant'].map(QUADRANT_NAMES)
         st.dataframe(recent[['date', 'Regime', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']], use_container_width=True)
+
+    st.divider()
+
+    # === IBKR Paper Trading Dashboard ===
+    st.header("📈 Compte IBKR Paper Trading")
+    render_ibkr_dashboard(data)
+
+def render_ibkr_dashboard(data):
+    # Attempt to import PortfolioManager
+    try:
+        from ibkr.portfolio import PortfolioManager
+        has_ibkr_module = True
+    except ImportError:
+        has_ibkr_module = False
+        
+    c1, c2 = st.columns([1, 1])
+    
+    with c1:
+        st.subheader("Positions Actuelles (Live ou Dernier Log)")
+        positions_df = None
+        portfolio_val = None
+        
+        if has_ibkr_module:
+            try:
+                # Use a specific client ID for Streamlit to avoid conflicts
+                pm = PortfolioManager(client_id=123, timeout=3)
+                if pm.connect():
+                    positions = pm.get_positions()
+                    portfolio_val = pm.get_portfolio_value()
+                    cash = pm.get_cash_balance()
+                    pm.disconnect()
+                    
+                    if positions:
+                        pos_list = []
+                        for asset, info in positions.items():
+                            pos_list.append({
+                                'Asset': asset,
+                                'Ticker': info['symbol'],
+                                'Shares': info['shares'],
+                                'Market Value ($)': round(info['market_value'], 2),
+                                'Unrealized PNL ($)': round(info.get('unrealized_pnl', 0), 2)
+                            })
+                        positions_df = pd.DataFrame(pos_list)
+                    st.success("✅ Connecté à IB Gateway (Live Data)")
+                else:
+                    st.warning("⚠️ Impossible de se connecter à IB Gateway. Affichage des données du dernier log.")
+            except Exception as e:
+                st.error(f"Erreur de connexion IBKR: {e}")
+                
+        # Fallback to logs if live fails
+        if portfolio_val is None and 'ibkr_nav' in data and not data['ibkr_nav'].empty:
+            portfolio_val = data['ibkr_nav'].iloc[-1]['nav']
+            
+        if portfolio_val is not None:
+            st.metric("Portfolio Value (Net Liquidation)", f"${portfolio_val:,.2f}")
+            
+        if positions_df is not None and not positions_df.empty:
+            st.dataframe(positions_df, use_container_width=True)
+        else:
+            st.info("Aucune position trouvée en direct.")
+            
+    with c2:
+        st.subheader("Performance Historique")
+        if 'ibkr_nav' in data and not data['ibkr_nav'].empty:
+            nav_df = data['ibkr_nav'].copy()
+            nav_df.set_index('date', inplace=True)
+            
+            # Plot NAV
+            fig_nav = px.line(nav_df, y='nav', title="Evolution du Portefeuille (Logs)", markers=True)
+            fig_nav.update_layout(yaxis_title="Valeur ($)", xaxis_title="Date", height=300)
+            st.plotly_chart(fig_nav, use_container_width=True)
+            
+            # Simple stats
+            first_val = nav_df['nav'].iloc[0]
+            last_val = nav_df['nav'].iloc[-1]
+            total_return = (last_val / first_val - 1) * 100 if first_val > 0 else 0
+            
+            st.metric("Total Return (depuis 1er log)", f"{total_return:.2f}%")
+        else:
+            st.info("Pas d'historique de NAV (Logs d'exécution introuvables)")
+
+    st.subheader("Dernières Transactions (Logs)")
+    if 'ibkr_orders' in data and not data['ibkr_orders'].empty:
+        st.dataframe(data['ibkr_orders'].sort_values('Date', ascending=False).head(20), use_container_width=True)
+    else:
+        st.info("Aucune transaction trouvée dans les logs.")

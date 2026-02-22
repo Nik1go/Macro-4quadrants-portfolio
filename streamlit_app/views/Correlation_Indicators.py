@@ -11,7 +11,9 @@ import os
 
 @st.cache_data
 def load_indicators():
-    path = os.path.expanduser("~/airflow/data/US/output_dag/combined_indicators.csv")
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(current_dir))
+    path = os.path.join(project_root, "data", "US", "output_dag", "combined_indicators.csv")
     try:
         df = pd.read_csv(path, parse_dates=['date'])
         return df.sort_values('date')
@@ -71,21 +73,6 @@ def render(data):
         
         # Select only numeric columns for correlation
         numeric_df = indicators.select_dtypes(include=['float64', 'int64'])
-        
-        # --- 1. NET LIQUIDITY (Existing) ---
-        st.subheader("Net Liquidity (Fed)")
-        if 'NET_LIQUIDITY' in indicators.columns:
-            df_nl = indicators[['date', 'NET_LIQUIDITY']].dropna()
-            fig_nl = go.Figure()
-            fig_nl.add_trace(go.Scatter(
-                x=df_nl['date'], y=df_nl['NET_LIQUIDITY'],
-                mode='lines', name='Net Liquidity',
-                line=dict(color='cyan', width=2)
-            ))
-            fig_nl.update_layout(height=400, xaxis_title="Date", yaxis_title="Net Liquidity ($)", hovermode='x unified')
-            st.plotly_chart(fig_nl, use_container_width=True)
-        
-        st.divider()
         
         # --- 2. CORRELATION MATRIX ---
         st.subheader("Global Correlation Matrix")

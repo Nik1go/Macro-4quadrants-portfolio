@@ -7,6 +7,8 @@ import streamlit as st
 import pandas as pd
 import os
 import json
+import glob
+from datetime import datetime
 
 
 # --- CONSTANTS ---
@@ -24,7 +26,10 @@ ALLOCATIONS = {
 # --- DATA LOADING ---
 @st.cache_data
 def load_data():
-    base_dir = os.path.expanduser("~/airflow/data/US")
+    # Resolve paths reliably regardless of where Streamlit is run from
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(current_dir)
+    base_dir = os.path.join(project_root, "data", "US")
     data = {}
     
     try:
@@ -72,6 +77,57 @@ def load_data():
             data['ml_metrics'] = json.load(f)
     except:
         data['ml_metrics'] = None
+    
+    # --- Load IBKR execution logs ---
+    nav_history = []
+    orders_history = []
+    prev_quadrant = None
+    
+    try:
+        log_files = sorted(glob.glob(f"{base_dir}/execution_logs/*.json"))
+        for log_file in log_files:
+            try:
+                with open(log_file, 'r') as f:
+                    log_data = json.load(f)
+                
+                ts = pd.to_datetime(log_data.get('timestamp'))
+                p_val = log_data.get('portfolio_value')
+                current_quadrant = log_data.get('quadrant')
+                
+                # NAV
+                if p_val is not None:
+                    nav_history.append({'date': ts, 'nav': p_val, 'quadrant': current_quadrant})
+                
+                # Orders
+                if log_data.get('success') and log_data.get('orders'):
+                    reason = "Changement Quadrant" if prev_quadrant and prev_quadrant != current_quadrant else "Rebalancing"
+                    for o in log_data['orders']:
+                        orders_history.append({
+                            'Date': ts,
+                            'Action': o.get('action'),
+                            'Ticker': o.get('symbol'),
+                            'Asset': o.get('asset'),
+                            'Shares': o.get('shares'),
+                            'Estimated Value ($)': round(o.get('estimated_value', 0), 2),
+                            'Reason': reason
+                        })
+                
+                if current_quadrant:
+                    prev_quadrant = current_quadrant
+            except Exception as e:
+                pass
+                
+        data['ibkr_nav'] = pd.DataFrame(nav_history) if nav_history else pd.DataFrame(columns=['date', 'nav', 'quadrant'])
+        data['ibkr_orders'] = pd.DataFrame(orders_history) if orders_history else pd.DataFrame(columns=['Date', 'Action', 'Ticker', 'Asset', 'Shares', 'Estimated Value ($)', 'Reason'])
+        
+        # Keep only the last NAV per day for cleaner chart
+        if not data['ibkr_nav'].empty:
+            data['ibkr_nav']['day'] = data['ibkr_nav']['date'].dt.date
+            data['ibkr_nav'] = data['ibkr_nav'].drop_duplicates(subset=['day'], keep='last').drop(columns=['day'])
+            
+    except Exception as e:
+        data['ibkr_nav'] = pd.DataFrame(columns=['date', 'nav', 'quadrant'])
+        data['ibkr_orders'] = pd.DataFrame(columns=['Date', 'Action', 'Ticker', 'Asset', 'Shares', 'Estimated Value ($)', 'Reason'])
     
     return data
 

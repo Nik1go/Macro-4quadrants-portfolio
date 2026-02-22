@@ -245,7 +245,11 @@ def execute_strategy(
     print(f"{'='*50}")
     print(f"Timestamp: {result['timestamp']}")
     print(f"Quadrant: Q{result['quadrant']}")
-    print(f"Portfolio Value: ${result.get('portfolio_value', 0):,.2f}")
+    port_val = result.get('portfolio_value')
+    if port_val is not None:
+        print(f"Portfolio Value: ${port_val:,.2f}")
+    else:
+        print(f"Portfolio Value: N/A")
     print(f"Dry Run: {dry_run}")
     print(f"Orders: {len(result['orders'])}")
     print(f"Success: {result['success']}")
