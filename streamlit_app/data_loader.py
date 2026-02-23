@@ -186,6 +186,23 @@ BLOOMBERG_CSS = """
         border-color: #3d4263 !important;
     }
     
+    /* Expander styling */
+    div[data-testid="stExpander"] details {
+        background-color: #0a0e27 !important;
+        border: 1px solid #3d4263 !important;
+        border-radius: 8px !important;
+    }
+    div[data-testid="stExpander"] summary {
+        background-color: #1a1d35 !important;
+        color: #00d4ff !important;
+    }
+    div[data-testid="stExpander"] summary:hover {
+        background-color: #2a2d45 !important;
+    }
+    div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+        background-color: #0a0e27 !important;
+    }
+    
     /* Sidebar collapse button  */
     [data-testid="stSidebarCollapseButton"] button {
         width: 40px !important;

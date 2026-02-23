@@ -215,11 +215,9 @@ def fetch_and_save_data(**kwargs):
                 combined = df
 
             combined.to_csv(backup_path, index=False)
-            print(f"Données indicateur mises à jour pour {
-                  name} ({meta['series_id']})")
+            print(f"Données indicateur mises à jour pour {name} ({meta['series_id']})")
         else:
-            print(f"Aucune nouvelle donnée indicateur pour {
-                  name} ({meta['series_id']})")
+            print(f"Aucune nouvelle donnée indicateur pour {name} ({meta['series_id']})")
 
     # --- Données Yahoo Finance ASSETS (tradable securities) ---
     for name, meta in YF_SERIES_MAPPING.items():
@@ -265,11 +263,9 @@ def fetch_and_save_data(**kwargs):
                 combined = df
 
             combined.to_csv(backup_path, index=False)
-            print(f"Données actif mises à jour pour {
-                  name} ({meta['series_id']})")
+            print(f"Données actif mises à jour pour {name} ({meta['series_id']})")
         else:
-            print(f"Aucune nouvelle donnée actif pour {
-                  name} ({meta['series_id']})")
+            print(f"Aucune nouvelle donnée actif pour {name} ({meta['series_id']})")
 
     # --- Données Yahoo Finance FOREX ---
     for name, meta in YF_FOREX_MAPPING.items():
@@ -315,11 +311,9 @@ def fetch_and_save_data(**kwargs):
                 combined = df
 
             combined.to_csv(backup_path, index=False)
-            print(f"Données forex mises à jour pour {
-                  name} ({meta['series_id']})")
+            print(f"Données forex mises à jour pour {name} ({meta['series_id']})")
         else:
-            print(f"Aucune nouvelle donnée forex pour {
-                  name} ({meta['series_id']})")
+            print(f"Aucune nouvelle donnée forex pour {name} ({meta['series_id']})")
 
 
 def prepare_indicators_data(base_dir):
@@ -453,8 +447,7 @@ def prepare_indicators_data(base_dir):
     combined_df = combined_df.sort_values('date')
 
     print(f"\nFinal combined indicators: {combined_df.shape[0]} dense rows")
-    print(f"   Date range: {combined_df['date'].min()} → {
-          combined_df['date'].max()}")
+    print(f"   Date range: {combined_df['date'].min()} → {combined_df['date'].max()}")
     print(f"   Colonnes: {combined_df.columns.tolist()}")
 
     output_dir = os.path.join(base_dir, 'output_dag')
@@ -549,8 +542,7 @@ def format_and_clean_data(base_dir, input_path, data_type):
     df.to_parquet(output_path, index=False)
     df.to_csv(output_csv, index=False)
 
-    print(f"Données {data_type} (Mode DAILY Continu) sauvegardées: {
-          output_path}")
+    print(f"Données {data_type} (Mode DAILY Continu) sauvegardées: {output_path}")
     print("Aperçu des 5 dernières lignes :")
     print(df.tail(5))
 
@@ -572,8 +564,7 @@ def format_and_clean_data_daily(base_dir, input_path, data_type):
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{data_type}_daily.parquet")
     df.to_parquet(output_path, index=False)
-    print(f"Données {data_type} journalières nettoyées sauvegardées : {
-          output_path}")
+    print(f"Données {data_type} journalières nettoyées sauvegardées : {output_path}")
     print(df.head(5))
     print(df.tail(5))
 

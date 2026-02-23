@@ -109,12 +109,6 @@ def render(data):
 
             fig = go.Figure()
 
-            # Quadrant backgrounds
-            fig.add_shape(type="rect", x0=-3, y0=0, x1=0, y1=3, fillcolor="rgba(0,255,0,0.15)", line_width=0)
-            fig.add_shape(type="rect", x0=0, y0=0, x1=3, y1=3, fillcolor="rgba(255,165,0,0.15)", line_width=0)
-            fig.add_shape(type="rect", x0=0, y0=-3, x1=3, y1=0, fillcolor="rgba(255,0,0,0.15)", line_width=0)
-            fig.add_shape(type="rect", x0=-3, y0=-3, x1=0, y1=0, fillcolor="rgba(0,0,255,0.15)", line_width=0)
-
             if 'MACRO_GROWTH_SCORE' in df_q.columns and 'MACRO_INFLATION_SCORE' in df_q.columns:
                 inflation_hist = df_q['MACRO_INFLATION_SCORE']
                 growth_hist = df_q['MACRO_GROWTH_SCORE']
@@ -133,6 +127,15 @@ def render(data):
                 x_title = "Score d'Inflation ->"
                 y_title = "Score de Croissance ->"
 
+            max_val = max(abs(inflation_hist.min()), abs(inflation_hist.max()), abs(growth_hist.min()), abs(growth_hist.max()))
+            limit = max(5.0, max_val * 1.2)
+
+            # Quadrant backgrounds
+            fig.add_shape(type="rect", x0=-limit, y0=0, x1=0, y1=limit, fillcolor="rgba(0,255,0,0.1)", line_width=0)
+            fig.add_shape(type="rect", x0=0, y0=0, x1=limit, y1=limit, fillcolor="rgba(255,165,0,0.1)", line_width=0)
+            fig.add_shape(type="rect", x0=0, y0=-limit, x1=limit, y1=0, fillcolor="rgba(255,0,0,0.1)", line_width=0)
+            fig.add_shape(type="rect", x0=-limit, y0=-limit, x1=0, y1=0, fillcolor="rgba(0,0,255,0.1)", line_width=0)
+
             fig.add_trace(go.Scatter(
                 x=inflation_hist, y=growth_hist, mode='markers',
                 marker=dict(size=4, color=list(range(len(df_q))), colorscale='Blues', opacity=0.4, showscale=False),
@@ -142,12 +145,19 @@ def render(data):
 
             df_recent = df_q.tail(90)
             if 'MACRO_GROWTH_SCORE' in df_recent.columns:
-                fig.add_trace(go.Scatter(
-                    x=df_recent['MACRO_INFLATION_SCORE'], y=df_recent['MACRO_GROWTH_SCORE'],
-                    mode='markers',
-                    marker=dict(size=6, color='yellow', opacity=0.8, line=dict(width=0.5, color='black')),
-                    name='90 derniers jours'
-                ))
+                recent_x = df_recent['MACRO_INFLATION_SCORE']
+                recent_y = df_recent['MACRO_GROWTH_SCORE']
+            else:
+                recent_x = df_recent['score_Q2'] - df_recent['score_Q4']
+                recent_y = df_recent['score_Q1'] - df_recent['score_Q3']
+
+            fig.add_trace(go.Scatter(
+                x=recent_x, y=recent_y,
+                mode='lines+markers',
+                marker=dict(size=6, color='yellow', opacity=0.8, line=dict(width=0.5, color='black')),
+                line=dict(color='yellow', width=1, dash='solid'),
+                name='90 derniers jours'
+            ))
 
             fig.add_trace(go.Scatter(
                 x=[cur_inflation], y=[cur_growth], mode='markers',
@@ -155,14 +165,16 @@ def render(data):
             ))
 
             fig.update_layout(
-                xaxis_title=x_title, yaxis_title=y_title, height=400, showlegend=True,
-                xaxis=dict(range=[-2.5, 2.5]), yaxis=dict(range=[-2.5, 2.5])
+                xaxis_title=x_title, yaxis_title=y_title, height=500, showlegend=True,
+                xaxis=dict(range=[-limit, limit], zeroline=True, zerolinecolor='rgba(255,255,255,0.2)'), 
+                yaxis=dict(range=[-limit, limit], zeroline=True, zerolinecolor='rgba(255,255,255,0.2)'),
+                margin=dict(l=0, r=0, t=30, b=0)
             )
 
-            fig.add_annotation(x=-1.2, y=1.2, text="Q1: Croissance", showarrow=False, font=dict(size=11))
-            fig.add_annotation(x=1.2, y=1.2, text="Q2: Inflation", showarrow=False, font=dict(size=11))
-            fig.add_annotation(x=1.2, y=-1.2, text="Q3: Stagflation", showarrow=False, font=dict(size=11))
-            fig.add_annotation(x=-1.2, y=-1.2, text="Q4: Deflation", showarrow=False, font=dict(size=11))
+            fig.add_annotation(x=-limit*0.5, y=limit*0.5, text="Q1: Croissance", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
+            fig.add_annotation(x=limit*0.5, y=limit*0.5, text="Q2: Inflation", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
+            fig.add_annotation(x=limit*0.5, y=-limit*0.5, text="Q3: Stagflation", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
+            fig.add_annotation(x=-limit*0.5, y=-limit*0.5, text="Q4: Deflation", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
 
             st.plotly_chart(fig, use_container_width=True)
         else:
