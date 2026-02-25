@@ -28,7 +28,7 @@ ALLOCATIONS = {
 def load_data():
     # Resolve paths reliably regardless of where Streamlit is run from
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(current_dir)
+    project_root = os.path.dirname(os.path.dirname(current_dir))
     base_dir = os.path.join(project_root, "data", "US")
     data = {}
     
@@ -143,6 +143,14 @@ BLOOMBERG_CSS = """
         background-color: #0a0e27 !important;
     }
     
+    /* Hide Streamlit top header and top margin padding */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    .block-container {
+        padding-top: 2rem !important;
+    }
+    
     /* Headers */
     h1, h2, h3 {
         color: #00d4ff !important;
@@ -254,15 +262,7 @@ def apply_theme():
 def render_sidebar(data):
     """Render the shared sidebar."""
     with st.sidebar:
-        st.image("https://upload.wikimedia.org/wikipedia/commons/a/a7/Camponotus_flavomarginatus_ant.jpg", width=80)
-        st.title("🍂 Four Seasons")
-        st.caption("Macro Strategy Dashboard")
-        
-        if st.button("🔄 Recharger les données", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        
-        st.divider()
+                
         
         st.subheader("📊 État du Pipeline")
         
@@ -283,6 +283,10 @@ def render_sidebar(data):
             st.warning("⚠️ ML Metrics: Non disponible")
         
         st.divider()
+
+        if st.button("🔄 Recharger les données", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
         
         st.subheader("🔧 Actions")
         st.code("airflow dags trigger dag_us_macro", language="bash")

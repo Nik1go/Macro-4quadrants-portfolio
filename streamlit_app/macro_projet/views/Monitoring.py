@@ -216,6 +216,12 @@ def render(data):
 def render_ibkr_dashboard(data):
     # Attempt to import PortfolioManager
     try:
+        import asyncio
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+            
         from ibkr.portfolio import PortfolioManager
         has_ibkr_module = True
     except ImportError:
