@@ -22,7 +22,10 @@ def render(data):
             import os
             from PIL import Image
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            image_path = os.path.join(os.path.dirname(current_dir), "images", "architecture.png")
+            # current_dir is streamlit_app/macro_projet/views
+            # project_root is streamlit_app/
+            project_root = os.path.dirname(os.path.dirname(current_dir))
+            image_path = os.path.join(project_root, "images", "architecture.png")
             img = Image.open(image_path)
             st.image(img, caption="Architecture Data Engineering & ML Pipeline", use_container_width=True)
         except Exception as e:

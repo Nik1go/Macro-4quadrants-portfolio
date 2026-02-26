@@ -17,9 +17,9 @@ QUADRANT_COLORS = {1: 'green', 2: 'orange', 3: 'red', 4: 'blue'}
 
 ALLOCATIONS = {
     1: {"SP500": 30, "NASDAQ": 40, "SmallCAP": 30},
-    2: {"SP500": 40, "GOLD": 30, "COMMODITIES": 20, "NASDAQ": 10},
-    3: {"GOLD": 60, "COMMODITIES": 20, "TREASURY": 20},
-    4: {"TREASURY": 60, "GOLD": 40}
+    2: {"SP500": 40, "SmallCAP": 30, "NASDAQ": 30},
+    3: {"GOLD": 40, "COMMODITIES": 30, "TREASURY": 30},
+    4: {"TREASURY": 50, "GOLD": 30, "Obligation": 20}   
 }
 
 
@@ -160,6 +160,8 @@ BLOOMBERG_CSS = """
     /* Sidebar styling */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1a1d35 0%, #0a0e27 100%) !important;
+        min-width: 230px !important;
+        max-width: 230px !important;
     }
     [data-testid="stSidebar"] * {
         color: #e8e8e8 !important;
@@ -262,9 +264,19 @@ def apply_theme():
 def render_sidebar(data):
     """Render the shared sidebar."""
     with st.sidebar:
-                
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(current_dir)
+        logo_path = os.path.join(project_root, "images", "logo.png")
         
-        st.subheader("📊 État du Pipeline")
+        _, col_logo, _ = st.columns([1, 6, 1])
+        with col_logo:
+            if os.path.exists(logo_path):
+                st.image(logo_path, use_container_width=True)
+                
+        st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Macro Pipeline</h3>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        st.subheader("État du Pipeline")
         
         if data['quadrants'] is not None:
             last_date = data['quadrants']['date'].max()
@@ -293,4 +305,3 @@ def render_sidebar(data):
         
         st.divider()
         
-        st.caption("Made with ❤️ using Streamlit")

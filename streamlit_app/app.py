@@ -64,6 +64,10 @@ def apply_home_css():
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
             margin: 10px 0;
             transition: transform 0.2s;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 420px;
         }
         
         .project-card:hover {
@@ -103,14 +107,16 @@ def apply_home_css():
         [data-testid="stSidebar"] {
             background-color: #0a0e27 !important;
             background-image: none !important;
+            min-width: 230px !important;
+            max-width: 230px !important;
         }
         [data-testid="stSidebar"] * {
             color: #e8e8e8 !important;
         }
         
-        /* Hide Streamlit top header and top margin padding */
+        /* Hide Streamlit top header background but keep it clickable for sidebar expand */
         header[data-testid="stHeader"] {
-            display: none !important;
+            background: transparent !important;
         }
         .block-container {
             padding-top: 2rem !important;
@@ -174,8 +180,14 @@ def apply_home_css():
 
 def render_sidebar():
     with st.sidebar:
-        st.image("https://img.icons8.com/fluency/96/000000/python.png", width=80)
-        st.markdown("### 📊 Quantitative Finance Portfolio")
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "logo.png")
+        
+        _, col_logo, _ = st.columns([1, 7, 1])
+        with col_logo:
+            if os.path.exists(logo_path):
+                st.image(logo_path, use_container_width=True)
+                
+        st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
         options = ["Home", "Pipeline Macro-Quantitative", "Equity Research"]
@@ -207,13 +219,13 @@ def render_sidebar():
         st.markdown("---")
         st.markdown("### 🔧 Tech Stack")
         st.markdown("""
-        - Python 🐍
-        - Streamlit 🎈
-        - Pandas & NumPy 📊
-        - Plotly & Matplotlib 📈
-        - VectorBT 📉
-        - Apache Airflow 🔄
-        - Scikit-learn 🤖
+        - Python 
+        - Streamlit 
+        - Pandas & NumPy 
+        - Plotly & Matplotlib 
+        - VectorBT 
+        - Apache Airflow 
+        - Scikit-learn 
         """)
         
         st.markdown("---")
@@ -240,31 +252,23 @@ def render_home():
             st.image(img_path, width=400)
         else:
             st.image("https://img.icons8.com/fluency/256/000000/financial-analytics.png", width=200)
-        st.markdown("""
-        <div class="metric-container">
-            <h4>📍 Profile</h4>
-            <p><strong>Location:</strong> Global 🌍</p>
-            <p><strong>Focus:</strong> Quantitative Finance</p>
-            <p><strong>Experience:</strong> Python, Data Engineering, Financial Modeling</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
+        
     with col2:
         st.markdown("### 💻 About Me")
         st.markdown("""
         Passionate engineer who likes building financial models, 
-        data pipelines, and some fun trading strategies.
+        data pipelines, and some fun trading strategies.""")
 
-        
-        **Core Competencies:**
-        - 📊 Macro quantitative Analysis & Statistical Modeling
-        - 🤖 Algorithmic Trading & Backtesting
-        - 🔄 Data Engineering & ETL Pipelines (Apache Airflow)
-        - 📈 Financial Derivatives & Risk Management
-        - 🐍 Python Development
-        """)
-        
-
+        st.markdown("""
+        <div class="metric-container">
+            <h4>📍 Profile</h4>
+            <p><strong>Location:</strong> Paris et Sud de France </p>
+            <p><strong>Focus:</strong> Macro-Quantitative</p>
+            <p><strong>Experience:</strong> Python, Data Engineering, Financial Modeling</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    
     st.markdown("---")
     
     # Projects Grid
@@ -395,8 +399,11 @@ if st.session_state.scroll_to_top:
     components.html(
         '''
         <script>
-            var body = window.parent.document.querySelector(".main");
-            if (body) { body.scrollTo(0, 0); }
+            setTimeout(function() {
+                var body = window.parent.document.querySelector(".main");
+                if (body) { body.scrollTo(0, 0); }
+                window.parent.scrollTo(0, 0);
+            }, 200);
         </script>
         ''',
         height=0
@@ -418,12 +425,12 @@ elif st.session_state.current_page == "Pipeline Macro-Quantitative":
 
 elif st.session_state.current_page == "Equity Research":
     with st.sidebar:
-        if st.button("⬅️ Retour au Home", use_container_width=True):
+        if st.button("⬅️ Back to home", use_container_width=True):
             st.session_state.current_page = "Home"
             st.session_state.scroll_to_top = True
             st.rerun()
     st.title("Equity Research")
-    st.write("Page en cours de construction...")
+    st.write("Page under construction...")
 
 else:
     st.session_state.current_page = "Home"

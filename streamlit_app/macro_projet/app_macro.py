@@ -20,11 +20,10 @@ from views import Monitoring, Backtest, ML_Performance, Methodologie, Correlatio
 def render():
     # Optional button to return to home inside the main page, or side-bar
     with st.sidebar:
-        if st.button("⬅️ Retour au Home", use_container_width=True):
+        if st.button("⬅️ Back to Home", use_container_width=True):
             st.session_state.current_page = "Home"
             st.session_state.scroll_to_top = True
             st.rerun()
-        st.markdown("---")
 
     # --- THEME & DATA ---
     apply_theme()
@@ -97,24 +96,24 @@ def render():
     
     # --- TAB NAVIGATION (no emojis, side by side) ---
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Methodologie",
         "Monitoring",
         "Backtest & Perf",
         "ML Performance",
-        "Methodologie",
         "Correlation & Indicators"
     ])
     
     with tab1:
-        Monitoring.render(data)
+        Methodologie.render(data)
     
     with tab2:
-        Backtest.render(data)
+        Monitoring.render(data)
     
     with tab3:
-        ML_Performance.render(data)
+        Backtest.render(data)
     
     with tab4:
-        Methodologie.render(data)
+        ML_Performance.render(data)
     
     with tab5:
         Correlation_Indicators.render(data)

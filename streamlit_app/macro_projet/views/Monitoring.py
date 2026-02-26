@@ -37,36 +37,10 @@ def render(data):
         st.plotly_chart(fig_trend, use_container_width=True)
 
         dominant_q = q_counts.idxmax()
-        st.info(f"Le modele selectionne le **Mode (Valeur la plus frequente)** sur 18 jours. Tendance actuelle : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts.max()} jours.")
+    st.info(f"Le modele selectionne le **Mode (Valeur la plus frequente)** sur 18 jours. Tendance actuelle : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts.max()} jours.")
 
     st.divider()
 
-    # === Full Distribution (All time) ===
-    st.subheader("Repartition Globale des Quadrants (Brut)")
-    if data['quadrants'] is not None:
-        all_data = data['quadrants'].copy()
-        q_counts_all = all_data['assigned_quadrant'].value_counts().reindex([1, 2, 3, 4], fill_value=0)
-
-        fig_all = go.Figure(data=[go.Bar(
-            x=[f"Q{i} {QUADRANT_NAMES.get(i)}" for i in [1, 2, 3, 4]],
-            y=q_counts_all.values,
-            marker_color=[QUADRANT_COLORS[i] for i in [1, 2, 3, 4]],
-            text=q_counts_all.values,
-            textposition='auto',
-        )])
-
-        fig_all.update_layout(
-            title="Repartition des Quadrants (Brut)",
-            yaxis_title="Nombre de Jours",
-            height=300,
-            margin=dict(l=20, r=20, t=40, b=20)
-        )
-        st.plotly_chart(fig_all, use_container_width=True)
-
-        dominant_q = q_counts_all.idxmax()
-        st.info(f"Repartition globale (Brut) : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts_all.max()} jours.")
-
-    st.divider()
 
     # === Smooth Quadrant Distribution (from Backtest) ===
     st.subheader("Repartition des Quadrants Lisses (Backtest Complet)")
