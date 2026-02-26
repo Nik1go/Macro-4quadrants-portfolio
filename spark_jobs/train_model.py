@@ -67,12 +67,19 @@ LAGS_TRADING_DAYS = {
 # Rolling Median Window for Dynamic Threshold (5 years = 1260 trading days)
 ROLLING_MEDIAN_WINDOW = 1260
 
-# GridSearchCV Hyperparameter Grid (Classifier)
-# GridSearchCV Hyperparameter Grid (Classification)
-PARAM_GRID = {
-    'n_estimators': [100, 200],
-    'max_depth': [3, 5, 7],
+# GridSearchCV Hyperparameter Grid for Risk Model (Focus on deeper trees/complexity)
+PARAM_GRID_RISK = {
+    'n_estimators': [100, 200, 300],
+    'max_depth': [5, 7, 9],
     'min_samples_leaf': [10, 30, 50],
+    'max_features': ['sqrt', 0.3, 0.5]
+}
+
+# GridSearchCV Hyperparameter Grid for Rates/Inflation Model (Focus on simpler trees)
+PARAM_GRID_INFLATION = {
+    'n_estimators': [100, 200],
+    'max_depth': [2, 3, 5],
+    'min_samples_leaf': [10, 20, 30],
     'max_features': ['sqrt', 0.3]
 }
 
@@ -432,7 +439,7 @@ def main(indicators_path: str, output_dir: str):
     print("   Running GridSearch Risk Classifier...")
     grid_growth = GridSearchCV(
         estimator=RandomForestClassifier(random_state=42, class_weight='balanced'),
-        param_grid=PARAM_GRID,
+        param_grid=PARAM_GRID_RISK,
         cv=tscv,
         scoring='roc_auc',
         n_jobs=-1,
@@ -447,7 +454,7 @@ def main(indicators_path: str, output_dir: str):
     print("   Running GridSearch Inflation Classifier...")
     grid_inflation = GridSearchCV(
         estimator=RandomForestClassifier(random_state=42, class_weight='balanced'),
-        param_grid=PARAM_GRID,
+        param_grid=PARAM_GRID_INFLATION,
         cv=tscv,
         scoring='roc_auc',
         n_jobs=-1,
@@ -628,7 +635,8 @@ def main(indicators_path: str, output_dir: str):
         'rf_params_inflation': {k: (str(v) if not isinstance(v, (int, float)) else v) for k, v in grid_inflation.best_params_.items()},
         'gridsearch_growth_cv_score': float(grid_growth.best_score_),
         'gridsearch_inflation_cv_score': float(grid_inflation.best_score_),
-        'param_grid': {k: [str(x) if not isinstance(x, (int, float)) else x for x in v] for k, v in PARAM_GRID.items()},
+        'param_grid_risk': {k: [str(x) if not isinstance(x, (int, float)) else x for x in v] for k, v in PARAM_GRID_RISK.items()},
+        'param_grid_inflation': {k: [str(x) if not isinstance(x, (int, float)) else x for x in v] for k, v in PARAM_GRID_INFLATION.items()},
         
         # Top 10 GridSearch results
         'gridsearch_growth_results': sorted([

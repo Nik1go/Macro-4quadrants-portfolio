@@ -88,13 +88,13 @@ def render(data):
     # SECTION 2: Performance avec Quadrants TARGET (Ground Truth)
     # =========================================================
     st.subheader("Performance par Quadrant TARGET (Ground Truth)")
-    st.markdown("*Ratio de Sharpe si le modele etait 100% precis — base sur les quadrants reels (Initial Claims + CPI vs rolling median).*")
+    st.markdown("*Ratio de Sharpe si le modele etait 100% precis — base sur les quadrants définis par les targets (spread HY et breakeven inflation).*")
 
     # Heatmap 3: Actions ETF — Target
     if not _render_heatmap(
         data.get('perf_target'),
         "Actions/ETF — Sharpe Ratio (Quadrants Reels Target)",
-        "Ground truth : quadrants bases sur INITIAL_CLAIMS_YOY (Growth inv) et CPI_YOY vs rolling median 5 ans."
+        "Ground truth : quadrants définis par les targets fixés au modèle (spread HY et breakeven inflation)"
     ):
         st.info("Donnees de performance Target Actions non disponibles. Relancez le DAG.")
 
@@ -106,3 +106,62 @@ def render(data):
     ):
         st.info("Donnees de performance Target Forex non disponibles. Relancez le DAG.")
 
+    with st.expander("Stratégie d'Allocation ", expanded=False):
+        st.markdown(
+            "L'allocation de ce portefeuille pivote dynamiquement selon les quatres régimes identifiés. "
+            "Les heatmaps ci-dessus comparent les Ratios de Sharpe obtenus selon les prédictions du modèle face aux données réelles de marché.\n\n"
+            "Les quadrants sont définis par deux indicateurs clés (proxies) :\n\n"
+            "- **Axe Croissance :** High Yield Bond Spread (le risque de crédit comme proxy de la croissance).\n"
+            "- **Axe Inflation :** 10Y Breakeven Inflation Rate (les anticipations d'inflation du marché obligataire).\n\n"
+            "📊 **Détail de la Répartition par Régime :**"
+        )
+
+        c1, c2, c3, c4 = st.columns(4)
+
+        with c1:
+            st.markdown(
+                "**Q1 | Croissance Saine (Goldilocks)**\n\n"
+                "*C'est la phase d'expansion où le risque est récompensé.*\n"
+                "- 40% NASDAQ_100 (Moteur de performance technologique)\n"
+                "- 30% SmallCAP (Bêta élevé pour maximiser la hausse)\n"
+                "- 30% S&P 500 (Large caps pour la stabilité relative)"
+            )
+
+        with c2:
+            st.markdown(
+                "**Q2 | Inflation**\n\n"
+                "*Le régime où le pricing power des entreprises est crucial.*\n"
+                "- 40% S&P 500 (Dominance des entreprises de qualité)\n"
+                "- 30% NASDAQ_100 (Maintien d'une exposition Growth)\n"
+                "- 30% SmallCAP (Sélection d'opportunités cycliques)"
+            )
+
+        with c3:
+            st.markdown(
+                "**Q3 | Stagflation (Défense Totale)**\n\n"
+                "*Protection du capital contre la baisse de croissance et la hausse des prix.*\n"
+                "- 40% Or (GOLD) (Valeur refuge ultime)\n"
+                "- 30% Matières Premières (COMMODITIES) (Hedge direct contre l'inflation)\n"
+                "- 30% Treasuries 10Y (Sécurité obligataire)"
+            )
+
+        with c4:
+            st.markdown(
+                "**Q4 | Crash Déflationniste (Le Bunker)**\n\n"
+                "*Priorité absolue à la sécurité et à la décorrélation des stock market.*\n"
+                "- 50% Treasuries 10Y (Profite de la baisse des taux directeurs)\n"
+                "- 30% Or (GOLD) (Refuge contre la panique de marché)\n"
+                "- 20% Obligations (Investment Grade) (Rendement sécurisé hors corporate risqué)"
+            )
+    st.divider()
+
+    with st.expander("Focus sur le Marché des Changes (Forex)", expanded=False):
+        st.markdown(
+            "J'ai intégré une analyse spécifique au Forex pour explorer des opportunités de Carry Trading. "
+            "Les Ratios de Sharpe affichés incluent les swaps d'intérêt journaliers.\n\n"
+            "**Observations :**\n\n"
+            "- Bien que le modèle identifie des disparités (ex: force du JPY ou de l'USD selon les quadrants), aucune stratégie systématique n'a été retenue pour le moment.\n"
+            "- Le modèle évoluant principalement en Q2 et Q4 (avec Q1/Q3 comme phases de transition rapides), l'extraction d'un \"edge\" persistant sur le Forex reste un défi. Pour l'instant, je juge la fiabilité des classes d'actifs (Actions/Obligations) supérieure."
+        )
+
+    st.divider()

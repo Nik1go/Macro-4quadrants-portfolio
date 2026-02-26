@@ -143,9 +143,9 @@ BLOOMBERG_CSS = """
         background-color: #0a0e27 !important;
     }
     
-    /* Hide Streamlit top header and top margin padding */
+    /* Hide Streamlit top header background but keep it clickable for sidebar expand */
     header[data-testid="stHeader"] {
-        display: none !important;
+        background: transparent !important;
     }
     .block-container {
         padding-top: 2rem !important;
@@ -213,15 +213,6 @@ BLOOMBERG_CSS = """
         background-color: #0a0e27 !important;
     }
     
-    /* Sidebar collapse button  */
-    [data-testid="stSidebarCollapseButton"] button {
-        width: 40px !important;
-        height: 40px !important;
-        font-size: 28px !important;
-        opacity: 1 !important;
-        visibility: visible !important;
-    }
-    
     /* Tab navigation styling - bigger + separated */
     .stTabs [data-baseweb="tab-list"] {
         gap: 0px !important;
@@ -264,18 +255,6 @@ def apply_theme():
 def render_sidebar(data):
     """Render the shared sidebar."""
     with st.sidebar:
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(current_dir)
-        logo_path = os.path.join(project_root, "images", "logo.png")
-        
-        _, col_logo, _ = st.columns([1, 6, 1])
-        with col_logo:
-            if os.path.exists(logo_path):
-                st.image(logo_path, use_container_width=True)
-                
-        st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Macro Pipeline</h3>", unsafe_allow_html=True)
-        st.markdown("---")
-        
         st.subheader("État du Pipeline")
         
         if data['quadrants'] is not None:

@@ -181,12 +181,16 @@ def apply_home_css():
 def render_sidebar():
     with st.sidebar:
         logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "logo.png")
-        
-        _, col_logo, _ = st.columns([1, 7, 1])
-        with col_logo:
-            if os.path.exists(logo_path):
-                st.image(logo_path, use_container_width=True)
-                
+        if os.path.exists(logo_path):
+            import base64
+            with open(logo_path, "rb") as image_file:
+                encoded_string = base64.b64encode(image_file.read()).decode()
+            st.markdown(
+                f'<div style="text-align: center;">\n'
+                f'    <img src="data:image/png;base64,{encoded_string}" style="width: 110px; max-width: 100%; margin-bottom: 20px;">\n'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
@@ -264,7 +268,7 @@ def render_home():
             <h4>📍 Profile</h4>
             <p><strong>Location:</strong> Paris et Sud de France </p>
             <p><strong>Focus:</strong> Macro-Quantitative</p>
-            <p><strong>Experience:</strong> Python, Data Engineering, Financial Modeling</p>
+            <p><strong>Experience:</strong> Python, Data Engineering, Macroeconomie</p>
         </div>
         """, unsafe_allow_html=True)
     
@@ -272,7 +276,7 @@ def render_home():
     st.markdown("---")
     
     # Projects Grid
-    st.markdown("### 📂 Featured Projects")
+    st.markdown("### Featured Projects")
     
     col1, col2, col3 = st.columns(3)
     
@@ -285,10 +289,9 @@ def render_home():
             Orchestrated "4 Seasons" strategy based on probability of growth/inflation regime detection.</p>
             <p><strong>Key Achievement:</strong> Automated portfolio management less volatile than the market with real-time streamlit dashboards.</p>
             <hr>
-            <p>🔄 Airflow | 📊 ETL | 📡 Macro ML</p>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet Macro", key="btn_macro", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_macro", use_container_width=True):
             st.session_state.current_page = "Pipeline Macro-Quantitative"
             st.session_state.scroll_to_top = True
             st.rerun()
@@ -377,21 +380,17 @@ def render_home():
     st.markdown("---")
     
     # Contact Section
-    st.markdown("### 📬 Let's Connect")
-    col1, col2, col3 = st.columns(3)
+    st.markdown("### Let's Connect")
+    col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("[![GitHub](https://img.icons8.com/fluency/48/000000/github.png)](https://github.com)")
-        st.markdown("[**GitHub**](https://github.com)")
+        st.markdown("[![GitHub](https://img.icons8.com/fluency/48/000000/github.png)](https://github.com/Nik1go)")
+        st.markdown("[**GitHub**](https://github.com/Nik1go)")
     
     with col2:
-        st.markdown("[![LinkedIn](https://img.icons8.com/fluency/48/000000/linkedin.png)](https://linkedin.com)")
-        st.markdown("[**LinkedIn**](https://linkedin.com)")
+        st.markdown("[![LinkedIn](https://img.icons8.com/fluency/48/000000/linkedin.png)](https://www.linkedin.com/in/leo-bertrand-link/)")
+        st.markdown("[**LinkedIn**](https://www.linkedin.com/in/leo-bertrand-link/)")
     
-    with col3:
-        st.markdown("[![Email](https://img.icons8.com/fluency/48/000000/email.png)](mailto:contact@example.com)")
-        st.markdown("[**Email**](mailto:contact@example.com)")
-
 
 # --- JS SCROLL HACK ---
 if st.session_state.scroll_to_top:

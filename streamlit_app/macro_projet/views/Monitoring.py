@@ -57,7 +57,7 @@ def render(data):
         )])
 
         fig_smooth.update_layout(
-            title=f"Repartition des Quadrants (Lisse 18j) - {total_days} jours de trading",
+            title=f"Repartition des Quadrants - {total_days} jours de trading",
             yaxis_title="Nombre de Jours",
             height=300,
             margin=dict(l=20, r=20, t=40, b=20)
