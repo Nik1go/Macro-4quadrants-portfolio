@@ -70,6 +70,8 @@ FRED_SERIES_MAPPING = {
     'IND_PRODUCTION': 'INDPRO',
     'WTI_CRUDE_OIL': 'DCOILWTICO',
     'BREAKEVEN_10Y': 'T10YIE',
+    # Chicago Fed National Financial Conditions Index (Weekly - Wednesday)
+    'NFCI': 'NFCI',
     # Philadelphia Fed Coincident Index - Ground Truth for Growth (ML Target)
     'USPHCI': 'USPHCI',
     # Net Liquidity Components
@@ -342,6 +344,7 @@ def prepare_indicators_data(base_dir):
         'IND_PRODUCTION',
         'WTI_CRUDE_OIL',
         'BREAKEVEN_10Y',
+        'NFCI',       # Financial conditions index
         'WALCL',      # Net Liquidity component (weekly)
         'WTREGEN',    # Net Liquidity component (daily)
         'RRPONTSYD',   # Net Liquidity component (daily)

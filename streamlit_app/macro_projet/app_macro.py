@@ -33,9 +33,9 @@ def render():
     # --- HEADER KPIs ---
     st.title("US Macro Four Seasons Strategy")
     st.markdown("""
-    **Objectif :** Optimisé le rendement et la volatilité d'une strategie Buy & Hold en adaptant l'allocation d'actifs selon le cycle economique US.
+    **Objectif :** Optimiser le rendement et la volatilité d'une strategie Buy & Hold en adaptant l'allocation d'actifs selon le cycle economique US.
     
-    La detection du cycle économique est inspiré du **Modèle des 4 Quadrants** de **Ray Dalio**, et d'une etudes de Verdad Capital "Countercyclical Asset Allocation" Mars 2021.
+    La detection du cycle économique est inspiré du **Modèle des 4 Quadrants** de **Ray Dalio**, et d'une etudes de **Verdad Capital** "Countercyclical Asset Allocation" Mars 2021.
     
     """)
     

@@ -8,7 +8,7 @@ st.set_page_config(
     layout="wide",
     page_title="Quantitative Finance Portfolio",
     page_icon="📊",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"
 )
 
 # Add current dir to path for imports
@@ -122,22 +122,6 @@ def apply_home_css():
             padding-top: 2rem !important;
         }
         
-        /* Option menu - blend into sidebar with rounded white border */
-        .nav-link {
-            color: #e8e8e8 !important;
-            border-radius: 10px !important;
-        }
-        div[data-testid="stSidebar"] .css-j7qwjs,
-        div[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div:has(> iframe) {
-            background-color: transparent !important;
-        }
-        nav.menu {
-            background-color: transparent !important;
-            border: 1px solid rgba(255, 255, 255, 0.3) !important;
-            border-radius: 12px !important;
-            padding: 8px !important;
-        }
-
         /* Button styling - Merge tightly to the project card */
         .stButton>button {
             background: linear-gradient(90deg, #1e2139 0%, #2a2d4a 100%);
@@ -194,7 +178,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Equity Research"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Monte Carlo Gambling", "Equity Research"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -203,13 +187,18 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "journal-code"],
+            icons=["house-fill", "graph-up-arrow", "dice-5", "file-earmark-text", "journal-code"],
             menu_icon="cast",
             default_index=default_idx,
             styles={
-                "container": {"padding": "0!important", "background-color": "transparent"},
+                "container": {
+                    "padding": "0!important", 
+                    "background-color": "#0a0e27",
+                    "border-radius": "0"
+                },
                 "icon": {"color": "#00d4ff", "font-size": "20px"},
                 "nav-link": {
+                    "color": "#e8e8e8",
                     "font-size": "16px",
                     "text-align": "left",
                     "margin": "5px",
@@ -265,7 +254,7 @@ def render_home():
 
         st.markdown("""
         <div class="metric-container">
-            <h4>📍 Profile</h4>
+            <h4>Profile</h4>
             <p><strong>Location:</strong> Paris et Sud de France </p>
             <p><strong>Focus:</strong> Macro-Quantitative</p>
             <p><strong>Experience:</strong> Python, Data Engineering, Macroeconomie</p>
@@ -309,7 +298,9 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
-            pass  # placeholder
+            st.session_state.current_page = "Monte Carlo Gambling"
+            st.session_state.scroll_to_top = True
+            st.rerun()
     
     with col3:
         st.markdown("""
@@ -421,6 +412,14 @@ if st.session_state.current_page == "Home":
 elif st.session_state.current_page == "Pipeline Macro-Quantitative":
     import macro_projet.app_macro as app_macro
     app_macro.render()
+
+elif st.session_state.current_page == "Monte Carlo Gambling":
+    try:
+        apply_home_css()
+        import montecarlo_gambling.app_montecarlo as app_montecarlo
+        app_montecarlo.render()
+    except Exception as e:
+        st.error(f"Could not load the Monte Carlo app: {str(e)}")
 
 elif st.session_state.current_page == "Equity Research":
     with st.sidebar:

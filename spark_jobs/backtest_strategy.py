@@ -62,10 +62,10 @@ ALLOCATIONS = {
     # On mise sur les grosses boîtes (SP500) et les matières premières.
     2: {
         'SP500': 0.4,           # Pricing Power
-        'GOLD_OZ_USD': 0.3,     # Protection Monétaire
-        'COMMODITIES': 0.2,     # Hedge Inflation direct
-        'NASDAQ_100': 0.1,      # On garde un pied dans la tech
-        'SmallCAP': 0.0,
+        'GOLD_OZ_USD': 0.0,     # Protection Monétaire
+        'COMMODITIES': 0.0,     # Hedge Inflation direct
+        'NASDAQ_100': 0.3,      # On garde un pied dans la tech
+        'SmallCAP': 0.3,
         'TREASURY_10Y': 0.0, 
         'US_REIT_VNQ': 0.0,
         'OBLIGATION': 0.0,
@@ -74,9 +74,9 @@ ALLOCATIONS = {
     
     # Q3 (Stagflation): DÉFENSE TOTALE.
     3: {
-        'GOLD_OZ_USD': 0.6,     # L'actif roi en Q3
-        'COMMODITIES': 0.2,     # La cause de l'inflation
-        'TREASURY_10Y': 0.2,    # Sécurité
+        'GOLD_OZ_USD': 0.4,  
+        'COMMODITIES': 0.3,     # La cause de l'inflation
+        'TREASURY_10Y': 0.3,    # Sécurité
         'NASDAQ_100': 0.0,
         'SP500': 0.0,
         'SmallCAP': 0.0, 
@@ -88,13 +88,13 @@ ALLOCATIONS = {
     # Q4 (Crash Déflationniste): BUNKER.
     # On enlève les Obligations Corporate. On veut du sans risque.
     4: {
-        'TREASURY_10Y': 0.7,    # Profite de la baisse des taux
+        'TREASURY_10Y': 0.5,    # Profite de la baisse des taux
         'GOLD_OZ_USD': 0.3,     # Peur / Valeur Refuge
         'SP500': 0.0, 
         'NASDAQ_100': 0.0, 
         'SmallCAP': 0.0, 
         'US_REIT_VNQ': 0.0, 
-        'OBLIGATION': 0.0,
+        'OBLIGATION': 0.2,
         'COMMODITIES': 0.0,
         'SHORT_SP500': 0.0
     },

@@ -73,6 +73,7 @@ def render(data):
         wf_inflation_auc = metrics.get('walk_forward_inflation_per_year_auc', {})
         wf_growth_acc = metrics.get('walk_forward_growth_per_year_accuracy', {})
         wf_inflation_acc = metrics.get('walk_forward_inflation_per_year_accuracy', {})
+        wf_samples = metrics.get('walk_forward_samples_per_year', {})
         wf_growth_legacy = metrics.get('walk_forward_growth_per_year', {})
         wf_inflation_legacy = metrics.get('walk_forward_inflation_per_year', {})
 
@@ -97,6 +98,13 @@ def render(data):
 
         if wf_g and wf_i:
             years = sorted(set(wf_g.keys()) | set(wf_i.keys()))
+            
+            # Filter out years with insufficient samples (avoid AUC mathematical artifacts)
+            valid_years = [y for y in years if wf_samples.get(y, 52) >= 30]
+            excluded_years = [y for y in years if y not in valid_years]
+            if excluded_years:
+                st.info(f"Années masquées car échantillon insuffisant (< 30 semaines) : {', '.join(excluded_years)}")
+            years = valid_years
 
             fig_wf = go.Figure()
 
@@ -162,8 +170,7 @@ def render(data):
         if data['quadrants'] is not None:
             df_quadrants = data['quadrants']
 
-            # Check for new targets (Spreads & Breakevens)
-            # compute_quadrants puts original 'High_Yield_Bond_SPREAD' and 'BREAKEVEN_10Y' in df if present
+            # Check for Target Columns (Legacy/Market targets)
             has_new_targets = 'High_Yield_Bond_SPREAD' in df_quadrants.columns and 'BREAKEVEN_10Y' in df_quadrants.columns
             
             if has_new_targets:
@@ -172,22 +179,19 @@ def render(data):
 
                 fig_targets = go.Figure()
 
-                # Risk: High Yield Spread (Inverted? No, just plot. High Spread = Risk Off)
-                # But we predict Risk On. So low spread = Risk On.
+                # Risk: High Yield Spread
                 fig_targets.add_trace(go.Scatter(
                     x=df_recent['date'], y=df_recent['High_Yield_Bond_SPREAD'],
                     mode='lines', name='Risk Proxy (HY Bond Spread %)',
                     line=dict(color='green', width=2)
                 ))
 
-                # Inflation: Breakeven
+                # Inflation: 10Y Breakeven
                 fig_targets.add_trace(go.Scatter(
                     x=df_recent['date'], y=df_recent['BREAKEVEN_10Y'],
                     mode='lines', name='Inflation Proxy (10Y Breakeven %)',
                     line=dict(color='orange', width=2)
                 ))
-
-                # fig_targets.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
 
                 fig_targets.update_layout(
                     height=350, xaxis_title="Date", yaxis_title="Yield / Rate (%)",
@@ -328,7 +332,7 @@ def render(data):
             training_samples = metrics.get('training_samples', 0)
             rolling_window = metrics.get('rolling_median_window', 'N/A')
 
-            st.markdown("### Espaces de Recherche et Hyperparamètres (GridSearchCV)")
+            st.markdown("### Hyperparamètres du ML")
             st.markdown(
                 "La complexité de prédiction diffère entre nos deux cibles et requiert des paramétrages distincts.\n\n"
                 "- **Modèle RISK (HY Bond) :** Le spread High Yield est bruyant, volatil et contient des signaux non-linéaires complexes. Le modèle a besoin d'une certaine profondeur d'arbres pour capter l'asymétrie des crises. Nous lui allouons donc une grille d'optimisation plus complexe (`max_depth` allant de 5 à 9) pour éviter d'être sous-appris.\n\n"
@@ -361,7 +365,6 @@ def render(data):
             ---
             **Détails Techniques Globaux :**
             - **Algorithme** : {model_type_label}
-            - **Rolling Median Window** : {rolling_window} jours
             - **Training Samples** : {training_samples} semaines (fréquence hebdomadaire)
             - **Validation** : Walk-Forward (Hors échantillon out-of-sample)
             - **Dernière MAJ du Modèle** : {timestamp[:19] if timestamp != 'N/A' else 'N/A'}

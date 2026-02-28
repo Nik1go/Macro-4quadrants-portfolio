@@ -11,9 +11,7 @@ Outputs:
 Usage:
     cd ~/airflow
     source airflow_venv/bin/activate
-    python spark_jobs/train_model.py \
-        data/US/output_dag/combined_indicators.csv \
-        data/US/output_dag
+    python spark_jobs/train_model.py data/US/output_dag/combined_indicators.csv data/US/output_dag
 """
 
 import sys
@@ -58,6 +56,7 @@ LAGS_TRADING_DAYS = {
     'IND_PRODUCTION': 35,
     'HOUSING_PERMITS': 25,
     'CONSUMER_SENTIMENT': 5,
+    'NFCI': 5,  # Weekly published on Wednesday
     'INITIAL_CLAIMS': 5,
     'INFLATION': 30,
     'USPHCI': 60,
@@ -67,50 +66,55 @@ LAGS_TRADING_DAYS = {
 # Rolling Median Window for Dynamic Threshold (5 years = 1260 trading days)
 ROLLING_MEDIAN_WINDOW = 1260
 
-# GridSearchCV Hyperparameter Grid for Risk Model (Focus on deeper trees/complexity)
+# GridSearchCV Hyperparameter Grid for Risk Model (Aggressive constraint against overfitting)
+# GridSearchCV Hyperparameter Grid for Risk Model (Aggressive constraint against overfitting)
+# GridSearchCV Hyperparameter Grid for Risk Model (Balanced regularization)
 PARAM_GRID_RISK = {
-    'n_estimators': [100, 200, 300],
-    'max_depth': [5, 7, 9],
-    'min_samples_leaf': [10, 30, 50],
-    'max_features': ['sqrt', 0.3, 0.5]
+    'n_estimators': [100, 200],
+    'max_depth': [2, 3, 4],          # Relaxed slightly to allow learning complex macro links
+    'min_samples_leaf': [40, 50, 60], # Increased to prevent over-reliance on small variations
+    'max_features': [0.1, 0.2, 'sqrt'] # Reduced to force decorrelation (e.g. 0.2 = 20% of features limit)
 }
 
-# GridSearchCV Hyperparameter Grid for Rates/Inflation Model (Focus on simpler trees)
+# GridSearchCV Hyperparameter Grid for Rates/Inflation Model
 PARAM_GRID_INFLATION = {
     'n_estimators': [100, 200],
-    'max_depth': [2, 3, 5],
-    'min_samples_leaf': [10, 20, 30],
-    'max_features': ['sqrt', 0.3]
+    'max_depth': [2, 3, 4],
+    'min_samples_leaf': [25, 40, 50],
+    'max_features': ['sqrt', 0.2, 0.3]
 }
 
-# Feature columns
-# Feature columns
+# Feature columns (Drastically pruned to 12 orthogonal core macro signals)
+# Pruning prevents the "Curse of Dimensionality" and stops WTI from dominating the splits
+# Feature columns (Balanced set: enough depth without noise)
 FEATURE_COLS_CANDIDATES = [
-    'COPPER',
-    '10-2Year_Treasury_Yield_Bond', 'INITIAL_CLAIMS', 'High_Yield_Bond_SPREAD',
-    'VIX', 'BREAKEVEN_10Y', 'WTI_CRUDE_OIL', 'US_DOLLAR_INDEX', 'REAL_RATES',
-    'NET_LIQUIDITY',
-    # New Fundamental/Macro Features
-    'CONSUMER_SENTIMENT', 'HOUSING_PERMITS', 'IND_PRODUCTION', 'INFLATION_YOY',
-    # New Features (Dynamic Momentum & Volatility - Pruned)
-    'COPPER_MOM_1M', 'COPPER_VOL_1M',
-    'COPPER_MOM_3M', 'COPPER_VOL_3M',
-    'WTI_CRUDE_OIL_MOM_1M', 'WTI_CRUDE_OIL_VOL_1M',
-    'WTI_CRUDE_OIL_MOM_3M', 'WTI_CRUDE_OIL_VOL_3M',
-    'US_DOLLAR_INDEX_MOM_1M', 'US_DOLLAR_INDEX_VOL_1M',
-    'US_DOLLAR_INDEX_MOM_3M', 'US_DOLLAR_INDEX_VOL_3M',
-    'High_Yield_Bond_SPREAD_MOM_1M', 'High_Yield_Bond_SPREAD_VOL_1M',
-    'High_Yield_Bond_SPREAD_MOM_3M', 'High_Yield_Bond_SPREAD_VOL_3M',
-    '10-2Year_Treasury_Yield_Bond_MOM_1M', '10-2Year_Treasury_Yield_Bond_VOL_1M',
-    '10-2Year_Treasury_Yield_Bond_MOM_3M', '10-2Year_Treasury_Yield_Bond_VOL_3M',
-    'VIX_MOM_1M', 'VIX_VOL_1M',
-    'VIX_VOL_3M', # Removed VIX_MOM_3M (Pump & Dump)
-    'NET_LIQUIDITY_MOM_3M', 'NET_LIQUIDITY_MOM_6M',
-    'REAL_RATES_MOM_3M', 'REAL_RATES_MOM_6M',
-    'CONSUMER_SENTIMENT_MOM_3M', 'CONSUMER_SENTIMENT_MOM_6M',
-    'HOUSING_PERMITS_MOM_3M', 'HOUSING_PERMITS_MOM_6M',
-    'IND_PRODUCTION_MOM_3M', 'IND_PRODUCTION_MOM_6M',
-    'INFLATION_YOY_MOM_3M', 'INFLATION_YOY_MOM_6M'
+    # 1. Market Pricing & Sentiment (Fast Levels)
+    '10-2Year_Treasury_Yield_Bond',  # Yield Curve
+    'VIX',                           # Pure Fear/Stress
+    'High_Yield_Bond_SPREAD',        # Corporate Credit Stress 
+    'BREAKEVEN_10Y',                 # Market Inflation Expectations
+    'WTI_CRUDE_OIL',                 # Energy costs base level
+    'NFCI',                          # Financial Conditions base level
+    
+    # 2. Market Momentum (The "Derivatives" - highly predictive but smoothed to 3M)
+    'US_DOLLAR_INDEX_MOM_3M',        # Global Liquidity Trend
+    'COPPER_MOM_3M',                 # Global Industrial Demand Trend
+    'WTI_CRUDE_OIL_MOM_3M',          # Inflationary Shock Proxy (Crucial for Rates)
+    'High_Yield_Bond_SPREAD_MOM_3M', # Credit Deterioration Speed
+    '10-2Year_Treasury_Yield_Bond_MOM_3M', # Yield Curve Steepening/Flattening Speed
+    'NFCI_MOM_3M',                   # True Banking/Credit Stress Speed
+    # (Removed VIX_VOL_3M to prevent redundant overweighting with VIX level)
+    
+    # 3. Macro Fundamentals (Medium/Slow)
+    'INITIAL_CLAIMS',                # Real-time employment health
+    'IND_PRODUCTION',                # Hard economic output
+    'HOUSING_PERMITS',               # Leading credit/consumer indicator
+    'CONSUMER_SENTIMENT',            # Soft economic confidence
+    
+    # 4. Monetary Policy & Inflation (Structural)
+    'INFLATION_YOY',                 # Structural inflation trend
+    'REAL_RATES',                    # True cost of capital
+    'NET_LIQUIDITY'                  # Central Bank support
 ]
 
 
@@ -132,14 +136,27 @@ def calculate_yoy_change(series: pd.Series, periods: int = 252) -> pd.Series:
     return series.pct_change(periods=periods) * 100
 
 
-def calculate_momentum(series: pd.Series, months: int) -> pd.Series:
-    """Calculate Momentum as percentage change over N months (approx 21 days/month)."""
-    return series.pct_change(periods=int(months * 21)) * 100
+def calculate_momentum(series: pd.Series, months: int, is_rate: bool = False) -> pd.Series:
+    """Calculate Momentum over N months (approx 21 days/month)."""
+    if is_rate:
+        # Use absolute difference for rates/indices that cross zero (like Spread, Yield Curve, NFCI)
+        mom = series.diff(periods=int(months * 21))
+    else:
+        # Use percentage change for prices (like S&P500, Oil), but clip extreme outliers (e.g. Oil dropping negative)
+        mom = series.pct_change(periods=int(months * 21)) * 100
+        mom = mom.clip(-200, 200)  # Cap at +/- 200% to avoid extreme distortions
+    return mom
 
 
-def calculate_volatility(series: pd.Series, months: int) -> pd.Series:
+def calculate_volatility(series: pd.Series, months: int, is_rate: bool = False) -> pd.Series:
     """Calculate Volatility as rolling standard deviation of daily returns over N months."""
-    return series.pct_change(1).rolling(window=int(months * 21)).std() * 100
+    if is_rate:
+        daily_changes = series.diff(1)
+    else:
+        daily_changes = series.pct_change(1) * 100
+        daily_changes = daily_changes.clip(-50, 50)  # Cap daily return at +/- 50%
+        
+    return daily_changes.rolling(window=int(months * 21)).std()
 
 
 def create_binary_targets(df: pd.DataFrame) -> pd.DataFrame:
@@ -185,12 +202,15 @@ def create_binary_targets(df: pd.DataFrame) -> pd.DataFrame:
 
 def walk_forward_classification(df_features: pd.DataFrame, df_targets: pd.DataFrame,
                                  feature_cols: list, target_col: str,
-                                 start_year: int = 2010, min_train_years: int = 3):
+                                 start_year: int = 2010, min_train_years: int = 3,
+                                 model_params: dict = None):
     """
     Walk-Forward Validation for Binary Classification.
     
     Returns per-year and overall Accuracy, AUC-ROC, and predictions.
     """
+    if model_params is None:
+        model_params = {'n_estimators': 200, 'max_depth': 5, 'min_samples_leaf': 20}
     results = {
         'per_year_accuracy': {},
         'per_year_auc': {},
@@ -246,10 +266,12 @@ def walk_forward_classification(df_features: pd.DataFrame, df_targets: pd.DataFr
         scaler = RobustScaler()
         X_train_sc = scaler.fit_transform(X_train)
         X_test_sc = scaler.transform(X_test)
+        # Extract relevant params for Random Forest
+        rf_params = {k: v for k, v in model_params.items() if k in ['n_estimators', 'max_depth', 'min_samples_leaf', 'max_features']}
         
         model = RandomForestClassifier(
-            n_estimators=200, max_depth=5, min_samples_leaf=20,
-            random_state=42, n_jobs=-1
+            **rf_params,
+            random_state=42, n_jobs=-1, class_weight='balanced'
         )
         model.fit(X_train_sc, y_train)
         
@@ -333,7 +355,7 @@ def main(indicators_path: str, output_dir: str):
     fast_assets = [
         'COPPER', 'WTI_CRUDE_OIL', 'US_DOLLAR_INDEX', 
         'High_Yield_Bond_SPREAD', '10-2Year_Treasury_Yield_Bond', 
-        'VIX'
+        'VIX', 'NFCI'
     ]
     
     slow_assets = [
@@ -341,23 +363,28 @@ def main(indicators_path: str, output_dir: str):
         'CONSUMER_SENTIMENT', 'HOUSING_PERMITS', 'IND_PRODUCTION', 'INFLATION_YOY'
     ]
     
+    # Rates/Indices that cross zero - require absolute difference, NOT pct change
+    rate_assets = ['High_Yield_Bond_SPREAD', '10-2Year_Treasury_Yield_Bond', 'NFCI', 'REAL_RATES', 'BREAKEVEN_10Y', 'TAUX_FED']
+    
     # Fast Assets: Focus on 1M & 3M Momentum & Volatility (Reactive)
     for asset in fast_assets:
         if asset in df_lagged.columns:
+            is_rate = asset in rate_assets
             # 1M Momentum (Fastest)
-            df_lagged[f'{asset}_MOM_1M'] = calculate_momentum(df_lagged[asset], months=1)
+            df_lagged[f'{asset}_MOM_1M'] = calculate_momentum(df_lagged[asset], months=1, is_rate=is_rate)
             # 3M Momentum (Confirmation)
-            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3)
+            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3, is_rate=is_rate)
             
             # Volatility (Rolling Std of Daily Returns) - 1M & 3M
-            df_lagged[f'{asset}_VOL_1M'] = calculate_volatility(df_lagged[asset], months=1)
-            df_lagged[f'{asset}_VOL_3M'] = calculate_volatility(df_lagged[asset], months=3)
+            df_lagged[f'{asset}_VOL_1M'] = calculate_volatility(df_lagged[asset], months=1, is_rate=is_rate)
+            df_lagged[f'{asset}_VOL_3M'] = calculate_volatility(df_lagged[asset], months=3, is_rate=is_rate)
 
     # Slow Assets: Focus on 3M & 6M Momentum (Trend)
     for asset in slow_assets:
         if asset in df_lagged.columns:
-            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3)
-            df_lagged[f'{asset}_MOM_6M'] = calculate_momentum(df_lagged[asset], months=6)
+            is_rate = asset in rate_assets
+            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3, is_rate=is_rate)
+            df_lagged[f'{asset}_MOM_6M'] = calculate_momentum(df_lagged[asset], months=6, is_rate=is_rate)
     
     # ========================================
     # 3. CREATE TARGET VARIABLES
@@ -417,7 +444,9 @@ def main(indicators_path: str, output_dir: str):
     # 5. GRIDSEARCH CV (Classification)
     # ========================================
     print("\n[5/6] Running GridSearchCV (Classification)...")
-    tscv = TimeSeriesSplit(n_splits=3)
+    
+    # We use 5 splits (about 4 years chunks) to ensure robustness across different crises
+    tscv = TimeSeriesSplit(n_splits=5)
     
     # Split features by model type (Specialization)
     # RISK MODEL (Old Growth): Fast signals only
@@ -433,7 +462,7 @@ def main(indicators_path: str, output_dir: str):
     feature_cols_inflation = [
         c for c in feature_cols 
         if 'BREAKEVEN_10Y' not in c                  # Remove Self-Leakage
-    ] 
+    ]  
     
     # Risk Classifier
     print("   Running GridSearch Risk Classifier...")
@@ -477,7 +506,8 @@ def main(indicators_path: str, output_dir: str):
         feature_cols=feature_cols_risk,
         target_col='TARGET_RISK_CLASS',
         start_year=2005,
-        min_train_years=3
+        min_train_years=4,
+        model_params=grid_growth.best_params_
     )
     
     # Walk-Forward for Inflation
@@ -487,7 +517,8 @@ def main(indicators_path: str, output_dir: str):
         feature_cols=feature_cols_inflation,
         target_col='TARGET_INFLATION_CLASS',
         start_year=2005,
-        min_train_years=3
+        min_train_years=4,
+        model_params=grid_inflation.best_params_
     )
     
     # OOS Results

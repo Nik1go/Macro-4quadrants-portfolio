@@ -9,7 +9,7 @@ def render(data):
     st.title("Méthodologie & Architecture")
     
     st.markdown("""
-    Bienvenue dans la section technique de ce portfolio dynamique. Ce projet repose sur la détection algorithmique de régimes macroéconomiques à l'aide de modèles de **Machine Learning (Classification Binaire)**.
+    Ce projet repose sur la détection algorithmique de régimes macroéconomiques à l'aide d modèles de **Machine Learning (Classification Binaire)**.
     L'objectif est d'allouer dynamiquement le capital sur 4 quadrants macroéconomiques (Goldilocks, Reflation, Stagflation, Déflation) afin d'optimiser le ratio de Sharpe face aux stratégies passives (Buy & Hold).
     """)
 
@@ -37,26 +37,37 @@ def render(data):
         2. **Feature Engineering (Task `prepare_indicators`)** : Nettoyage, synchronisation temporelle, et calcul des métriques dérivées.
         3. **Modélisation ML (Spark Job `train_model`)** : Entraînement distribué des classifieurs Random Forest (GridSearchCV + Walk-Forward test).
         4. **Inférence (Spark Job `compute_quadrants`)** : Prédiction mensuelle probabiliste et assignation au quadrant correspondant.
-        5. **Simulation & Trading (Spark/IBKR)** : Backtesting de la stratégie avec prise en compte des coûts de transaction, suivi de l'exécution automatique.
+        5. **Simulation & Trading (Spark/IBKR)** : Backtesting de la stratégie avec prise en compte des coûts de transaction, exécution automatique des ordres de réallocation.
         """)
         
     with st.expander("2. Cadre Macroéconomique (Feature Engineering)"):
         st.markdown("""
         Pour définir la position économique (le "Quadrant"), j'utilise un cadre bifactoriel : **Croissance** et **Inflation**.
 
-        **Axe Croissance (Mesure du Risk-On / Risk-Off) :**
-        Capture la dynamique de l'économie réelle et le sentiment de marché.
-        - *Indicateurs positifs* : Housing Permits, Industrial Production, Consumer Sentiment, Copper, spread 10-2Y Yield Curve.
-        - *Indicateurs négatifs* : Initial Claims, High Yield Spread (spread de crédit risqué vs OAT), VIX, Real Rates.
+        **L'Axe Croissance mesure la probabilité d'un régime Risk-On / Risk-Off**.
+        On utilise comme target le **High Yield Bond Spread** (différence entre les taux d'obligations d'entreprises risquées et les taux sans risque de référence).
+        Il représente, selon moi, un excellent proxy de marché de la croissance et notamment de l'appétit des investisseurs pour les actifs risqués (risk-on / risk-off).
+        
+        **Pour entraîner le modèle**, j'ai décidé d'utiliser plusieurs types de *features* (indicateurs) complémentaires :
+        
+        **Les indicateurs de marché (réactif au marché) :**
+        - Matières premières : **Copper** (Croissance industrielle), **WTI Crude Oil** (Coût de l'énergie).
+        - Taux et Conditions Financières : **Spread 10-2Y Yield Curve** (Pente de la courbe), **10Y Breakeven Inflation Rate** (Anticipations d'inflation du marché), **VIX** (Volatilité), **NFCI** (Indice des conditions financières de Chicago).
+        - Devises : **DXY** (Indice Dollar US).
 
-        **Axe Inflation :**
-        Capture la dynamique des prix et les anticipations du marché.
-        - *Indicateurs positifs* : CPI, 10Y Breakeven Inflation Rate (T10YIE - anticipation de marché), WTI Oil Prices.
-        - *Indicateurs négatifs* : US Dollar Index (un dollar fort étant historiquement déflationniste).
+        **Les indicateurs macroéconomiques (plus structurels) :**
+        Ils sont intégrés pour que le modèle trouve des corrélations de fond et détecte avec moins de bruit les véritables changements de régime économique :
+        - Économie et Emploi : **Initial Claims** (Demandes chômage hebdomadaires), **Industrial Production** (Production industrielle).
+        - Consommation et Immobilier : **Consumer Sentiment** (Confiance des consommateurs), **Housing Permits** (Demandes de permis de construire).
+        - Monétaire et Inflation : **CPI** (Inflation), **Net Liquidity** (Liquidité Nette des banques centrales), **Real Rates** (Taux Fed ajusté à l'inflation).
+
+        **Gestion du Biais d'Anticipation (Look-Ahead Bias) :**
+        Les données proviennent de Yahoo Finance et de FRED. Contrairement au marché actions, les données macroéconomiques (FRED) sont publiées avec du retard (ex : l'inflation de février est annoncée mi-mars). J'ai donc appliqué des **lags de publication stricts en jours de trading** (+30 jours pour le CPI, +35 jours pour la production industrielle, +25 jours pour l'immobilier, +5 jours pour le chômage...) afin d'éviter d'entraîner le modèle sur des données qu'il n'aurait pas connues en temps réel.
 
         **Transformations & Normalisation :**
         - **Z-Scores** : Application de scores standardisés glissants (expanding z-scores) pour normaliser les données et capter les changements de régime.
         - **Momentum (3MoM-6MoM) & Volatilité** : Calcul de la dynamique à 3 mois et de la volatilité historique pour lisser le bruit et dégager des signaux clairs.
+      
         """)
         st.latex(r'''
         Score_{position} = \frac{X_t - \mu_{expanding}}{\sigma_{expanding}}
@@ -67,10 +78,15 @@ def render(data):
         st.markdown("""
         **Approche Algorithmique :** Classification binaire séparée pour le Risque (Croissance) et l'Inflation en utilisant des algorithmes d'ensemble (**Random Forest Classifier**).
 
-        **Cibles (Targets) Basées sur le Marché :**
-        La définition des régimes s'appuie sur le momentum des prix de marché (pricing) pour capturer les conditions de liquidité et le consensus des investisseurs, qui anticipent la macroéconomie réelle de 6 à 9 mois :
-        - `TARGET_RISK_CLASS = 1` (Risk-On / Croissance) : si la Moyenne Mobile 1 mois du **High Yield Spread** < Moyenne Mobile 3 mois (les spreads de crédit se resserrent).
-        - `TARGET_INFLATION_CLASS = 1` (Reflation) : si la Moyenne Mobile 1 mois du **10Y Breakeven Inflation** > Moyenne Mobile 3 mois (les anticipations d'inflation montent).
+        **Choix des Cibles (Targets) :**
+        Pour piloter l'allocation, j'ai sélectionné deux actifs de marché extrêmement réactifs qui agissent comme *proxies* pour la Croissance et l'Inflation. Cela permet d'éviter l'utilisation de données macroéconomiques classiques (PIB, CPI) souvent des données mensuelles/trimestrielles retardées et sujettes à de fortes révisions ( révision non disponible avec FRED).
+        - **Cible Risque (Proxy Croissance)** : Le **High Yield Bond Spread**. Cet indicateur mesure la prime de risque exigée pour prêter aux entreprises fragiles. C'est un baromètre direct du stress financier et de la confiance des marchés dans l'économie.
+        - **Cible Taux (Proxy Inflation)** : Le **10Y Breakeven Inflation Rate**. Cet actif représente l'inflation "pricée" en temps réel par les investisseurs obligataires. C'est le signal le plus pur pour capter la tendance inflationniste bien avant les annonces officielles.
+
+        **Logique de Tendance (Croisement de Moyennes Mobiles - SMA) :**
+        Plutôt que d'utiliser une valeur absolue ou une médiane historique fixe, les régimes sont définis par le momentum. Le modèle compare le court terme (1 mois) à la tendance de fond (3 mois) pour identifier les points de basculement :
+        - `TARGET_RISK_CLASS = 1` (Risk-On) : si `SMA_1M < SMA_3M` du **High Yield Spread**. Un spread qui baisse à court terme signale une détente des conditions de crédit, propice aux actifs risqués.
+        - `TARGET_INFLATION_CLASS = 1` (Reflation) : si `SMA_1M > SMA_3M` du **10Y Breakeven**. Un breakeven qui monte à court terme indique une accélération soudaine des anticipations d'inflation.
 
         **Validation & Évaluation :**
         - **Walk-Forward Validation** : Le modèle subit un "backtest ML" glissant annuel (entraînement sur les données historiques $T-n$, test sur l'année $T$), garantissant l'absence temporelle de biais de présentation (look-ahead bias).

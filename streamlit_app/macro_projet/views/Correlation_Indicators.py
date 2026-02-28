@@ -12,7 +12,7 @@ import os
 @st.cache_data
 def load_indicators():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(current_dir))
+    project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
     path = os.path.join(project_root, "data", "US", "output_dag", "combined_indicators.csv")
     try:
         df = pd.read_csv(path, parse_dates=['date'])

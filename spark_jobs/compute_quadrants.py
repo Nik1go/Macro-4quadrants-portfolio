@@ -7,11 +7,7 @@ using predict_proba, applies EMA smoothing, and assigns economic quadrants.
 Usage:
     cd ~/airflow
     source airflow_venv/bin/activate
-    python spark_jobs/compute_quadrants.py \
-        data/US/output_dag/combined_indicators.csv \
-        data/US/output_dag/ml_pipeline.pkl \
-        data/US/output_dag/quadrants.parquet \
-        data/US/output_dag/quadrants.csv
+python spark_jobs/compute_quadrants.py data/US/output_dag/combined_indicators.csv data/US/output_dag/ml_pipeline.pkl data/US/output_dag/quadrants.parquet data/US/output_dag/quadrants.csv
 """
 
 import sys
@@ -43,6 +39,7 @@ LAGS_TRADING_DAYS = {
     'IND_PRODUCTION': 35,
     'HOUSING_PERMITS': 25,
     'CONSUMER_SENTIMENT': 5,
+    'NFCI': 5,  # Weekly published on Wednesday
     'INITIAL_CLAIMS': 5,
     'INFLATION': 30,
     'USPHCI': 60,
@@ -71,14 +68,27 @@ def calculate_yoy_change(series: pd.Series, periods: int = 252) -> pd.Series:
     return series.pct_change(periods=periods) * 100
 
 
-def calculate_momentum(series: pd.Series, months: int) -> pd.Series:
-    """Calculate Momentum as percentage change over N months (approx 21 days/month)."""
-    return series.pct_change(periods=int(months * 21)) * 100
+def calculate_momentum(series: pd.Series, months: int, is_rate: bool = False) -> pd.Series:
+    """Calculate Momentum over N months (approx 21 days/month)."""
+    if is_rate:
+        # Use absolute difference for rates/indices that cross zero (like Spread, Yield Curve, NFCI)
+        mom = series.diff(periods=int(months * 21))
+    else:
+        # Use percentage change for prices (like S&P500, Oil), but clip extreme outliers (e.g. Oil dropping negative)
+        mom = series.pct_change(periods=int(months * 21)) * 100
+        mom = mom.clip(-200, 200)  # Cap at +/- 200% to avoid extreme distortions
+    return mom
 
 
-def calculate_volatility(series: pd.Series, months: int) -> pd.Series:
+def calculate_volatility(series: pd.Series, months: int, is_rate: bool = False) -> pd.Series:
     """Calculate Volatility as rolling standard deviation of daily returns over N months."""
-    return series.pct_change(1).rolling(window=int(months * 21)).std() * 100
+    if is_rate:
+        daily_changes = series.diff(1)
+    else:
+        daily_changes = series.pct_change(1) * 100
+        daily_changes = daily_changes.clip(-50, 50)  # Cap daily return at +/- 50%
+        
+    return daily_changes.rolling(window=int(months * 21)).std()
 
 
 # ============================================================
@@ -140,7 +150,7 @@ def main(indicators_path: str, pipeline_path: str, output_parquet: str, output_c
     fast_assets = [
         'COPPER', 'WTI_CRUDE_OIL', 'US_DOLLAR_INDEX', 
         'High_Yield_Bond_SPREAD', '10-2Year_Treasury_Yield_Bond', 
-        'VIX'
+        'VIX', 'NFCI'
     ]
     
     slow_assets = [
@@ -148,23 +158,28 @@ def main(indicators_path: str, pipeline_path: str, output_parquet: str, output_c
         'CONSUMER_SENTIMENT', 'HOUSING_PERMITS', 'IND_PRODUCTION', 'INFLATION_YOY'
     ]
     
+    # Rates/Indices that cross zero - require absolute difference, NOT pct change
+    rate_assets = ['High_Yield_Bond_SPREAD', '10-2Year_Treasury_Yield_Bond', 'NFCI', 'REAL_RATES', 'BREAKEVEN_10Y', 'TAUX_FED']
+    
     # Fast Assets: Focus on 1M & 3M Momentum & Volatility (Reactive)
     for asset in fast_assets:
         if asset in df_lagged.columns:
+            is_rate = asset in rate_assets
             # 1M Momentum (Fastest)
-            df_lagged[f'{asset}_MOM_1M'] = calculate_momentum(df_lagged[asset], months=1)
+            df_lagged[f'{asset}_MOM_1M'] = calculate_momentum(df_lagged[asset], months=1, is_rate=is_rate)
             # 3M Momentum (Confirmation)
-            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3)
+            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3, is_rate=is_rate)
             
             # Volatility (Rolling Std of Daily Returns) - 1M & 3M
-            df_lagged[f'{asset}_VOL_1M'] = calculate_volatility(df_lagged[asset], months=1)
-            df_lagged[f'{asset}_VOL_3M'] = calculate_volatility(df_lagged[asset], months=3)
+            df_lagged[f'{asset}_VOL_1M'] = calculate_volatility(df_lagged[asset], months=1, is_rate=is_rate)
+            df_lagged[f'{asset}_VOL_3M'] = calculate_volatility(df_lagged[asset], months=3, is_rate=is_rate)
 
     # Slow Assets: Focus on 3M & 6M Momentum (Trend)
     for asset in slow_assets:
         if asset in df_lagged.columns:
-            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3)
-            df_lagged[f'{asset}_MOM_6M'] = calculate_momentum(df_lagged[asset], months=6)
+            is_rate = asset in rate_assets
+            df_lagged[f'{asset}_MOM_3M'] = calculate_momentum(df_lagged[asset], months=3, is_rate=is_rate)
+            df_lagged[f'{asset}_MOM_6M'] = calculate_momentum(df_lagged[asset], months=6, is_rate=is_rate)
     
     # Create YoY variables (for export in quadrants.csv) - Updated for new Growth proxy
     df['INITIAL_CLAIMS_YOY'] = calculate_yoy_change(df['INITIAL_CLAIMS'], periods=252)
