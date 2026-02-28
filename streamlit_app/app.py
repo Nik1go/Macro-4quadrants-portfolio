@@ -178,7 +178,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Monte Carlo Gambling", "Equity Research"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Monte Carlo Gambling", "DCA Investment Strategy", "Equity Research"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -187,9 +187,10 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "graph-up-arrow", "dice-5", "file-earmark-text", "journal-code"],
+            icons=["house-fill", "graph-up-arrow", "dice-5", "coin", "file-earmark-text", "journal-code"],
             menu_icon="cast",
             default_index=default_idx,
+            key="main_menu",
             styles={
                 "container": {
                     "padding": "0!important", 
@@ -294,7 +295,6 @@ def render_home():
             Achieved statistical analysis showing 82% win rate but negative expected value.</p>
             <p><strong>Key Result:</strong> Demonstrated the mathematical impossibility of beating the house edge.</p>
             <hr>
-            <p>📊 Monte Carlo | 🎯 Risk Analysis </p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
@@ -311,11 +311,12 @@ def render_home():
             Implemented bi-weekly rebalancing with Sharpe ratio optimization.</p>
             <p><strong>Key Result:</strong> Systematized long-term investment strategy with risk-adjusted returns.</p>
             <hr>
-            <p>💵 Portfolio Mgmt | 📉 Backtesting | ⚖️ Risk/Reward</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_dca", use_container_width=True):
-            pass # placeholder
+            st.session_state.current_page = "DCA Investment Strategy"
+            st.session_state.scroll_to_top = True
+            st.rerun()
     
     
     col4, col5, col6 = st.columns(3)
@@ -329,7 +330,6 @@ def render_home():
             (Augmented Dickey-Fuller) and linear regression for spread modeling.</p>
             <p><strong>Key Result:</strong> Statistical arbitrage based on mean reversion principles.</p>
             <hr>
-            <p>🔗 Correlation | 📊 Cointegration | 🎯 Arbitrage</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
@@ -344,7 +344,6 @@ def render_home():
             Trades top performer among 15 cryptos when BTC shows strength.</p>
             <p><strong>Key Result:</strong> Captured volatility during bullish crypto trends.</p>
             <hr>
-            <p>₿ Crypto | 📈 Momentum | 🔥 Trend Following</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_crypto", use_container_width=True):
@@ -360,7 +359,6 @@ def render_home():
             and options pricing (Black-Scholes). Interactive sensitivity analysis with Plotly.</p>
             <p><strong>Key Result:</strong> End-to-end equity research framework.</p>
             <hr>
-            <p>💼 DCF | 📐 Valuation | 🎓 Financial Theory</p>
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_finmod", use_container_width=True):
@@ -420,6 +418,14 @@ elif st.session_state.current_page == "Monte Carlo Gambling":
         app_montecarlo.render()
     except Exception as e:
         st.error(f"Could not load the Monte Carlo app: {str(e)}")
+
+elif st.session_state.current_page == "DCA Investment Strategy":
+    try:
+        apply_home_css()
+        import dca_strat.app_dca as app_dca
+        app_dca.render()
+    except Exception as e:
+        st.error(f"Could not load the DCA Strategy app: {str(e)}")
 
 elif st.session_state.current_page == "Equity Research":
     with st.sidebar:

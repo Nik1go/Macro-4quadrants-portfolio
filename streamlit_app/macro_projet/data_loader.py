@@ -209,7 +209,8 @@ BLOOMBERG_CSS = """
     div[data-testid="stExpander"] summary:hover {
         background-color: #2a2d45 !important;
     }
-    div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+    div[data-testid="stExpander"] [data-testid="stExpanderDetails"], 
+    [data-testid="stExpanderDetails"] {
         background-color: #0a0e27 !important;
     }
     

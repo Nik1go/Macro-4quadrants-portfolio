@@ -234,7 +234,7 @@ def render():
             font=dict(color='white')
         )
         
-        st.plotly_chart(fig_heatmap, use_container_width=True)
+        st.plotly_chart(fig_heatmap, use_container_width=True, key="mc_heatmap")
         
         with st.expander("Détail des résultats VectorBT", expanded=False):
             st.dataframe(df_resultats.style.highlight_max(subset=['Return Moyen (%)', 'Sharpe Ratio', '% Gain'], axis=0), use_container_width=True)
