@@ -159,6 +159,55 @@ def render(data):
                 name='90 derniers jours'
             ))
 
+            if 'date' in df_q.columns:
+                df_crisis = df_q[(df_q['date'] >= '2007-09-01') & (df_q['date'] <= '2009-03-01')]
+                if not df_crisis.empty:
+                    if 'MACRO_GROWTH_SCORE' in df_crisis.columns:
+                        crisis_x = df_crisis['MACRO_INFLATION_SCORE']
+                        crisis_y = df_crisis['MACRO_GROWTH_SCORE']
+                    else:
+                        crisis_x = df_crisis['score_Q2'] - df_crisis['score_Q4']
+                        crisis_y = df_crisis['score_Q1'] - df_crisis['score_Q3']
+                    hover_dates = df_crisis['date'].dt.strftime('%Y-%m-%d')
+                    
+                    fig.add_trace(go.Scatter(
+                        x=crisis_x, y=crisis_y,
+                        mode='lines+markers',
+                        marker=dict(
+                            size=5, 
+                            color=list(range(len(crisis_x))), 
+                            colorscale='Greys', # De gris clair à foncé pour voir le temps passer
+                            opacity=0.8
+                        ),
+                        line=dict(color='rgba(150, 150, 150, 0.3)', width=1, dash='dot'), # Ligne pointillée très discrète
+                        name='Crise 2008 (Clair ➜ Foncé)',
+                        hovertext=hover_dates
+                    ))
+                    
+                    # Marquer expressément le début
+                    fig.add_trace(go.Scatter(
+                        x=[crisis_x.iloc[0]], y=[crisis_y.iloc[0]],
+                        mode='markers+text',
+                        marker=dict(size=7, color='white'),
+                        text=['Début (Sep 07)'],
+                        textposition='top right',
+                        textfont=dict(size=10, color='lightgrey'),
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
+                    
+                    # Marquer expressément la fin
+                    fig.add_trace(go.Scatter(
+                        x=[crisis_x.iloc[-1]], y=[crisis_y.iloc[-1]],
+                        mode='markers+text',
+                        marker=dict(size=7, color='grey', symbol='x', line=dict(color='white', width=1)),
+                        text=['Fin (Mar 09)'],
+                        textposition='bottom right',
+                        textfont=dict(size=10, color='lightgrey'),
+                        showlegend=False,
+                        hoverinfo='skip'
+                    ))
+
             fig.add_trace(go.Scatter(
                 x=[cur_inflation], y=[cur_growth], mode='markers',
                 marker=dict(size=20, color='red', symbol='star'), name='Actuel'
