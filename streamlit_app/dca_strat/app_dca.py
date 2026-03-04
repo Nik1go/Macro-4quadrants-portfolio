@@ -146,6 +146,6 @@ def render():
                     "pour acheter davantage lors de baisses (soldes).\n\n"
                     "- **Cost Basis DCA + Z** : Variante qui module l'allocation non seulement avec le Z-Score, mais "
                     "aussi en comparant le prix actuel au prix de revient unitaire (Cost Basis). L'objectif est d'accélérer "
-                    "l'investissement quand on est en perte par rapport à sa propre moyenne d'achat.")
-            st.markdown("On peu voir que ces methodes ne sont finalement pas plus profitable qu'un DCA classique sur le long terme."
-                    "Il est toute fois évident que cette methode est moins efficace qu'un investissement en une seul fois.")
+                    "l'investissement quand on est en perte par rapport à sa propre moyenne d'achat. \n\n"
+                    "- On peu voir que ces methodes ne sont finalement pas plus profitable qu'un DCA classique sur le long terme."
+                    "Il est toute fois évident que cela reste moins efficace qu'un investissement en une seul fois.")

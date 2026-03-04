@@ -99,7 +99,7 @@ def render():
     # --- TAB NAVIGATION (no emojis, side by side) ---
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Methodologie",
-        "Monitoring",
+        "Monitoring & Live",
         "Backtest & Perf",
         "ML Performance",
         "Correlation & Indicators"

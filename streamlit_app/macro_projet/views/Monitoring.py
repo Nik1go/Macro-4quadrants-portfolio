@@ -9,6 +9,58 @@ import plotly.graph_objects as go
 import plotly.express as px
 from data_loader import QUADRANT_NAMES, QUADRANT_COLORS, ALLOCATIONS
 
+# --- Friendly display names for indicator columns ---
+INDICATOR_LABELS = {
+    "INFLATION":               "Inflation (CPI YoY)",
+    "BREAKEVEN_10Y":           "Breakeven 10Y",
+    "High_Yield_Bond_SPREAD":  "High Yield Spread",
+    "10-2Year_Treasury_Yield_Spread": "Courbe des Taux (10-2Y)",
+    "CONSUMER_SENTIMENT":      "Sentiment Consommateur",
+    "INITIAL_CLAIMS":          "Inscriptions Chômage",
+    "US_DOLLAR_INDEX":         "Dollar Index (DXY)",
+    "WTI_CRUDE_OIL":           "WTI Pétrole",
+    "COPPER":                  "Cuivre",
+    "VIX":                     "VIX",
+    "HOUSING_PERMITS":         "Permis Construire",
+    "IND_PRODUCTION":          "Production Industrielle",
+    "NFCI":                    "NFCI (Conditions Fin.)",
+    "NET_LIQUIDITY":           "Net Liquidity Fed",
+    "WALCL":                   "Bilan Fed (WALCL)",
+}
+
+SKIP_COLUMNS = {"date", "TAUX_ECB", "TAUX_BOJ", "TAUX_BOC", "TAUX_RBA", "TAUX_BCB",
+                "WTREGEN", "RRPONTSYD", "WALCL","COPPER","US_DOLLAR_INDEX","VIX"}
+
+
+def _render_last_indicators(data):
+    """Display the 5 most recently updated macro indicators using raw backup files."""
+    recent_info = data.get("recent_indicators", [])
+    if not recent_info:
+        st.warning("Données d'indicateurs non disponibles ou historique insuffisant.")
+        return
+
+    top5 = recent_info[:5]
+
+    cols = st.columns(len(top5))
+    for i, info in enumerate(top5):
+        with cols[i]:
+            label = INDICATOR_LABELS.get(info["col"], info["col"].replace("_", " ").title())
+            
+            # Format values: show as % if small absolute value (e.g. rates/spreads), else 2 dec
+            def _fmt(v):
+                return f"{v:.3f}" if abs(v) < 10 else f"{v:,.2f}"
+
+            delta_str = f"{info['pct_change']:+.2f}%  (anc.: {_fmt(info['prev_val'])})"
+            delta_color = "normal" if info["pct_change"] >= 0 else "inverse"
+
+            st.metric(
+                label=label,
+                value=_fmt(info["last_val"]),
+                delta=delta_str,
+                delta_color=delta_color,
+            )
+            st.caption(f"Publié le {info['last_date'].strftime('%Y-%m-%d')}")
+
 
 def render(data):
     st.header("Situation Macroeconomique Actuelle")
@@ -37,39 +89,13 @@ def render(data):
         st.plotly_chart(fig_trend, use_container_width=True)
 
         dominant_q = q_counts.idxmax()
-    st.info(f"Le modele selectionne le **Mode (Valeur la plus frequente)** sur 18 jours. Tendance actuelle : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts.max()} jours.")
+    st.info(f"Le modele selectionne le **Mode (Valeur la plus frequente)** sur 5 jours glissants. Tendance actuelle : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts.max()} jours.")
 
     st.divider()
 
-
-    # === Smooth Quadrant Distribution (from Backtest) ===
-    st.subheader("Repartition des Quadrants Lisses (Backtest Complet)")
-    if data['backtest'] is not None and 'smooth_quadrant' in data['backtest'].columns:
-        smooth_q_counts = data['backtest']['smooth_quadrant'].value_counts().reindex([1, 2, 3, 4], fill_value=0)
-        total_days = smooth_q_counts.sum()
-
-        fig_smooth = go.Figure(data=[go.Bar(
-            x=[f"Q{i} {QUADRANT_NAMES.get(i)}" for i in [1, 2, 3, 4]],
-            y=smooth_q_counts.values,
-            marker_color=[QUADRANT_COLORS[i] for i in [1, 2, 3, 4]],
-            text=[f"{v} ({v / total_days * 100:.1f}%)" for v in smooth_q_counts.values],
-            textposition='auto',
-        )])
-
-        fig_smooth.update_layout(
-            title=f"Repartition des Quadrants - {total_days} jours de trading",
-            yaxis_title="Nombre de Jours",
-            height=300,
-            margin=dict(l=20, r=20, t=40, b=20)
-        )
-        st.plotly_chart(fig_smooth, use_container_width=True)
-
-        dominant_smooth_q = smooth_q_counts.idxmax()
-        start_date = data['backtest']['date'].min().strftime('%Y-%m-%d') if 'date' in data['backtest'].columns else 'N/A'
-        end_date = data['backtest']['date'].max().strftime('%Y-%m-%d') if 'date' in data['backtest'].columns else 'N/A'
-        st.info(f"Periode: **{start_date}** -> **{end_date}** | Regime dominant (lisse): **Q{dominant_smooth_q} {QUADRANT_NAMES.get(dominant_smooth_q)}** ({smooth_q_counts.max() / total_days * 100:.1f}%)")
-    else:
-        st.warning("Donnees smooth_quadrant non disponibles. Lancez le backtest pour generer ces donnees.")
+    # === Last 5 Fetched Indicators ===
+    st.subheader("Derniers Indicateurs Fetchés")
+    _render_last_indicators(data)
 
     st.divider()
 
@@ -175,16 +201,16 @@ def render(data):
             st.info("Allocation non disponible")
 
     # === Recent Regime History ===
-    st.subheader("Historique recent des Regimes")
-    if data['quadrants'] is not None:
-        recent = data['quadrants'].tail(20)[['date', 'assigned_quadrant', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']]
-        recent['Regime'] = recent['assigned_quadrant'].map(QUADRANT_NAMES)
-        st.dataframe(recent[['date', 'Regime', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']], use_container_width=True)
+    with st.expander("Historique recent des Regimes", expanded=False):
+        if data['quadrants'] is not None:
+            recent = data['quadrants'].tail(20)[['date', 'assigned_quadrant', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']]
+            recent['Regime'] = recent['assigned_quadrant'].map(QUADRANT_NAMES)
+            st.dataframe(recent[['date', 'Regime', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']], use_container_width=True)
 
     st.divider()
 
     # === IBKR Paper Trading Dashboard ===
-    st.header("📈 Compte IBKR Paper Trading")
+    st.header("Compte IBKR Paper Trading")
     render_ibkr_dashboard(data)
 
 def render_ibkr_dashboard(data):

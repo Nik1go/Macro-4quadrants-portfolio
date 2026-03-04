@@ -14,10 +14,8 @@ simple_auth_manager_passwords.json.generated
 
 .DS_Store
 Thumbs.db
-<<<<<<< HEAD
-
 ib-gateway/
-=======
 ib-gateway/.env
 .env
->>>>>>> 051a1a14c0c72cb8f605d171236769abebf75d3a
+*.parquet
+data/US/*

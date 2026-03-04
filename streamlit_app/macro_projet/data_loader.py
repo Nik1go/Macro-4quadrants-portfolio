@@ -24,7 +24,7 @@ ALLOCATIONS = {
 
 
 # --- DATA LOADING ---
-@st.cache_data
+@st.cache_data(ttl=300)
 def load_data():
     # Resolve paths reliably regardless of where Streamlit is run from
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +71,60 @@ def load_data():
         data['forex_perf_target'] = pd.read_parquet(f"{base_dir}/output_dag/forex_performance_by_target_quadrant.parquet")
     except:
         data['forex_perf_target'] = None
+
+    try:
+        data['daily_assets'] = pd.read_parquet(f"{base_dir}/output_dag/Assets_daily.parquet")
+    except:
+        data['daily_assets'] = None
+
+    try:
+        data['daily_forex'] = pd.read_parquet(f"{base_dir}/output_dag/Forex_daily.parquet")
+    except:
+        data['daily_forex'] = None
+    
+    # --- Load Raw Indicators (for true publication dates & filtering out daily noise) ---
+    raw_indicators = []
+    # Only keep these specific macroeconomic metrics (exclude WTI, Copper, Interbank, DXY, VIX, Repos)
+    MACRO_ALLOWLIST = [
+        "INFLATION", "CONSUMER_SENTIMENT", "HOUSING_PERMITS", "IND_PRODUCTION",
+        "INITIAL_CLAIMS", "BREAKEVEN_10Y", "High_Yield_Bond_SPREAD", 
+        "10-2Year_Treasury_Yield_Bond", "NFCI", "Real_Gross_Domestic_Product", 
+    ]
+    
+    backup_dir = os.path.join(base_dir, "backup")
+    if os.path.exists(backup_dir):
+        for ind in MACRO_ALLOWLIST:
+            file_path = os.path.join(backup_dir, f"{ind}.csv")
+            try:
+                if os.path.exists(file_path):
+                    df_raw = pd.read_csv(file_path)
+                    # Needs at least 2 rows to compute delta
+                    if len(df_raw) >= 2:
+                        # Drop any NaN rows that might be at the end, then take last 2
+                        df_raw = df_raw.dropna(subset=['value'])
+                        if len(df_raw) >= 2:
+                            last_row = df_raw.iloc[-1]
+                            prev_row = df_raw.iloc[-2]
+                            
+                            last_val = float(last_row['value'])
+                            prev_val = float(prev_row['value'])
+                            last_date = pd.to_datetime(last_row['date'])
+                            
+                            pct_change = (last_val - prev_val) / abs(prev_val) * 100 if prev_val != 0 else 0
+                            
+                            raw_indicators.append({
+                                'col': ind,
+                                'last_val': last_val,
+                                'prev_val': prev_val,
+                                'pct_change': pct_change,
+                                'last_date': last_date
+                            })
+            except Exception as e:
+                pass
+                
+    # Sort by descending actual publication date
+    raw_indicators.sort(key=lambda x: x["last_date"], reverse=True)
+    data['recent_indicators'] = raw_indicators
     
     try:
         with open(f"{base_dir}/output_dag/ml_metrics.json", 'r') as f:
@@ -159,9 +213,11 @@ BLOOMBERG_CSS = """
     
     /* Sidebar styling */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a1d35 0%, #0a0e27 100%) !important;
         min-width: 230px !important;
         max-width: 230px !important;
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        background: linear-gradient(180deg, #1a1d35 0%, #0a0e27 100%) !important;
     }
     [data-testid="stSidebar"] * {
         color: #e8e8e8 !important;
@@ -243,6 +299,40 @@ BLOOMBERG_CSS = """
     .stTabs [data-baseweb="tab"]:hover {
         color: #00d4ff !important;
         background: rgba(0, 212, 255, 0.05) !important;
+    }
+    
+    /* FIX: Selectbox Dropdown rendering issue (invisible text) */
+    div[data-baseweb="select"] > div {
+        background-color: #1a1d35 !important;
+        color: #e8e8e8 !important;
+        border: 1px solid #3d4263 !important;
+    }
+    div[data-baseweb="select"] span {
+        color: #e8e8e8 !important;
+    }
+    div[data-baseweb="popover"] ul {
+        background-color: #1a1d35 !important;
+    }
+    div[data-baseweb="popover"] li {
+        color: #e8e8e8 !important;
+    }
+    div[data-baseweb="popover"] li:hover {
+        background-color: #2a2d45 !important;
+    }
+    
+    /* FIX: Selectbox Label & Help Text styling */
+    .stSelectbox label p {
+        color: #00d4ff !important;
+        font-weight: 600 !important;
+        font-size: 16px !important;
+    }
+    .stSelectbox div[data-testid="stMarkdownContainer"] p {
+        color: #a0a6cc !important;
+        font-size: 13.5px !important;
+    }
+    .stSelectbox .stTooltipIcon svg {
+        fill: #00d4ff !important;
+        stroke: #00d4ff !important;
     }
     </style>
 """

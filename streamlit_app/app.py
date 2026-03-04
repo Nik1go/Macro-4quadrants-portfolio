@@ -105,10 +105,13 @@ def apply_home_css():
         
         /* Sidebar styling */
         [data-testid="stSidebar"] {
-            background-color: #0a0e27 !important;
-            background-image: none !important;
             min-width: 230px !important;
             max-width: 230px !important;
+            background-color: #0a0e27 !important;
+        }
+        [data-testid="stSidebar"] > div:first-child {
+            background-color: #0a0e27 !important;
+            background-image: none !important;
         }
         [data-testid="stSidebar"] * {
             color: #e8e8e8 !important;
@@ -178,7 +181,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Monte Carlo Gambling", "DCA Investment Strategy", "Equity Research"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Equity Research"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -187,7 +190,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "graph-up-arrow", "dice-5", "coin", "file-earmark-text", "journal-code"],
+            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "dice-5", "coin", "journal-code"],
             menu_icon="cast",
             default_index=default_idx,
             key="main_menu",
@@ -211,7 +214,7 @@ def render_sidebar():
         )
         
         st.markdown("---")
-        st.markdown("### 🔧 Tech Stack")
+        st.markdown("###  Tech Stack")
         st.markdown("""
         - Python 
         - Streamlit 
@@ -273,7 +276,7 @@ def render_home():
     with col1:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>🌍 Macro Strategy Pipeline</h3>
+            <h3> Macro Strategy Pipeline</h3>
             <p><strong>Tech:</strong> Apache Airflow, Random Forest, Spark, IBKR  </p>
             <p>Designed ETL pipeline ingesting macro indicators via Airflow DAGs and procces them with Random Forest ML model. 
             Orchestrated "4 Seasons" strategy based on probability of growth/inflation regime detection.</p>
@@ -289,7 +292,23 @@ def render_home():
     with col2:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>🎲 Monte Carlo Gambling Strategies</h3>
+            <h3>Crypto Hype Cycles Trading</h3>
+            <p><strong>Tech:</strong> Binance API, VectorBT, Plotly</p>
+            <p>Momentum-based crypto strategy detecting "hype cycles" in BTC to trade altcoin market. 
+            Trades top performing altcoins when BTC shows strength.</p>
+            <p><strong>Key Result:</strong> Captured volatility during bullish crypto trends.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_crypto", use_container_width=True):
+            st.session_state.current_page = "Crypto Momentum Trading"
+            st.session_state.scroll_to_top = True
+            st.rerun()
+    
+    with col3:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+            <h3> Monte Carlo Gambling Strategies</h3>
             <p><strong>Tech:</strong> NumPy, Matplotlib, Plotly</p>
             <p>Simulated 1000+ roulette games using Martingale strategy with vectorized operations. 
             Achieved statistical analysis showing 82% win rate but negative expected value.</p>
@@ -302,14 +321,16 @@ def render_home():
             st.session_state.scroll_to_top = True
             st.rerun()
     
-    with col3:
+    
+    col4, col5, col6 = st.columns(3)
+    
+    with col4:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>💰 DCA Investment Strategy</h3>
+            <h3> DCA Investment Strategy</h3>
             <p><strong>Tech:</strong> Pandas, yFinance, VectorBT</p>
-            <p>Built a Dollar Cost Averaging backtesting framework for SP500, Gold, and Bitcoin. 
-            Implemented bi-weekly rebalancing with Sharpe ratio optimization.</p>
-            <p><strong>Key Result:</strong> Systematized long-term investment strategy with risk-adjusted returns.</p>
+            <p>trying to improve Dollar Cost Averaging backtesting framework for SP500, Gold, and Bitcoin. 
+            Implemented bi-weekly rebalancing with z-score optimisation.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
@@ -317,14 +338,11 @@ def render_home():
             st.session_state.current_page = "DCA Investment Strategy"
             st.session_state.scroll_to_top = True
             st.rerun()
-    
-    
-    col4, col5, col6 = st.columns(3)
-    
-    with col4:
+
+    with col5:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>🥇 Pairs Trading Arbitrage</h3>
+            <h3> Pairs Trading Arbitrage</h3>
             <p><strong>Tech:</strong> Statsmodels, Scikit-learn, Scipy</p>
             <p>Developed pairs trading strategy for Gold-Silver correlation. Applied cointegration tests 
             (Augmented Dickey-Fuller) and linear regression for spread modeling.</p>
@@ -334,26 +352,12 @@ def render_home():
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
             pass # placeholder
-
-    with col5:
-        st.markdown("""
-        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>🚀 Crypto Momentum Trading</h3>
-            <p><strong>Tech:</strong> Binance API, VectorBT, Plotly</p>
-            <p>Momentum-based crypto strategy detecting "hype cycles" using rolling z-scores. 
-            Trades top performer among 15 cryptos when BTC shows strength.</p>
-            <p><strong>Key Result:</strong> Captured volatility during bullish crypto trends.</p>
-            <hr>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_crypto", use_container_width=True):
-            pass # placeholder
     
     
     with col6:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>📊 Financial Modeling Suite</h3>
+            <h3>Financial Modeling Suite</h3>
             <p><strong>Tech:</strong> NumPy, Pandas, LaTeX (for formulas)</p>
             <p>Built comprehensive equity valuation models including DCF, multiples analysis, 
             and options pricing (Black-Scholes). Interactive sensitivity analysis with Plotly.</p>
@@ -399,44 +403,53 @@ if st.session_state.scroll_to_top:
     st.session_state.scroll_to_top = False
 
 # --- ROUTING LOGIC ---
-if st.session_state.current_page == "Home":
-    selected = render_sidebar()
-    if selected and selected != "Home":
-        st.session_state.current_page = selected
-        st.session_state.scroll_to_top = True
-        st.rerun()
-    render_home()
-
-elif st.session_state.current_page == "Pipeline Macro-Quantitative":
-    import macro_projet.app_macro as app_macro
-    app_macro.render()
-
-elif st.session_state.current_page == "Monte Carlo Gambling":
-    try:
-        apply_home_css()
-        import montecarlo_gambling.app_montecarlo as app_montecarlo
-        app_montecarlo.render()
-    except Exception as e:
-        st.error(f"Could not load the Monte Carlo app: {str(e)}")
-
-elif st.session_state.current_page == "DCA Investment Strategy":
-    try:
-        apply_home_css()
-        import dca_strat.app_dca as app_dca
-        app_dca.render()
-    except Exception as e:
-        st.error(f"Could not load the DCA Strategy app: {str(e)}")
-
-elif st.session_state.current_page == "Equity Research":
-    with st.sidebar:
-        if st.button("⬅️ Back to home", use_container_width=True):
-            st.session_state.current_page = "Home"
+if __name__ == "__main__":
+    if st.session_state.current_page == "Home":
+        selected = render_sidebar()
+        if selected and selected != "Home":
+            st.session_state.current_page = selected
             st.session_state.scroll_to_top = True
             st.rerun()
-    st.title("Equity Research")
-    st.write("Page under construction...")
+        render_home()
 
-else:
-    st.session_state.current_page = "Home"
-    st.session_state.scroll_to_top = True
-    st.rerun()
+    elif st.session_state.current_page == "Pipeline Macro-Quantitative":
+        import macro_projet.app_macro as app_macro
+        app_macro.render()
+
+    elif st.session_state.current_page == "Monte Carlo Gambling":
+        try:
+            apply_home_css()
+            import montecarlo_gambling.app_montecarlo as app_montecarlo
+            app_montecarlo.render()
+        except Exception as e:
+            st.error(f"Could not load the Monte Carlo app: {str(e)}")
+
+    elif st.session_state.current_page == "DCA Investment Strategy":
+        try:
+            apply_home_css()
+            import dca_strat.app_dca as app_dca
+            app_dca.render()
+        except Exception as e:
+            st.error(f"Could not load the DCA Strategy app: {str(e)}")
+
+    elif st.session_state.current_page == "Crypto Momentum Trading":
+        try:
+            apply_home_css()
+            import momentum_BTC.app_momentum as app_momentum
+            app_momentum.render()
+        except Exception as e:
+            st.error(f"Could not load the Crypto Momentum Trading app: {str(e)}")
+
+    elif st.session_state.current_page == "Equity Research":
+        with st.sidebar:
+            if st.button("⬅️ Back to home", use_container_width=True):
+                st.session_state.current_page = "Home"
+                st.session_state.scroll_to_top = True
+                st.rerun()
+        st.title("Equity Research")
+        st.write("Page under construction...")
+
+    else:
+        st.session_state.current_page = "Home"
+        st.session_state.scroll_to_top = True
+        st.rerun()

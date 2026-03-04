@@ -42,7 +42,7 @@ def render(data):
         
     with st.expander("2. Cadre Macroéconomique (Feature Engineering)"):
         st.markdown("""
-        Pour définir la position économique (le "Quadrant"), j'utilise un cadre bifactoriel : **Croissance** et **Inflation**.
+        Pour définir la position économique les **Quadrants**, j'utilise un cadre bifactoriel : **Croissance** et **Inflation**.
 
         **L'Axe Croissance mesure la probabilité d'un régime Risk-On / Risk-Off**.
         On utilise comme target le **High Yield Bond Spread** (différence entre les taux d'obligations d'entreprises risquées et les taux sans risque de référence).
@@ -61,8 +61,13 @@ def render(data):
         - Consommation et Immobilier : **Consumer Sentiment** (Confiance des consommateurs), **Housing Permits** (Demandes de permis de construire).
         - Monétaire et Inflation : **CPI** (Inflation), **Net Liquidity** (Liquidité Nette des banques centrales), **Real Rates** (Taux Fed ajusté à l'inflation).
 
-        **Gestion du Biais d'Anticipation (Look-Ahead Bias) :**
-        Les données proviennent de Yahoo Finance et de FRED. Contrairement au marché actions, les données macroéconomiques (FRED) sont publiées avec du retard (ex : l'inflation de février est annoncée mi-mars). J'ai donc appliqué des **lags de publication stricts en jours de trading** (+30 jours pour le CPI, +35 jours pour la production industrielle, +25 jours pour l'immobilier, +5 jours pour le chômage...) afin d'éviter d'entraîner le modèle sur des données qu'il n'aurait pas connues en temps réel.
+        **Détermination du Régime (Lissage des Probabilités sur 5 jours) :**
+        Pour éviter des allers-retours incessants dans le portefeuille à chaque bruit statistique du marché, le quadrant final n'est pas choisi sur une seule journée isolée. 
+        Les prédictions brutes de chaque régime émanant du modèle sont lissées via une Moyenne Mobile Exponentielle (EMA) sur **5 jours**. L'algorithme exige ainsi qu'une convergence probabiliste s'installe fermement (une confirmation sur une semaine entière) avant d'activer officiellement un basculement de régime macroéconomique.
+
+        **Gestion des données (Look-Ahead Bias) :**
+        Les données proviennent de Yahoo Finance et de FRED. Contrairement au marché actions, les données macroéconomiques (FRED) sont publiées avec du retard (ex : l'inflation de février est annoncée mi-mars). 
+        J'ai donc appliqué des **lags de publication** (+30 jours pour le CPI, +5 jours pour le chômage...) afin d'éviter d'entraîner le modèle sur des données du futur.
 
         **Transformations & Normalisation :**
         - **Z-Scores** : Application de scores standardisés glissants (expanding z-scores) pour normaliser les données et capter les changements de régime.
@@ -72,7 +77,7 @@ def render(data):
         st.latex(r'''
         Score_{position} = \frac{X_t - \mu_{expanding}}{\sigma_{expanding}}
         ''')
-        st.info("💡 Je vous invite à consulter la page **'Correlations'** pour observer la matrice de corrélation exploratoire de ces indicateurs et valider la solidité des indicateurs retenus.")
+        st.info(" Je vous invite par la suite à consulter la page **'Correlations'** pour observer la matrice de corrélation exploratoire de ces indicateurs et valider la solidité des indicateurs retenus.")
 
     with st.expander("3. Modélisation Machine Learning"):
         st.markdown("""
@@ -85,30 +90,60 @@ def render(data):
 
         **Logique de Tendance (Croisement de Moyennes Mobiles - SMA) :**
         Plutôt que d'utiliser une valeur absolue ou une médiane historique fixe, les régimes sont définis par le momentum. Le modèle compare le court terme (1 mois) à la tendance de fond (3 mois) pour identifier les points de basculement :
-        - `TARGET_RISK_CLASS = 1` (Risk-On) : si `SMA_1M < SMA_3M` du **High Yield Spread**. Un spread qui baisse à court terme signale une détente des conditions de crédit, propice aux actifs risqués.
-        - `TARGET_INFLATION_CLASS = 1` (Reflation) : si `SMA_1M > SMA_3M` du **10Y Breakeven**. Un breakeven qui monte à court terme indique une accélération soudaine des anticipations d'inflation.
+        - `TARGET_RISK_CLASS = 1` (Risk-On) : si `SMA_1M < SMA_3M` du **High Yield Spread**, 0 sinon. Un spread qui baisse à court terme signale une détente des conditions de crédit, propice aux actifs risqués.
+        - `TARGET_INFLATION_CLASS = 1` (Reflation) : si `SMA_1M > SMA_3M` du **10Y Breakeven**, 0 sinon. Un breakeven qui monte à court terme indique une accélération soudaine des anticipations d'inflation.
 
         **Validation & Évaluation :**
         - **Walk-Forward Validation** : Le modèle subit un "backtest ML" glissant annuel (entraînement sur les données historiques $T-n$, test sur l'année $T$), garantissant l'absence temporelle de biais de présentation (look-ahead bias).
         - **Prédictions (Lissage)** : Les probabilités brutes (`predict_proba()`) sont lissées avec une Moyenne Mobile Exponentielle (EMA span=5) avant d'être classées par un seuil de décision de $0.5$.
         
         """)
-        st.info("📊 Les métriques détaillées d'entraînement (Accuracy, Precision, Recall, Matrice de Confusion) sont disponibles et analysables sur la page **'ML Performance'**.")
+        st.info(" Les métriques détaillées d'entraînement (Accuracy, Precision, Recall, Matrice de Confusion) sont disponibles et analysables sur la page **'ML Performance'**.")
 
     with st.expander("4. Stratégie d'Allocation"):
         st.markdown("""
-        L'actif final est un portefeuille systématiquement réalloué au premier jour de chaque mois selon les prédictions macro. La logique fondamentale d'allocation s'inspire du modèle "All Weather" mais de manière dynamique et directionnelle.
+        L'actif final est un portefeuille avec une gestion des ordres et de la réallocation **quotidienne**, pilotée à la fois par les probabilités macroéconomiques (lissées par une EMA de 5 jours) et un suivi de tendance (Trend Following). 
+        La logique fondamentale d'allocation s'inspire de l'approche "All Weather" mais de manière nettement plus dynamique et réactive aux signaux de marché.
 
-        | Quadrant | Logique Fondamentale | SP500 | NASDAQ | SmallCAP | GOLD | COMMODITIES | TREASURY |
-        |----------|-----------------------|-------|--------|----------|------|-------------|----------|
-        | **Q1: Growth** | L'économie est forte, l'inflation est contenue (Goldilocks). Maximal Risk-On. | 30% | **40%** | **30%** | 0% | 0% | 0% |
-        | **Q2: Inflation** | Surchauffe (Reflation). Les actifs tangibles et matières premières performent. | **40%** | 10% | 0% | **30%** | **20%** | 0% |
-        | **Q3: Stagflation** | Croissance faible, forte inflation. Hausse des taux, cash et refuges privilégiés. | 0% | 0% | 0% | **60%** | **20%** | **20%** |
-        | **Q4: Deflation** | Choc déflationniste / Récession. Les obligations (Treasuries) jouent leur rôle protecteur d'ultime recours. | 0% | 0% | 0% | **40%** | 0% | **60%** |
+        **1. Allocation de base par Régime Macro :**
+
+        | Quadrant | Logique Fondamentale | SP500 | NASDAQ | SmallCAP | GOLD | COMMODITIES | TREASURY | OBLIGATION (IG) |
+        |----------|-----------------------|-------|--------|----------|------|-------------|----------|-----------------|
+        | **Q1: Growth** | Croissance Saine (Goldilocks). Maximal Risk-On sur les actions. | 30% | 40% | 30% | 0% | 0% | 0% | 0% |
+        | **Q2: Inflation** | **Reflation (Régime dominant).** Phase d'expansion la plus courante de l'économie moderne. Maintien de l'exposition globale au risque. | 40% | 30% | 30% | 0% | 0% | 0% | 0% |
+        | **Q3: Stagflation** | Défense Totale. Phase de transition vers le risk-OFF du Q4. Baisse de la croissance et hausse des prix. Refuges tangibles privilégiés (Or, Matières premières) et Treasuries. | 0% | 0% | 0% | 40% | 30% | 30% | 0% |
+        | **Q4: Deflation** | Le Bunker (Crash Déflationniste). Risk-OFF, protection via les obligations d'État, et l'Or comme refuge. | 0% | 0% | 0% | 30% | 0% | 50% | 20% |
+        
+        **2. Filtre de Tendance et Mécanisme Risk-Off (Trend Following Overlay) :**
+        
+        Afin de limiter les drawdowns extrêmes lors de krachs boursiers subits, un filtre de suivi de tendance (**MA200**) est superposé en temps réel aux allocations ci-dessus :
+        - Les actifs majeurs (**S&P 500, NASDAQ 100 et Or**) sont constamment surveillés par rapport à leur Moyenne Mobile à 200 jours.
+        - **Déclenchement Risk-Off :** Si un de ces actifs clôture sous sa MA200 pendant **5 jours consécutifs**, l'intégralité de son allocation prévue est coupée et automatiquement transférée vers la sécurité des **Bons du Trésor à 10 ans (Treasuries)**.
+        - **Reprise Risk-On :** La position est restaurée soit lorsque l'actif repasse au-dessus de sa MA200 pendant 5 jours, soit lors d'un grand basculement de quadrant macroéconomique.
         """)
-        st.info("📈 Les résultats de ces pondérations confrontées au marché (rendements composés, Max Drawdown, Ratio de Sharpe) sont consultables dans la page **'Backtest'**.")
+        st.info(" Les résultats de ces pondérations confrontées au marché (rendements composés, Max Drawdown, Ratio de Sharpe) sont consultables dans la page **'Backtest'**.")
 
-    with st.expander("5. Limitations du Modèle (Real-World Constraints)"):
+    with st.expander("5. Mesure de Robustesse et Confiance Statistique (Bootstrap)"):
+        st.markdown("""
+        Pour s'assurer que les performances de notre modèle ne sont pas de simples anomalies (overfitting sur des valeurs extrêmes isolées), l'application propose plusieurs métriques et un test de confiance par Bootstrap :
+        Pour la construction de l'allocations, le modèle s'appuie sur la confiance statistique des performances des actifs en fonction des quadrants.
+        **Les Métriques de Performance :**
+        - **Sharpe Ratio** : Évalue le rendement ajusté de la volatilité totale. 
+        - **Sortino Ratio** : Variante du Sharpe qui ne pénalise que la volatilité *à la baisse* (Downside Deviation). 
+        - **Win Rate (%)** : Probabilité qu'une journée soit positive. 
+
+        **La Confiance Statistique (Block Bootstrap) :**
+        Au lieu de tester la stratégie sur de l'aléatoire avec un montecarlo par exemple (ce qui n'aurait pas de sens économique avec un model macros comme celui-ci), l'application teste la **fiabilité des rendements**.
+        Pour un actif donné dans un quadrant précis (ex: l'Or en Q4), le système :
+        1. Isole tous les rendements quotidiens réels de l'actif durant ce régime.
+        2. Tire aléatoirement 500 échantillons distincts de cette série de rendements (avec remise).
+        3. Calcule la métrique (ex: Sortino) pour ces 500 scénarios ainsi que l'écart-type des rendements des échantillons.
+        4. Détermine le **Niveau de Confiance** (ex: 95%) : pourcentage des échantillons confirmant la même polarité (gain ou perte) que la performance historique observée sur cet actif.
+        
+        *Plus la confiance est proche de 100%, plus la performance observée (qu'elle soit positive ou négative) est robuste et non due à quelques jours d'anomalies statistiques extrêmes isolés.*
+        """)
+
+    with st.expander("6. Limitations du Modèle (Real-World Constraints)"):
         st.markdown("""
         Afin de rester le plus réaliste possible face au terrain, le projet a été confronté et adapté à plusieurs limites inhérentes à la data financière et au ML :
         
