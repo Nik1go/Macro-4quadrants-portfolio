@@ -314,6 +314,7 @@ def _build_signal_loop(
 
                 current_pos      = None
                 underperf_streak = 0
+                continue
 
         # ── ENTRY CHECK (only if no position is open) ──
         if current_pos is not None:

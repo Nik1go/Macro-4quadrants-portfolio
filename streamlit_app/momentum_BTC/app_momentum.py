@@ -36,6 +36,30 @@ def render():
             color: white !important;
         }
         
+        /* Expander styling */
+        div[data-testid="stExpander"] details {
+            background-color: #1a1d35 !important;
+            border: 1px solid #3d4263 !important;
+            border-radius: 8px !important;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+        }
+        div[data-testid="stExpander"] summary {
+            background-color: #1e2139 !important;
+            color: #00d4ff !important;
+            padding: 15px !important;
+            font-size: 16px !important;
+            font-weight: 700 !important;
+        }
+        div[data-testid="stExpander"] summary:hover {
+            background-color: #2a2d45 !important;
+            border-color: #00d4ff !important;
+        }
+        div[data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+            background-color: #0a0e27 !important;
+            padding: 20px !important;
+            border-top: 1px solid #3d4263 !important;
+        }
+        
         /* Tab navigation styling - bigger + separated */
         .stTabs [data-baseweb="tab-list"] {
             gap: 0px !important;
@@ -93,16 +117,18 @@ def render():
 
         st.markdown("---")
 
-        # Long/Short side by side
-        col_long, col_short = st.columns(2)
+        with st.expander("Conditions d'Entrée & Sortie", expanded=False):
+            # Long/Short side by side
+            col_long, col_short = st.columns(2)
+            
 
-        with col_long:
-            st.markdown("### Position Long (Achat)")
-            st.markdown("""
-            **Conditions d'Entrée :**
-            1. **Univers :** Sélection des 20 altcoins avec le plus gros volume (hors stablecoins).
-            2. **Régime de Distribution :** *120d Skewness > 0.15* (asymétrie positive significative).
-            3. **Force du Mouvement :** *BTC 5D Return > Médiane + 1σ* (momentum haussier exceptionnel).
+            with col_long:
+                st.markdown("### Position Long (Achat)")
+                st.markdown("""
+                **Conditions d'Entrée :**
+                1. **Univers :** Sélection des 20 altcoins avec le plus gros volume (hors stablecoins).
+                2. **Régime de Distribution :** *120d Skewness > 0.15* (asymétrie positive significative).
+                3. **Force du Mouvement :** *BTC 5D Return > Médiane + 1σ* (momentum haussier exceptionnel).
             4. **Confirmation Volume :** Volume BTC du jour > SMA(20) des volumes (le mouvement est soutenu par de vrais flux).
             5. **Confirmation BTC :** Prix > SMA depuis **3 jours consécutifs**.
             6. **Performance Relative :** Paire ALT/BTC > SMA depuis **5 jours consécutifs**.
@@ -136,7 +162,7 @@ def render():
 
         st.markdown("---")
 
-        with st.expander("1. Architecture Technique (Data Engineering Pipeline)", expanded=True):
+        with st.expander("1. Architecture Technique (Data Engineering Pipeline)", expanded=False):
             st.markdown("""
             L'ensemble du pipeline est entièrement automatisé et executé chaque jours à 00H05 UTC (01H05/02H05 heure de Paris) par **Apache Airflow**, via **Apache Spark**, de l'ingestion de la donnée jusqu'à l'exécution d'ordres de trading via l'API d'Interactive Brokers.
             """)
@@ -180,7 +206,7 @@ def render():
         trades_path = os.path.join(backtest_out_dir, "trades_log.csv")
 
         if not os.path.exists(heatmap_path) or not os.path.exists(summary_path):
-            st.warning("⚠️ Les résultats du Backtest ne sont pas encore générés.")
+            st.warning(" Les résultats du Backtest ne sont pas encore générés.")
             st.info("Lancez le script `pipeline_crypto_momentum/backtest/run_backtest.py` via Airflow pour calculer l'optimisation.")
 
         else:
@@ -198,7 +224,7 @@ def render():
 
                 st.markdown("---")
                 st.markdown("### Meilleure Configuration")
-                st.info(f"🏆 SMA : **{summary.get('best_sma', 'N/A')}**\n\n🏆 Lookback : **{summary.get('best_lookback', 'N/A')}**")
+                st.info(f" SMA : **{summary.get('best_sma', 'N/A')}**\n\n🏆 Lookback : **{summary.get('best_lookback', 'N/A')}**")
 
                 st.markdown("### Métriques globales")
                 st.metric("Rendement Total", f"{summary.get('tot_ret_pct', 0.0):.2f}%")
@@ -309,15 +335,21 @@ def render():
                 sys.path.insert(0, momentum_dir)
             from indicators.calc_indicators import compute_all_indicators
 
-            st.markdown("#### ⚙️ Paramètres de Vision")
-            live_lookback = st.slider(
-                "Période de Lookback (Jours)", 
-                min_value=30, max_value=600, value=600, step=30,
-                help="Ajustez le Lookback pour voir comment cela affecte les seuils d'entrée (Médiane ± Écart-type) aujourd'hui."
-            )
+            # Load optimal parameters from backtest summary
+            summary_path = os.path.join(crypto_data_dir, "backtest_results", "backtest_summary.json")
+            live_lookback = 120
+            live_sma = 50
+            if os.path.exists(summary_path):
+                import json
+                with open(summary_path, "r") as f:
+                    summary = json.load(f)
+                    live_lookback = summary.get("best_lookback", 120)
+                    live_sma = summary.get("best_sma", 50)
+            
+            st.markdown(f"**Paramètres Actifs (issus du Backtest) :** SMA = {live_sma} | Lookback = {live_lookback}")
             st.markdown("---")
 
-            indicators = compute_all_indicators(sma_period=50, roll_lookback=live_lookback)
+            indicators = compute_all_indicators(sma_period=live_sma, roll_lookback=live_lookback)
             today_idx = len(indicators["btc_close"]) - 1
             today = indicators["btc_close"].index[today_idx]
             data_loaded = True
@@ -343,7 +375,7 @@ def render():
             # ══════════════════════════════════════════
             # SECTION 1: BTC CONDITIONS DASHBOARD
             # ══════════════════════════════════════════
-            st.markdown("#### 📊 Conditions BTC")
+            st.markdown("####  Conditions BTC")
 
             col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
@@ -361,7 +393,7 @@ def render():
             st.markdown("---")
 
             # Entry conditions with visual indicators
-            st.markdown("#### 🎯 Conditions d'Entrée")
+            st.markdown("#### Conditions d'Entrée")
 
             col_long, col_short = st.columns(2)
 
@@ -400,7 +432,7 @@ def render():
             # ══════════════════════════════════════════
             # SECTION 2: ALT HEATMAP + SELECTION
             # ══════════════════════════════════════════
-            st.markdown("#### 🗺️ Heatmap Performance Altcoins")
+            st.markdown("####  Heatmap Performance Altcoins")
 
             import plotly.express as px
             import plotly.graph_objects as go
@@ -483,7 +515,7 @@ def render():
 
             # ── Signal Preview ──
             st.markdown("---")
-            st.markdown("#### ⭐ Crypto Sélectionnée")
+            st.markdown("####  Crypto Sélectionnée")
 
             col_star, col_skull = st.columns(2)
 
@@ -491,7 +523,7 @@ def render():
                 if long_candidates:
                     long_candidates.sort(key=lambda x: x[1], reverse=True)
                     star_sym, star_ret = long_candidates[0]
-                    st.markdown(f"### ⭐ Star du moment")
+                    st.markdown(f"###  Star du moment")
                     st.markdown(f"**{star_sym}** — 3D ret: **{star_ret:+.2%}**")
                     st.markdown(f"*{len(long_candidates)} cryptos passent le filtre Long*")
                     if long_momentum and above_3d:
@@ -499,14 +531,14 @@ def render():
                     else:
                         st.info("Conditions BTC non remplies (pas de trade)")
                 else:
-                    st.markdown("### ⭐ Star du moment")
+                    st.markdown("###  Star du moment")
                     st.info("Aucune crypto ne passe le filtre ALT/BTC > SMA (5d)")
 
             with col_skull:
                 if short_candidates:
                     short_candidates.sort(key=lambda x: x[1])
                     skull_sym, skull_ret = short_candidates[0]
-                    st.markdown(f"### 💀 Absente du moment")
+                    st.markdown(f"###  Absente du moment")
                     st.markdown(f"**{skull_sym}** — 3D ret: **{skull_ret:+.2%}**")
                     st.markdown(f"*{len(short_candidates)} cryptos passent le filtre Short*")
                     if short_momentum and below_3d:
@@ -514,7 +546,7 @@ def render():
                     else:
                         st.info("Conditions BTC non remplies (pas de trade)")
                 else:
-                    st.markdown("### 💀 Absente du moment")
+                    st.markdown("###  Absente du moment")
                     st.info("Aucune crypto ne passe le filtre ALT/BTC < SMA (5d)")
 
         st.markdown("---")
@@ -522,7 +554,7 @@ def render():
         # ══════════════════════════════════════════
         # SECTION 3: PORTFOLIO STATE
         # ══════════════════════════════════════════
-        st.markdown("#### 💼 État du Portefeuille")
+        st.markdown("####  État du Portefeuille")
 
         if os.path.exists(state_path):
             import json
@@ -531,10 +563,10 @@ def render():
 
             col_a, col_b, col_c = st.columns(3)
             with col_a:
-                st.metric("💰 Cash Disponible", f"${state.get('cash', 0):,.2f}")
+                st.metric(" Cash Disponible", f"${state.get('cash', 0):,.2f}")
             with col_b:
                 n_pos = len(state.get("positions", []))
-                st.metric("📦 Positions Ouvertes", n_pos)
+                st.metric(" Positions Ouvertes", n_pos)
             with col_c:
                 initial_cash = state.get('initial_cash', 10000)
                 current_cash = state.get('cash', 0)
@@ -545,7 +577,7 @@ def render():
 
             positions = state.get("positions", [])
             if positions:
-                st.markdown("##### 📍 Positions Actives")
+                st.markdown("##### Positions Actives")
                 pos_df = pd.DataFrame(positions)
                 st.dataframe(pos_df, use_container_width=True)
         else:
@@ -559,7 +591,7 @@ def render():
         if os.path.exists(nav_path):
             nav_df = pd.read_csv(nav_path, parse_dates=["date"])
             if not nav_df.empty:
-                st.markdown("#### 📈 Évolution de la NAV")
+                st.markdown("#### Évolution de la NAV")
                 import plotly.graph_objects as go
                 fig_nav = go.Figure()
                 fig_nav.add_trace(go.Scatter(
@@ -578,7 +610,7 @@ def render():
         # ══════════════════════════════════════════
         # SECTION 5: TRADE HISTORY
         # ══════════════════════════════════════════
-        st.markdown("#### 📋 Trades Récents")
+        st.markdown("####  Trades Récents")
         exec_logs_dir = os.path.join(crypto_data_dir, "execution_logs")
         if os.path.exists(exec_logs_dir):
             import glob, json
