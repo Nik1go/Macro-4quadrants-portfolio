@@ -17,8 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # Initialize session state for routing
 if 'current_page' not in st.session_state:
     st.session_state.current_page = "Home"
-if 'scroll_to_top' not in st.session_state:
-    st.session_state.scroll_to_top = False
+
 
 try:
     import matplotlib.pyplot as plt
@@ -285,8 +284,8 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_macro", use_container_width=True):
+            st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Pipeline Macro-Quantitative"
-            st.session_state.scroll_to_top = True
             st.rerun()
     
     with col2:
@@ -301,8 +300,8 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_crypto", use_container_width=True):
+            st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Crypto Momentum Trading"
-            st.session_state.scroll_to_top = True
             st.rerun()
     
     with col3:
@@ -317,8 +316,8 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
+            st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Monte Carlo Gambling"
-            st.session_state.scroll_to_top = True
             st.rerun()
     
     
@@ -335,8 +334,8 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_dca", use_container_width=True):
+            st.session_state.pop("main_menu", None)
             st.session_state.current_page = "DCA Investment Strategy"
-            st.session_state.scroll_to_top = True
             st.rerun()
 
     with col5:
@@ -351,7 +350,9 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
-            pass # placeholder
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Equity Research"
+            st.rerun()
     
     
     with col6:
@@ -366,8 +367,8 @@ def render_home():
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_finmod", use_container_width=True):
+            st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Equity Research"
-            st.session_state.scroll_to_top = True
             st.rerun()
     
     st.markdown("---")
@@ -385,30 +386,21 @@ def render_home():
         st.markdown("[**LinkedIn**](https://www.linkedin.com/in/leo-bertrand-link/)")
     
 
-# --- JS SCROLL HACK ---
-if st.session_state.scroll_to_top:
-    import streamlit.components.v1 as components
-    components.html(
-        '''
-        <script>
-            setTimeout(function() {
-                var body = window.parent.document.querySelector(".main");
-                if (body) { body.scrollTo(0, 0); }
-                window.parent.scrollTo(0, 0);
-            }, 200);
-        </script>
-        ''',
-        height=0
-    )
-    st.session_state.scroll_to_top = False
-
 # --- ROUTING LOGIC ---
+def _render_nav_sidebar(current_page_name):
+    """Renders the sidebar option_menu and returns True if user navigated away."""
+    selected = render_sidebar()
+    if selected and selected != current_page_name:
+        st.session_state.pop("main_menu", None)
+        st.session_state.current_page = selected
+        st.rerun()
+
 if __name__ == "__main__":
     if st.session_state.current_page == "Home":
         selected = render_sidebar()
         if selected and selected != "Home":
+            st.session_state.pop("main_menu", None)
             st.session_state.current_page = selected
-            st.session_state.scroll_to_top = True
             st.rerun()
         render_home()
 
@@ -417,6 +409,7 @@ if __name__ == "__main__":
         app_macro.render()
 
     elif st.session_state.current_page == "Monte Carlo Gambling":
+        _render_nav_sidebar("Monte Carlo Gambling")
         try:
             apply_home_css()
             import montecarlo_gambling.app_montecarlo as app_montecarlo
@@ -425,6 +418,7 @@ if __name__ == "__main__":
             st.error(f"Could not load the Monte Carlo app: {str(e)}")
 
     elif st.session_state.current_page == "DCA Investment Strategy":
+        _render_nav_sidebar("DCA Investment Strategy")
         try:
             apply_home_css()
             import dca_strat.app_dca as app_dca
@@ -433,6 +427,7 @@ if __name__ == "__main__":
             st.error(f"Could not load the DCA Strategy app: {str(e)}")
 
     elif st.session_state.current_page == "Crypto Momentum Trading":
+        _render_nav_sidebar("Crypto Momentum Trading")
         try:
             apply_home_css()
             import momentum_BTC.app_momentum as app_momentum
@@ -441,15 +436,11 @@ if __name__ == "__main__":
             st.error(f"Could not load the Crypto Momentum Trading app: {str(e)}")
 
     elif st.session_state.current_page == "Equity Research":
-        with st.sidebar:
-            if st.button("⬅️ Back to home", use_container_width=True):
-                st.session_state.current_page = "Home"
-                st.session_state.scroll_to_top = True
-                st.rerun()
+        _render_nav_sidebar("Equity Research")
         st.title("Equity Research")
         st.write("Page under construction...")
 
     else:
         st.session_state.current_page = "Home"
-        st.session_state.scroll_to_top = True
         st.rerun()
+

@@ -22,7 +22,6 @@ def render():
     with st.sidebar:
         if st.button("Back to Home", use_container_width=True):
             st.session_state.current_page = "Home"
-            st.session_state.scroll_to_top = True
             st.rerun()
 
     # --- THEME & DATA ---

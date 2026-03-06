@@ -104,14 +104,6 @@ def run_optimization():
     return pd.DataFrame(resultats_vbt)
 
 def render():
-    import app
-    
-    selected = app.render_sidebar()
-    if selected and selected != "Monte Carlo Gambling":
-        st.session_state.current_page = selected
-        st.session_state.scroll_to_top = True
-        st.rerun()
-            
     st.title("🎲 Monte Carlo Gambling Simulator")
     st.markdown("Simulation d'une ** Martingale** à la roulette via des simulations de Monte Carlo, afin de démontrer l'impossibilité mathématique de battre le casino de manière consistante.")
     

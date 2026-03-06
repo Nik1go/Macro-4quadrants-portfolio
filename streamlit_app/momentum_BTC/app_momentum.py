@@ -5,14 +5,7 @@ import pandas as pd
 import os
 
 def render():
-    import app
     import momentum_BTC.momentum_utils as mu
-
-    selected = app.render_sidebar()
-    if selected and selected != "Crypto Momentum Trading":
-        st.session_state.current_page = selected
-        st.session_state.scroll_to_top = True
-        st.rerun()
 
     st.title("Crypto Momentum Trading")
     st.markdown("**Exploitation des effets de mode et de momentum sur les cryptomonnaies.**")
@@ -161,7 +154,6 @@ def render():
             """)
 
         st.markdown("---")
-
         with st.expander("1. Architecture Technique (Data Engineering Pipeline)", expanded=False):
             st.markdown("""
             L'ensemble du pipeline est entièrement automatisé et executé chaque jours à 00H05 UTC (01H05/02H05 heure de Paris) par **Apache Airflow**, via **Apache Spark**, de l'ingestion de la donnée jusqu'à l'exécution d'ordres de trading via l'API d'Interactive Brokers.
@@ -479,15 +471,18 @@ def render():
             if not hm_df.empty:
                 hm_df = hm_df.sort_values("3D Return (%)", ascending=False)
 
+                # Keep top 10 long candidates (highest positive return) and top 10 short candidates (lowest negative return)
+                df_long = hm_df[hm_df["ALT/BTC > SMA (5d)"]].nlargest(10, "3D Return (%)")
+                df_short = hm_df[hm_df["ALT/BTC < SMA (5d)"]].nsmallest(10, "3D Return (%)")
+                hm_df = pd.concat([df_long, df_short]).sort_values("3D Return (%)", ascending=False)
+
                 # Color-coded bar chart of 3D returns
                 colors = []
                 for _, row in hm_df.iterrows():
                     if row["ALT/BTC > SMA (5d)"]:
                         colors.append("#00ff88")  # green = long candidate
-                    elif row["ALT/BTC < SMA (5d)"]:
-                        colors.append("#ff4444")  # red = short candidate
                     else:
-                        colors.append("#555555")  # gray = no filter
+                        colors.append("#ff4444")  # red = short candidate
 
                 fig_bar = go.Figure(data=[
                     go.Bar(
@@ -510,8 +505,6 @@ def render():
                 )
                 fig_bar.add_hline(y=0, line_dash="dash", line_color="gray")
                 st.plotly_chart(fig_bar, use_container_width=True)
-
-                st.caption("🟢 Vert = ALT/BTC > SMA (5d) — candidat Long  |  🔴 Rouge = ALT/BTC < SMA (5d) — candidat Short  |  ⚫ Gris = Filtre non passé")
 
             # ── Signal Preview ──
             st.markdown("---")

@@ -151,62 +151,33 @@ def render(data):
                 recent_x = df_recent['score_Q2'] - df_recent['score_Q4']
                 recent_y = df_recent['score_Q1'] - df_recent['score_Q3']
 
+            # Ligne fine noire pour le trajet
             fig.add_trace(go.Scatter(
                 x=recent_x, y=recent_y,
-                mode='lines+markers',
-                marker=dict(size=6, color='yellow', opacity=0.8, line=dict(width=0.5, color='black')),
-                line=dict(color='yellow', width=1, dash='solid'),
-                name='90 derniers jours'
+                mode='lines',
+                line=dict(color='black', width=1, dash='solid'),
+                name='Trajectoire (90 derniers jours)'
             ))
 
-            if 'date' in df_q.columns:
-                df_crisis = df_q[(df_q['date'] >= '2007-09-01') & (df_q['date'] <= '2009-03-01')]
-                if not df_crisis.empty:
-                    if 'MACRO_GROWTH_SCORE' in df_crisis.columns:
-                        crisis_x = df_crisis['MACRO_INFLATION_SCORE']
-                        crisis_y = df_crisis['MACRO_GROWTH_SCORE']
-                    else:
-                        crisis_x = df_crisis['score_Q2'] - df_crisis['score_Q4']
-                        crisis_y = df_crisis['score_Q1'] - df_crisis['score_Q3']
-                    hover_dates = df_crisis['date'].dt.strftime('%Y-%m-%d')
-                    
-                    fig.add_trace(go.Scatter(
-                        x=crisis_x, y=crisis_y,
-                        mode='lines+markers',
-                        marker=dict(
-                            size=5, 
-                            color=list(range(len(crisis_x))), 
-                            colorscale='Greys', # De gris clair à foncé pour voir le temps passer
-                            opacity=0.8
-                        ),
-                        line=dict(color='rgba(150, 150, 150, 0.3)', width=1, dash='dot'), # Ligne pointillée très discrète
-                        name='Crise 2008 (Clair ➜ Foncé)',
-                        hovertext=hover_dates
-                    ))
-                    
-                    # Marquer expressément le début
-                    fig.add_trace(go.Scatter(
-                        x=[crisis_x.iloc[0]], y=[crisis_y.iloc[0]],
-                        mode='markers+text',
-                        marker=dict(size=7, color='white'),
-                        text=['Début (Sep 07)'],
-                        textposition='top right',
-                        textfont=dict(size=10, color='lightgrey'),
-                        showlegend=False,
-                        hoverinfo='skip'
-                    ))
-                    
-                    # Marquer expressément la fin
-                    fig.add_trace(go.Scatter(
-                        x=[crisis_x.iloc[-1]], y=[crisis_y.iloc[-1]],
-                        mode='markers+text',
-                        marker=dict(size=7, color='grey', symbol='x', line=dict(color='white', width=1)),
-                        text=['Fin (Mar 09)'],
-                        textposition='bottom right',
-                        textfont=dict(size=10, color='lightgrey'),
-                        showlegend=False,
-                        hoverinfo='skip'
-                    ))
+            # Ajouter des flèches directionnelles le long du trajet (1 toutes les 4 périodes pour la lisibilité)
+            step = 4
+            for i in range(0, len(recent_x) - 1, step):
+                fig.add_annotation(
+                    x=recent_x.iloc[i+1], y=recent_y.iloc[i+1],
+                    ax=recent_x.iloc[i], ay=recent_y.iloc[i],
+                    xref='x', yref='y', axref='x', ayref='y',
+                    showarrow=True, arrowhead=2, arrowsize=1.5, arrowwidth=1,
+                    arrowcolor='yellow'
+                )
+            # S'assurer qu'il y a une flèche sur le dernier segment si non couvert
+            if len(recent_x) > 1 and (len(recent_x) - 2) % step != 0:
+                fig.add_annotation(
+                    x=recent_x.iloc[-1], y=recent_y.iloc[-1],
+                    ax=recent_x.iloc[-2], ay=recent_y.iloc[-2],
+                    xref='x', yref='y', axref='x', ayref='y',
+                    showarrow=True, arrowhead=2, arrowsize=1.5, arrowwidth=1,
+                    arrowcolor='yellow'
+                )
 
             fig.add_trace(go.Scatter(
                 x=[cur_inflation], y=[cur_growth], mode='markers',

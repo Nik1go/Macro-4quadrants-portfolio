@@ -3,15 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 def render():
-    import app
     import dca_strat.dca_utils as du
-    
-    selected = app.render_sidebar()
-    if selected and selected != "DCA Investment Strategy":
-        st.session_state.current_page = selected
-        st.session_state.scroll_to_top = True
-        st.rerun()
-            
     st.title("💰 DCA Investment Strategy")
     st.markdown("illustration et optimisation d'une stratégie de DCA (Dollar Cost Averaging). "
                 "Ayant moi-même un petit capital, j'utilise le DCA pour une partie de mon portefeuille (40%) "
