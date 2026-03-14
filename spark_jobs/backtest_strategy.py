@@ -170,8 +170,9 @@ def main():
     df_a = df_a.drop_duplicates(subset=['date']).set_index('date').sort_index()
 
     # ========== 2. INNER JOIN ==========
-    df = df_a[ASSETS].join(df_q[['assigned_quadrant']], how='inner')
-    df = df.dropna(subset=['assigned_quadrant'])
+    # Merge on data, include raw probabilities for the new High Conviction strategy
+    df = df_a[ASSETS].join(df_q[['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW']], how='inner')
+    df = df.dropna(subset=['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW'])
     df['assigned_quadrant'] = df['assigned_quadrant'].astype(int)
     
     # Apply start date filter
@@ -274,9 +275,55 @@ def main():
     df['SP500_wealth'] = initial_capital * (1 + df['SP500_ret']).cumprod()
     df['GOLD_wealth'] = initial_capital * (1 + df['GOLD_OZ_USD_ret']).cumprod()
 
+    # ========== 12.B HIGH CONVICTION STRATEGY ==========
+    # Initialize weights
+    for asset in ASSETS:
+        df[f'{asset}_hc_weight'] = 0.0
+
+    # Q1: Growth > 65% AND Inflation < 35%
+    # SP500, US REIT, Obligation
+    q1_hc_mask = (df['PROB_GROWTH_RAW'] > 0.65) & (df['PROB_INFLATION_RAW'] < 0.35)
+    df.loc[q1_hc_mask, 'SP500_hc_weight'] = 0.334
+    df.loc[q1_hc_mask, 'US_REIT_VNQ_hc_weight'] = 0.333
+    df.loc[q1_hc_mask, 'OBLIGATION_hc_weight'] = 0.333
+
+    # Q2: Growth > 65% AND Inflation > 65%
+    # NASDAQ_100, SP500
+    q2_hc_mask = (df['PROB_GROWTH_RAW'] > 0.65) & (df['PROB_INFLATION_RAW'] > 0.65)
+    df.loc[q2_hc_mask, 'NASDAQ_100_hc_weight'] = 0.5
+    df.loc[q2_hc_mask, 'SP500_hc_weight'] = 0.5
+
+    # Q4: Growth < 35% AND Inflation < 35%
+    # Treasury 10Y, GOLD
+    q4_hc_mask = (df['PROB_GROWTH_RAW'] < 0.35) & (df['PROB_INFLATION_RAW'] < 0.35)
+    df.loc[q4_hc_mask, 'TREASURY_10Y_hc_weight'] = 0.5
+    df.loc[q4_hc_mask, 'GOLD_OZ_USD_hc_weight'] = 0.5
+
+    # Any other condition implies Cash (all weights remain 0.0)
+
+    # Returns for HC
+    df['hc_return'] = 0.0
+    for asset in ASSETS:
+        df['hc_return'] += df[f'{asset}_hc_weight'] * df[f'{asset}_ret']
+
+    # Costs for HC
+    hc_weight_cols = [f'{a}_hc_weight' for a in ASSETS]
+    hc_turnover = df[hc_weight_cols].diff().abs().sum(axis=1).fillna(0.0)
+    df['hc_transaction_cost'] = hc_turnover * TRANSACTION_COST
+
+    hc_ter_daily = pd.Series(0.0, index=df.index)
+    for asset in ASSETS:
+        hc_ter_daily += df[f'{asset}_hc_weight'] * (TER.get(asset, 0.0) / TRADING_DAYS)
+    df['hc_ter_cost'] = hc_ter_daily
+
+    df['hc_return'] = df['hc_return'] - df['hc_ter_cost'] - df['hc_transaction_cost']
+    df['hc_wealth'] = initial_capital * (1 + df['hc_return']).cumprod()
+
+
     # ========== 13. STATS ==========
     stats = {}
     stats.update(calculate_stats(df['portfolio_return'], df['wealth'], 'strategy'))
+    stats.update(calculate_stats(df['hc_return'], df['hc_wealth'], 'strategy_hc'))
     stats.update(calculate_stats(df['SP500_ret'], df['SP500_wealth'], 'SP500'))
     stats.update(calculate_stats(df['GOLD_OZ_USD_ret'], df['GOLD_wealth'], 'GOLD'))
 
@@ -284,7 +331,9 @@ def main():
     stats['cum_ter_cost'] = df['ter_cost'].sum()
     stats['initial_capital'] = initial_capital
     stats['final_wealth'] = df['wealth'].iloc[-1]
+    stats['hc_final_wealth'] = df['hc_wealth'].iloc[-1]
     stats['total_return'] = (df['wealth'].iloc[-1] / initial_capital) - 1
+    stats['hc_total_return'] = (df['hc_wealth'].iloc[-1] / initial_capital) - 1
 
     # Count risk-off switches (including NASDAQ-100)
     for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100']:
@@ -327,7 +376,7 @@ def main():
         pd.DataFrame(perf_rows).to_csv(f"{output_dir}/assets_performance_by_smooth_quadrant.csv", index=False)
 
     # Timeseries
-    out_cols = ['smooth_quadrant', 'portfolio_return', 'wealth', 'SP500_wealth', 'GOLD_wealth',
+    out_cols = ['smooth_quadrant', 'portfolio_return', 'wealth', 'hc_return', 'hc_wealth', 'SP500_wealth', 'GOLD_wealth',
                 'transaction_cost', 'ter_cost'] + weight_cols
     df_out = df[out_cols].copy()
     df_out.index.name = 'date'

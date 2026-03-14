@@ -224,10 +224,10 @@ def get_rolling_universe(all_volumes: pd.DataFrame, date, n: int = 20) -> list:
 def _build_signal_loop(
     close, open_price, alt_usdt_volumes,
     btc_ret_5d, btc_median, btc_std, btc_skew,
-    btc_above_sma_3d, btc_below_sma_3d,
+    btc_above_sma_2d, btc_below_sma_2d,
     btc_vol_confirm,
     alt_btc_closes,
-    alt_btc_above_sma_5d, alt_btc_below_sma_5d,
+    alt_btc_above_sma_2d, alt_btc_below_sma_2d,
     alt_atr_df,
     daily_ret, basket_avg_ret,
     btc="BTCUSDT",
@@ -300,8 +300,8 @@ def _build_signal_loop(
 
             # BTC trend reversal exit
             btc_trend_exit = (
-                (side == "long"  and bool(btc_below_sma_3d.at[prev_dt])) or
-                (side == "short" and bool(btc_above_sma_3d.at[prev_dt]))
+                (side == "long"  and bool(btc_below_sma_2d.at[prev_dt])) or
+                (side == "short" and bool(btc_above_sma_2d.at[prev_dt]))
             )
 
             should_exit = underperf_streak >= 3 or btc_trend_exit or atr_stop
@@ -329,17 +329,17 @@ def _build_signal_loop(
         if pd.isna(ret_5) or pd.isna(med) or pd.isna(std) or pd.isna(skew):
             continue
 
-        long_cond  = (ret_5 > (med + std)) and bool(btc_above_sma_3d.at[prev_dt]) and (skew > 0.15)  and vol_ok
-        short_cond = (ret_5 < (med - std)) and bool(btc_below_sma_3d.at[prev_dt]) and (skew < -0.15) and vol_ok
+        long_cond  = (ret_5 > (med + 0.5 * std)) and bool(btc_above_sma_2d.at[prev_dt]) and (skew > 0.15)  and vol_ok
+        short_cond = (ret_5 < (med - 0.5 * std)) and bool(btc_below_sma_2d.at[prev_dt]) and (skew < -0.15) and vol_ok
 
         # ── LONG ENTRY ──
         if long_cond:
             best_sym, best_ret = None, -np.inf
             for sym in active_universe:
                 btc_pair = sym.replace("USDT", "BTC")
-                if btc_pair not in alt_btc_above_sma_5d.columns:
+                if btc_pair not in alt_btc_above_sma_2d.columns:
                     continue
-                if not bool(alt_btc_above_sma_5d.at[prev_dt, btc_pair]):
+                if not bool(alt_btc_above_sma_2d.at[prev_dt, btc_pair]):
                     continue
                 r3 = close.at[prev_dt, sym] / close.iloc[max(0, i - 4)].get(sym, np.nan) - 1 if sym in close.columns else np.nan
                 # Use pre-computed 3d return from close directly
@@ -363,9 +363,9 @@ def _build_signal_loop(
             worst_sym, worst_ret = None, np.inf
             for sym in active_universe:
                 btc_pair = sym.replace("USDT", "BTC")
-                if btc_pair not in alt_btc_below_sma_5d.columns:
+                if btc_pair not in alt_btc_below_sma_2d.columns:
                     continue
-                if not bool(alt_btc_below_sma_5d.at[prev_dt, btc_pair]):
+                if not bool(alt_btc_below_sma_2d.at[prev_dt, btc_pair]):
                     continue
                 close_3d_ago = close.iloc[max(0, i - 4)][sym] if sym in close.columns else np.nan
                 close_now    = close.at[prev_dt, sym]
@@ -437,8 +437,8 @@ def run_momentum_backtest(
     btc_sma       = close[btc].rolling(sma_period, min_periods=sma_period).mean()
     btc_above_sma = close[btc] > btc_sma
     btc_below_sma = close[btc] < btc_sma
-    btc_above_sma_3d = btc_above_sma.rolling(3).sum() == 3
-    btc_below_sma_3d = btc_below_sma.rolling(3).sum() == 3
+    btc_above_sma_2d = btc_above_sma.rolling(2).sum() == 2
+    btc_below_sma_2d = btc_below_sma.rolling(2).sum() == 2
 
     btc_vol = btc_df["volume"].reindex(close.index).ffill() if "volume" in btc_df.columns else None
     if btc_vol is not None:
@@ -456,8 +456,8 @@ def run_momentum_backtest(
     alt_atr_df = pd.DataFrame(alt_atr)
 
     alt_btc_sma        = alt_btc_closes.rolling(sma_period, min_periods=sma_period).mean()
-    alt_btc_above_sma_5d = (alt_btc_closes > alt_btc_sma).rolling(5).sum() == 5
-    alt_btc_below_sma_5d = (alt_btc_closes < alt_btc_sma).rolling(5).sum() == 5
+    alt_btc_above_sma_2d = (alt_btc_closes > alt_btc_sma).rolling(2).sum() == 2
+    alt_btc_below_sma_2d = (alt_btc_closes < alt_btc_sma).rolling(2).sum() == 2
 
     universe       = [s for s in close.columns if s != btc]
     daily_ret      = close.pct_change(1)
@@ -468,10 +468,10 @@ def run_momentum_backtest(
         open_price=alt_usdt_opens,
         alt_usdt_volumes=alt_usdt_volumes,
         btc_ret_5d=btc_ret_5d, btc_median=btc_median, btc_std=btc_std, btc_skew=btc_skew,
-        btc_above_sma_3d=btc_above_sma_3d, btc_below_sma_3d=btc_below_sma_3d,
+        btc_above_sma_2d=btc_above_sma_2d, btc_below_sma_2d=btc_below_sma_2d,
         btc_vol_confirm=btc_vol_confirm,
         alt_btc_closes=alt_btc_closes,
-        alt_btc_above_sma_5d=alt_btc_above_sma_5d, alt_btc_below_sma_5d=alt_btc_below_sma_5d,
+        alt_btc_above_sma_2d=alt_btc_above_sma_2d, alt_btc_below_sma_2d=alt_btc_below_sma_2d,
         alt_atr_df=alt_atr_df,
         daily_ret=daily_ret, basket_avg_ret=basket_avg_ret,
         btc=btc,
@@ -578,12 +578,12 @@ def run_heatmap_simulation(
 
     for sma in sma_periods:
         btc_sma          = close[btc].rolling(sma, min_periods=sma).mean()
-        btc_above_sma_3d = (close[btc] > btc_sma).rolling(3).sum() == 3
-        btc_below_sma_3d = (close[btc] < btc_sma).rolling(3).sum() == 3
+        btc_above_sma_2d = (close[btc] > btc_sma).rolling(2).sum() == 2
+        btc_below_sma_2d = (close[btc] < btc_sma).rolling(2).sum() == 2
 
         alt_btc_sma          = alt_btc_closes.rolling(sma, min_periods=sma).mean()
-        alt_btc_above_sma_5d = (alt_btc_closes > alt_btc_sma).rolling(5).sum() == 5
-        alt_btc_below_sma_5d = (alt_btc_closes < alt_btc_sma).rolling(5).sum() == 5
+        alt_btc_above_sma_2d = (alt_btc_closes > alt_btc_sma).rolling(2).sum() == 2
+        alt_btc_below_sma_2d = (alt_btc_closes < alt_btc_sma).rolling(2).sum() == 2
 
         for lookback in roll_lookbacks:
             btc_median = btc_ret_5d.rolling(lookback, min_periods=30).median()
@@ -595,10 +595,10 @@ def run_heatmap_simulation(
                 open_price=alt_usdt_opens,
                 alt_usdt_volumes=alt_usdt_volumes,
                 btc_ret_5d=btc_ret_5d, btc_median=btc_median, btc_std=btc_std, btc_skew=btc_skew,
-                btc_above_sma_3d=btc_above_sma_3d, btc_below_sma_3d=btc_below_sma_3d,
+                btc_above_sma_2d=btc_above_sma_2d, btc_below_sma_2d=btc_below_sma_2d,
                 btc_vol_confirm=btc_vol_confirm,
                 alt_btc_closes=alt_btc_closes,
-                alt_btc_above_sma_5d=alt_btc_above_sma_5d, alt_btc_below_sma_5d=alt_btc_below_sma_5d,
+                alt_btc_above_sma_2d=alt_btc_above_sma_2d, alt_btc_below_sma_2d=alt_btc_below_sma_2d,
                 alt_atr_df=alt_atr_df,
                 daily_ret=daily_ret, basket_avg_ret=basket_avg_ret,
                 btc=btc,

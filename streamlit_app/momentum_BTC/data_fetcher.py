@@ -66,6 +66,23 @@ def fetch_top_symbols(n=TOP_N):
     """
     url = f"{API_BASE}/api/v3/ticker/24hr"
     
+    # ── Master Universe File Setup ──
+    alt_usdt_dir, _ = _get_data_dirs()
+    crypto_dir = os.path.dirname(alt_usdt_dir)
+    master_file = os.path.join(crypto_dir, "universe_master.json")
+    
+    import json
+    master_usdt = set()
+    master_btc = set()
+    if os.path.exists(master_file):
+        try:
+            with open(master_file, "r") as f:
+                data = json.load(f)
+                master_usdt = set(data.get("usdt_symbols", []))
+                master_btc = set(data.get("btc_symbols", []))
+        except Exception as e:
+            print(f"⚠️ Error reading master universe: {e}")
+    
     try:
         r = requests.get(url, timeout=15)
         r.raise_for_status()
@@ -114,8 +131,27 @@ def fetch_top_symbols(n=TOP_N):
         vol = next((float(t["quoteVolume"]) for t in usdt_tickers if t["symbol"] == sym), 0)
         print(f"   {i:2d}. {sym:<12s} — Vol: ${vol:>15,.0f}")
     
+    
     if skipped:
         print(f"\n⚠️ Skipped {len(skipped)} (no BTC pair): {', '.join(skipped[:10])}")
+    
+    # ── Merge with Master Universe ──
+    master_usdt.update(top_usdt)
+    master_btc.update(btc_pairs)
+    
+    # Save back to file
+    try:
+        with open(master_file, "w") as f:
+            json.dump({
+                "usdt_symbols": list(master_usdt),
+                "btc_symbols": list(master_btc)
+            }, f, indent=4)
+        print(f"\n💾 Master Universe updated: {len(master_usdt)} USDT pairs tracked historically.")
+    except Exception as e:
+        print(f"⚠️ Could not save master universe: {e}")
+        
+    # Return the full master list so the system downloads data for ALL historical + current top cryptos
+    return list(master_usdt), list(master_btc)
     
     print(f"\n📋 ALT/BTC pairs available: {len(btc_pairs)}")
     

@@ -7,7 +7,6 @@ from streamlit_option_menu import option_menu
 st.set_page_config(
     layout="wide",
     page_title="Quantitative Finance Portfolio",
-    page_icon="📊",
     initial_sidebar_state="auto"
 )
 
@@ -180,18 +179,23 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Equity Research"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Equity Research", "Tokenisation Project"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
             default_idx = 0
             
+        def on_menu_change(key):
+            st.session_state.current_page = st.session_state[key]
+            
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "dice-5", "coin", "journal-code"],
+            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "dice-5", "coin", "journal-code", "robot"],
             menu_icon="cast",
             default_index=default_idx,
+            manual_select=default_idx,
+            on_change=on_menu_change,
             key="main_menu",
             styles={
                 "container": {
@@ -341,6 +345,21 @@ def render_home():
     with col5:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+            <h3> Tokenisation Project</h3>
+            <p><strong>Tech:</strong> FEC parsing, Financial KPIs, AI Health Score</p>
+            <p>Company valuation and tokenization project based on FEC (Audit File). 
+            Analyze historical financial data to calculate KPIs and determine token price.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_token", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Tokenisation Project"
+            st.rerun()
+
+    with col6:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3> Pairs Trading Arbitrage</h3>
             <p><strong>Tech:</strong> Statsmodels, Scikit-learn, Scipy</p>
             <p>Developed pairs trading strategy for Gold-Silver correlation. Applied cointegration tests 
@@ -355,7 +374,9 @@ def render_home():
             st.rerun()
     
     
-    with col6:
+    col7, col8, col9 = st.columns(3)
+    
+    with col7:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3>Financial Modeling Suite</h3>
@@ -388,20 +409,12 @@ def render_home():
 
 # --- ROUTING LOGIC ---
 def _render_nav_sidebar(current_page_name):
-    """Renders the sidebar option_menu and returns True if user navigated away."""
-    selected = render_sidebar()
-    if selected and selected != current_page_name:
-        st.session_state.pop("main_menu", None)
-        st.session_state.current_page = selected
-        st.rerun()
+    """Renders the sidebar option_menu."""
+    render_sidebar()
 
 if __name__ == "__main__":
     if st.session_state.current_page == "Home":
-        selected = render_sidebar()
-        if selected and selected != "Home":
-            st.session_state.pop("main_menu", None)
-            st.session_state.current_page = selected
-            st.rerun()
+        _render_nav_sidebar("Home")
         render_home()
 
     elif st.session_state.current_page == "Pipeline Macro-Quantitative":
@@ -434,6 +447,15 @@ if __name__ == "__main__":
             app_momentum.render()
         except Exception as e:
             st.error(f"Could not load the Crypto Momentum Trading app: {str(e)}")
+
+    elif st.session_state.current_page == "Tokenisation Project":
+        _render_nav_sidebar("Tokenisation Project")
+        try:
+            apply_home_css()
+            import tokenisation_ia.app_tokenisation as app_tokenisation
+            app_tokenisation.render()
+        except Exception as e:
+            st.error(f"Could not load the Tokenisation Project app: {str(e)}")
 
     elif st.session_state.current_page == "Equity Research":
         _render_nav_sidebar("Equity Research")

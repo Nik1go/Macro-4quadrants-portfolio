@@ -212,6 +212,8 @@ def render(data):
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['wealth'], name='Strategy', line=dict(color='cyan')))
+        if 'hc_wealth' in df_bt.columns:
+            fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['hc_wealth'], name='Strategy Haute Conviction', line=dict(color='#39FF14', dash='dot')))
         fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['SP500_wealth'], name='SP500', line=dict(color='orange')))
         fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['GOLD_wealth'], name='Gold', line=dict(color='gold')))
         fig.update_layout(height=400, yaxis_title="Wealth ($)", xaxis_title="Date")
@@ -220,13 +222,37 @@ def render(data):
         st.warning("Donnees backtest non disponibles")
 
     # Key Metrics
-    m1, m2, m3, m4 = st.columns(4)
     if data['stats'] is not None:
         stats_dict = data['stats'].iloc[0].to_dict() if len(data['stats']) > 0 else {}
+        
+        st.markdown("#####  Stratégie d'Allocation (Tous régimes)")
+        st.caption("On définit une allocation systématique pour chaque quadrant, le portefeuille est toujours investi.")
+        m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total Return", f"{stats_dict.get('total_return', 0) * 100:.1f}%")
         m2.metric("Max Drawdown", f"{stats_dict.get('strategy_max_drawdown', 0) * 100:.1f}%")
         m3.metric("Sharpe Ratio", f"{stats_dict.get('strategy_sharpe_annual', 0):.2f}")
         m4.metric("Annual Vol", f"{stats_dict.get('strategy_vol_annual', 0) * 100:.1f}%")
+
+        if 'hc_total_return' in stats_dict:
+            st.markdown("##### Stratégie Trading (Haute Conviction)")
+            st.caption("On trade uniquement les jours de forte conviction (>65%). Nous ne tradons pas le Q3 car le signal n'est pas détecté avec suffisamment de probabilité/stabilité.")
+            m1b, m2b, m3b, m4b = st.columns(4)
+            m1b.metric("Total Return", f"{stats_dict.get('hc_total_return', 0) * 100:.1f}%")
+            m2b.metric("Max Drawdown", f"{stats_dict.get('strategy_hc_max_drawdown', 0) * 100:.1f}%")
+            m3b.metric("Sharpe Ratio", f"{stats_dict.get('strategy_hc_sharpe_annual', 0):.2f}")
+            m4b.metric("Annual Vol", f"{stats_dict.get('strategy_hc_vol_annual', 0) * 100:.1f}%")
+
+        if data['backtest'] is not None and 'SP500_wealth' in data['backtest'].columns:
+            sp500_wealth = data['backtest']['SP500_wealth']
+            sp500_tot_ret = (sp500_wealth.iloc[-1] / sp500_wealth.iloc[0]) - 1 if len(sp500_wealth) > 0 else 0
+            
+            st.markdown("##### Benchmark (S&P 500 B&H)")
+            st.caption("Acheter et conserver le marché américain (Buy & Hold).")
+            m1c, m2c, m3c, m4c = st.columns(4)
+            m1c.metric("Total Return", f"{sp500_tot_ret * 100:.1f}%")
+            m2c.metric("Max Drawdown", f"{stats_dict.get('SP500_max_drawdown', 0) * 100:.1f}%")
+            m3c.metric("Sharpe Ratio", f"{stats_dict.get('SP500_sharpe_annual', 0):.2f}")
+            m4c.metric("Annual Vol", f"{stats_dict.get('SP500_vol_annual', 0) * 100:.1f}%")
 
     st.divider()
 
@@ -271,6 +297,47 @@ def render(data):
             st.info("Donnees de perf Forex Target non dispo.")
 
     st.info("ℹ **Score de Confiance (Conf: X%) :** Ce score indique le pourcentage des échantillons qui ont la meme polarité (mesure l'homogénéité de la distribution). ")
+
+    st.divider()
+
+    # =========================================================
+    # HEATMAP HAUTE CONVICTION (>65% Probabilité)
+    # =========================================================
+    st.subheader("Performance par Quadrant : Signaux Haute Conviction (>65%)")
+    st.markdown("Cette section affiche la performance de la stratégie uniquement lors des jours où le modèle est fortement convaincu de son régime de Croissance ET/OU d'Inflation (probabilités >65% ou <35% sur *les deux* axes).")
+
+    if data.get('quadrants') is not None and 'PROB_GROWTH_EMA' in data['quadrants'].columns and 'PROB_INFLATION_EMA' in data['quadrants'].columns:
+        # Filtrer pour ne garder que les jours de haute conviction
+        # Conviction = probabilité "loins de 50%" sur les deux axes (>65% ou <35%)
+        high_conviction_mask = (abs(data['quadrants']['PROB_GROWTH_EMA'] - 0.5) >= 0.15) & \
+                               (abs(data['quadrants']['PROB_INFLATION_EMA'] - 0.5) >= 0.15)
+        
+        df_high_conviction = data['quadrants'][high_conviction_mask]
+        
+        if not df_high_conviction.empty:
+            st.write(f"Nombre de jours de Haute Conviction : **{len(df_high_conviction)}** jours sur {len(data['quadrants'])}.")
+            
+            # Ne récupérer que la DataFrame de Backtest filtrée sur ces jours précis
+            if data.get('backtest') is not None:
+                bt_filtered = data['backtest'][data['backtest']['date'].isin(df_high_conviction['date'])]
+                
+                hc_col1, hc_col2 = st.columns(2)
+                
+                with hc_col1:
+                    st.markdown("**Actions/ETF — HAUTE CONVICTION**")
+                    scores_hc, conf_hc = get_dynamic_heatmap_data(data.get('daily_assets'), bt_filtered, 'smooth_quadrant', selected_metric)
+                    if not _render_heatmap(scores_hc, conf_hc, None, "Actions/ETF — HAUTE CONVICTION", f"Signaux nets (>65% proba)", selected_metric, height=350):
+                        st.info("Données insuffisantes pour calculer le heatmap Haute Conviction Actions.")
+                
+                with hc_col2:
+                    st.markdown("**Forex — HAUTE CONVICTION**")
+                    scores_hcfx, conf_hcfx = get_dynamic_heatmap_data(data.get('daily_forex'), bt_filtered, 'smooth_quadrant', selected_metric)
+                    if not _render_heatmap(scores_hcfx, conf_hcfx, None, "Forex — HAUTE CONVICTION", f"Signaux nets (>65% proba)", selected_metric, height=300):
+                        st.info("Données insuffisantes pour calculer le heatmap Haute Conviction Forex.")
+        else:
+            st.warning("Aucun jour ne correspond à ce critère de conviction (>65%) simultanément sur les deux axes.")
+    else:
+        st.warning("Les données de probabilités étendues (PROB_GROWTH_EMA, PROB_INFLATION_EMA) ne sont pas chargées.")
 
     st.divider()
 

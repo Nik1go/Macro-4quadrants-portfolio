@@ -121,16 +121,16 @@ def render():
                 **Conditions d'Entrée :**
                 1. **Univers :** Sélection des 20 altcoins avec le plus gros volume (hors stablecoins).
                 2. **Régime de Distribution :** *120d Skewness > 0.15* (asymétrie positive significative).
-                3. **Force du Mouvement :** *BTC 5D Return > Médiane + 1σ* (momentum haussier exceptionnel).
+                3. **Force du Mouvement :** *BTC 5D Return > Médiane + 0.5σ* (momentum haussier exceptionnel).
             4. **Confirmation Volume :** Volume BTC du jour > SMA(20) des volumes (le mouvement est soutenu par de vrais flux).
-            5. **Confirmation BTC :** Prix > SMA depuis **3 jours consécutifs**.
-            6. **Performance Relative :** Paire ALT/BTC > SMA depuis **5 jours consécutifs**.
+            5. **Confirmation BTC :** Prix > SMA depuis **2 jours consécutifs**.
+            6. **Performance Relative :** Paire ALT/BTC > SMA depuis **2 jours consécutifs**.
             7. **Sélection finale :** L'actif ayant la **meilleure performance sur 3 jours** parmi les filtrés.
             8. **Allocation :** 50% du cash disponible.
 
             **Conditions de Sortie :**
             * L'actif sous-performe le panier moyen des altcoins pendant **3 jours** consécutifs.
-            * **OU :** Le BTC repasse sous sa SMA pendant **3 jours** consécutifs.
+            * **OU :** Le BTC repasse sous sa SMA pendant **2 jours** consécutifs.
             * **OU :** **Trailing Stop ATR** : le prix chute de plus de **2× ATR(14)** depuis son plus haut en position.
             """)
 
@@ -140,16 +140,16 @@ def render():
             **Conditions d'Entrée :**
             1. **Univers :** Sélection des 20 altcoins avec le plus gros volume (hors stablecoins).
             2. **Régime de Distribution :** *120d Skewness < -0.15* (asymétrie négative forte).
-            3. **Force du Mouvement :** *BTC 5D Return < Médiane - 1σ* (momentum baissier marqué).
+            3. **Force du Mouvement :** *BTC 5D Return < Médiane - 0.5σ* (momentum baissier marqué).
             4. **Confirmation Volume :** Volume BTC du jour > SMA(20) des volumes (le mouvement est soutenu par de vrais flux).
-            5. **Confirmation BTC :** Prix < SMA depuis **3 jours consécutifs**.
-            6. **Performance Relative :** Paire ALT/BTC < SMA depuis **5 jours consécutifs**.
+            5. **Confirmation BTC :** Prix < SMA depuis **2 jours consécutifs**.
+            6. **Performance Relative :** Paire ALT/BTC < SMA depuis **2 jours consécutifs**.
             7. **Sélection finale :** L'actif ayant la **pire performance sur 3 jours** parmi les filtrés.
             8. **Allocation :** 25% du cash disponible.
 
             **Conditions de Sortie :**
             * L'actif sur-performe le panier moyen pendant **3 jours** consécutifs.
-            * **OU :** Le BTC repasse au-dessus de sa SMA pendant **3 jours** consécutifs.
+            * **OU :** Le BTC repasse au-dessus de sa SMA pendant **2 jours** consécutifs.
             * **OU :** **Trailing Stop ATR** : le prix rebondit de plus de **2× ATR(14)** depuis son plus bas en position.
             """)
 
@@ -356,11 +356,11 @@ def render():
             btc_med = float(indicators["btc_median"].iloc[today_idx])
             btc_std = float(indicators["btc_std"].iloc[today_idx])
             btc_skew = float(indicators["btc_skew"].iloc[today_idx])
-            above_3d = bool(indicators["btc_above_sma_3d"].iloc[today_idx])
-            below_3d = bool(indicators["btc_below_sma_3d"].iloc[today_idx])
+            above_2d = bool(indicators["btc_above_sma_2d"].iloc[today_idx])
+            below_2d = bool(indicators["btc_below_sma_2d"].iloc[today_idx])
 
-            long_threshold = btc_med + btc_std
-            short_threshold = btc_med - btc_std
+            long_threshold = btc_med + 0.5 * btc_std
+            short_threshold = btc_med - 0.5 * btc_std
             long_momentum = btc_ret > long_threshold
             short_momentum = btc_ret < short_threshold
 
@@ -379,8 +379,8 @@ def render():
             with col4:
                 st.metric("120d Skewness", f"{btc_skew:.2f}", delta="Bullish Regime" if btc_skew > 0 else "Bearish Regime", delta_color="normal" if btc_skew > 0 else "inverse")
             with col5:
-                trend = "🟢 Haussier" if above_3d else ("🔴 Baissier" if below_3d else "⚪ Neutre")
-                st.metric("Trend (3d)", trend)
+                trend = "🟢 Haussier" if above_2d else ("🔴 Baissier" if below_2d else "⚪ Neutre")
+                st.metric("Trend (2d)", trend)
 
             st.markdown("---")
 
@@ -392,13 +392,13 @@ def render():
             with col_long:
                 st.markdown("**🟢 LONG**")
                 c1_met = long_momentum
-                c2_met = above_3d
+                c2_met = above_2d
                 c3_met = btc_skew > 0.15
                 c4_met = bool(indicators.get("btc_vol_confirm", pd.Series(True)).iloc[-1]) if "btc_vol_confirm" in indicators else True
                 st.markdown(f"{'✅' if c3_met else '❌'} Régime Distribution: Skewness > 0.15")
                 st.markdown(f"{'✅' if c1_met else '❌'} 5D Ret ({btc_ret:.2%}) > Seuil ({long_threshold:.2%})")
                 st.markdown(f"{'✅' if c4_met else '❌'} Volume BTC > SMA(20) Volume")
-                st.markdown(f"{'✅' if c2_met else '❌'} BTC > SMA depuis 3 jours")
+                st.markdown(f"{'✅' if c2_met else '❌'} BTC > SMA depuis 2 jours")
                 if c1_met and c2_met and c3_met and c4_met:
                     st.success("**Signal LONG activé !**")
                 else:
@@ -407,13 +407,13 @@ def render():
             with col_short:
                 st.markdown("**🔴 SHORT**")
                 c1_met_s = short_momentum
-                c2_met_s = below_3d
+                c2_met_s = below_2d
                 c3_met_s = btc_skew < -0.15
                 c4_met_s = bool(indicators.get("btc_vol_confirm", pd.Series(True)).iloc[-1]) if "btc_vol_confirm" in indicators else True
                 st.markdown(f"{'✅' if c3_met_s else '❌'} Régime Distribution: Skewness < -0.15")
                 st.markdown(f"{'✅' if c1_met_s else '❌'} 5D Ret ({btc_ret:.2%}) < Seuil ({short_threshold:.2%})")
                 st.markdown(f"{'✅' if c4_met_s else '❌'} Volume BTC > SMA(20) Volume")
-                st.markdown(f"{'✅' if c2_met_s else '❌'} BTC < SMA depuis 3 jours")
+                st.markdown(f"{'✅' if c2_met_s else '❌'} BTC < SMA depuis 2 jours")
                 if c1_met_s and c2_met_s and c3_met_s and c4_met_s:
                     st.success("**Signal SHORT activé !**")
                 else:
@@ -447,23 +447,23 @@ def render():
                     if pd.notna(ret_3d_val):
                         ret_3d = float(ret_3d_val)
 
-                above_5d = False
-                below_5d = False
-                if sym in indicators["alt_btc_above_sma_5d"].columns:
-                    above_5d = bool(indicators["alt_btc_above_sma_5d"].at[today, sym])
-                if sym in indicators["alt_btc_below_sma_5d"].columns:
-                    below_5d = bool(indicators["alt_btc_below_sma_5d"].at[today, sym])
+                above_2d = False
+                below_2d = False
+                if sym in indicators["alt_btc_above_sma_2d"].columns:
+                    above_2d = bool(indicators["alt_btc_above_sma_2d"].at[today, sym])
+                if sym in indicators["alt_btc_below_sma_2d"].columns:
+                    below_2d = bool(indicators["alt_btc_below_sma_2d"].at[today, sym])
 
                 heatmap_data.append({
                     "Crypto": base,
                     "3D Return (%)": round(ret_3d * 100, 2) if ret_3d else 0,
-                    "ALT/BTC > SMA (5d)": above_5d,
-                    "ALT/BTC < SMA (5d)": below_5d,
+                    "ALT/BTC > SMA (2d)": above_2d,
+                    "ALT/BTC < SMA (2d)": below_2d,
                 })
 
-                if above_5d and ret_3d is not None:
+                if above_2d and ret_3d is not None:
                     long_candidates.append((usdt_sym, ret_3d))
-                if below_5d and ret_3d is not None:
+                if below_2d and ret_3d is not None:
                     short_candidates.append((usdt_sym, ret_3d))
 
             hm_df = pd.DataFrame(heatmap_data)
@@ -472,14 +472,14 @@ def render():
                 hm_df = hm_df.sort_values("3D Return (%)", ascending=False)
 
                 # Keep top 10 long candidates (highest positive return) and top 10 short candidates (lowest negative return)
-                df_long = hm_df[hm_df["ALT/BTC > SMA (5d)"]].nlargest(10, "3D Return (%)")
-                df_short = hm_df[hm_df["ALT/BTC < SMA (5d)"]].nsmallest(10, "3D Return (%)")
+                df_long = hm_df[hm_df["ALT/BTC > SMA (2d)"]].nlargest(10, "3D Return (%)")
+                df_short = hm_df[hm_df["ALT/BTC < SMA (2d)"]].nsmallest(10, "3D Return (%)")
                 hm_df = pd.concat([df_long, df_short]).sort_values("3D Return (%)", ascending=False)
 
                 # Color-coded bar chart of 3D returns
                 colors = []
                 for _, row in hm_df.iterrows():
-                    if row["ALT/BTC > SMA (5d)"]:
+                    if row["ALT/BTC > SMA (2d)"]:
                         colors.append("#00ff88")  # green = long candidate
                     else:
                         colors.append("#ff4444")  # red = short candidate
@@ -519,13 +519,13 @@ def render():
                     st.markdown(f"###  Star du moment")
                     st.markdown(f"**{star_sym}** — 3D ret: **{star_ret:+.2%}**")
                     st.markdown(f"*{len(long_candidates)} cryptos passent le filtre Long*")
-                    if long_momentum and above_3d:
+                    if long_momentum and above_2d:
                         st.success("🟢 → Trade LONG actif !")
                     else:
                         st.info("Conditions BTC non remplies (pas de trade)")
                 else:
                     st.markdown("###  Star du moment")
-                    st.info("Aucune crypto ne passe le filtre ALT/BTC > SMA (5d)")
+                    st.info("Aucune crypto ne passe le filtre ALT/BTC > SMA (2d)")
 
             with col_skull:
                 if short_candidates:
@@ -534,13 +534,13 @@ def render():
                     st.markdown(f"###  Absente du moment")
                     st.markdown(f"**{skull_sym}** — 3D ret: **{skull_ret:+.2%}**")
                     st.markdown(f"*{len(short_candidates)} cryptos passent le filtre Short*")
-                    if short_momentum and below_3d:
+                    if short_momentum and below_2d:
                         st.success("🔴 → Trade SHORT actif !")
                     else:
                         st.info("Conditions BTC non remplies (pas de trade)")
                 else:
                     st.markdown("###  Absente du moment")
-                    st.info("Aucune crypto ne passe le filtre ALT/BTC < SMA (5d)")
+                    st.info("Aucune crypto ne passe le filtre ALT/BTC < SMA (2d)")
 
         st.markdown("---")
 

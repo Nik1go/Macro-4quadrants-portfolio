@@ -104,7 +104,7 @@ def run_optimization():
     return pd.DataFrame(resultats_vbt)
 
 def render():
-    st.title("🎲 Monte Carlo Gambling Simulator")
+    st.title("Monte Carlo Gambling Simulator")
     st.markdown("Simulation d'une ** Martingale** à la roulette via des simulations de Monte Carlo, afin de démontrer l'impossibilité mathématique de battre le casino de manière consistante.")
     
     st.markdown("---")
