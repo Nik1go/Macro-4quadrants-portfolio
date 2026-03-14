@@ -74,23 +74,39 @@ def render_ibkr_dashboard(data):
                                 'Unrealized PNL ($)': round(info.get('unrealized_pnl', 0), 2)
                             })
                         positions_df = pd.DataFrame(pos_list)
-                    st.success("✅ Connecté à IB Gateway (Live Data)")
+                        st.success("✅ Connecté à IB Gateway (Live Data)")
+                    else:
+                        st.warning("⚠️ Connecté à IB Gateway, mais aucune position correspondante trouvée (vérifier ETF_MAPPING).")
                 else:
                     st.warning("⚠️ Impossible de se connecter à IB Gateway. Affichage des données du dernier log.")
             except Exception as e:
                 st.error(f"Erreur de connexion IBKR: {e}")
                 
-        # Fallback to logs if live fails
-        if portfolio_val is None and 'ibkr_nav' in data and not data['ibkr_nav'].empty:
-            portfolio_val = data['ibkr_nav'].iloc[-1]['nav']
+        # --- Fallback to logs if live fails or returns nothing ---
+        # 1. Fallback for Portfolio Value
+        if portfolio_val is None:
+            if data.get('ibkr_last_portfolio_val'):
+                portfolio_val = data['ibkr_last_portfolio_val']
+            elif 'ibkr_nav' in data and not data['ibkr_nav'].empty:
+                portfolio_val = data['ibkr_nav'].iloc[-1]['nav']
             
         if portfolio_val is not None:
-            st.metric("Portfolio Value (Net Liquidation)", f"${portfolio_val:,.2f}")
+            st.metric("Valeur du Portefeuille", f"${portfolio_val:,.2f}")
             
+        # 2. Fallback for Positions
         if positions_df is not None and not positions_df.empty:
             st.dataframe(positions_df, use_container_width=True)
+        elif data.get('ibkr_last_positions'):
+            st.info("📊 Affichage des derniers poids connus (Logs)")
+            last_pos = data['ibkr_last_positions']
+            # Convert weights dict to DataFrame
+            weights_df = pd.DataFrame([
+                {'Asset': k, 'Weight (%)': round(v * 100, 2)} 
+                for k, v in last_pos.items() if v > 0
+            ])
+            st.dataframe(weights_df, use_container_width=True)
         else:
-            st.info("Aucune position trouvée en direct.")
+            st.info("Aucune position trouvée (Direct ou Logs).")
             
     with c2:
         st.subheader("Performance Historique")
@@ -117,9 +133,6 @@ def render_ibkr_dashboard(data):
         st.dataframe(data['ibkr_orders'].sort_values('Date', ascending=False).head(20), use_container_width=True)
     else:
         st.info("Aucune transaction trouvée dans les logs.")
-
-   
-
 
 
 

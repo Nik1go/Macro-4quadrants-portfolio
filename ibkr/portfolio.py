@@ -73,6 +73,9 @@ class PortfolioManager:
         
         positions = {}
         
+        # Wait for account synchronization
+        self.ib.waitOnUpdate(timeout=1.0)
+        
         # Get portfolio items (includes market value)
         portfolio_items = self.ib.portfolio()
         
@@ -90,6 +93,8 @@ class PortfolioManager:
                     'unrealized_pnl': item.unrealizedPNL
                 }
                 logger.debug(f"Position: {asset_name} ({symbol}): {item.position} shares, ${item.marketValue:.2f}")
+            else:
+                logger.info(f"Ignored symbol in portfolio (not in mapping): {symbol}")
         
         return positions
     

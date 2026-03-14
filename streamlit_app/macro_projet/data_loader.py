@@ -135,6 +135,8 @@ def load_data():
     # --- Load IBKR execution logs ---
     nav_history = []
     orders_history = []
+    last_positions = None
+    last_portfolio_val = None
     prev_quadrant = None
     
     try:
@@ -166,6 +168,11 @@ def load_data():
                             'Reason': reason
                         })
                 
+                # Last known positions/weights
+                if log_data.get('success') and log_data.get('current_weights'):
+                    last_positions = log_data.get('current_weights')
+                    last_portfolio_val = log_data.get('portfolio_value')
+                
                 if current_quadrant:
                     prev_quadrant = current_quadrant
             except Exception as e:
@@ -173,6 +180,8 @@ def load_data():
                 
         data['ibkr_nav'] = pd.DataFrame(nav_history) if nav_history else pd.DataFrame(columns=['date', 'nav', 'quadrant'])
         data['ibkr_orders'] = pd.DataFrame(orders_history) if orders_history else pd.DataFrame(columns=['Date', 'Action', 'Ticker', 'Asset', 'Shares', 'Estimated Value ($)', 'Reason'])
+        data['ibkr_last_positions'] = last_positions
+        data['ibkr_last_portfolio_val'] = last_portfolio_val
         
         # Keep only the last NAV per day for cleaner chart
         if not data['ibkr_nav'].empty:
