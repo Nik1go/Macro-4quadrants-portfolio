@@ -22,7 +22,6 @@ def render(data):
         else:
             st.warning("Type de validation inconnu")
 
-        st.divider()
 
         # ========================================
         # OUT-OF-SAMPLE METRICS

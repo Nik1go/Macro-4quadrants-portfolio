@@ -24,7 +24,7 @@ ETF_MAPPING = {
     'GOLD_OZ_USD': 'SGLD',  # iShares Physical Gold ETC (AEB)
     'SmallCAP': 'IUSN',     # iShares MSCI World Small Cap UCITS (AEB)
     'US_REIT_VNQ': 'IUSP',  # iShares US Property Yield UCITS (AEB)
-    'TREASURY_10Y': 'IDTL', # iShares $ Treasury Bond 7-10yr UCITS (AEB)
+    'TREASURY_10Y': 'SXRM', # iShares $ Treasury Bond 7-10yr UCITS (Xetra) - 0.07% TER
     'OBLIGATION': 'LQDE',   # iShares $ Corp Bond UCITS (AEB)
     'NASDAQ_100': 'SXRV',   # iShares Nasdaq 100 UCITS (Xetra ticker on AEB)
     'COMMODITIES': 'EXXY',  # iShares Diversified Commodity Swap UCITS (AEB)
@@ -36,7 +36,7 @@ YFINANCE_MAPPING = {
     'GOLD_OZ_USD': 'SGLD.L',   # London (Gold ETC)
     'SmallCAP': 'IUSN.AS',     # Amsterdam
     'US_REIT_VNQ': 'IUSP.L',   # London
-    'TREASURY_10Y': 'IDTL.L',  # London
+    'TREASURY_10Y': 'SXRM.DE', # Xetra
     'OBLIGATION': 'LQDE.L',    # London
     'NASDAQ_100': 'SXRV.DE',   # Germany (Xetra)
     'COMMODITIES': 'EXXY.DE',  # Germany
