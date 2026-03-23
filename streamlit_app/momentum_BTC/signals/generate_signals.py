@@ -98,9 +98,17 @@ def evaluate_exits(state, indicators, today_idx):
                 exits.append({"symbol": symbol, "side": side, "reason": "momentum_stop_underperf"})
                 continue
 
-            # BTC trend stop: BTC < SMA 3 consecutive days
-            if indicators["btc_below_sma_3d"].iloc[today_idx]:
+            # BTC trend stop: BTC < SMA 2 consecutive days
+            if indicators["btc_below_sma_2d"].iloc[today_idx]:
                 exits.append({"symbol": symbol, "side": side, "reason": "btc_trend_stop"})
+                continue
+
+            # ATR trailing stop (2.0x ATR)
+            current_price = indicators["alt_usdt_closes"].at[today, symbol]
+            pos["peak"] = max(pos.get("peak", current_price), current_price)
+            atr_val = indicators["alt_atr"].at[today, symbol] if symbol in indicators["alt_atr"].columns else None
+            if atr_val and current_price < (pos["peak"] - 2.0 * atr_val):
+                exits.append({"symbol": symbol, "side": side, "reason": "atr_trailing_stop"})
                 continue
 
         # ── SHORT EXIT ──
@@ -115,9 +123,17 @@ def evaluate_exits(state, indicators, today_idx):
                 exits.append({"symbol": symbol, "side": side, "reason": "momentum_stop_outperf"})
                 continue
 
-            # BTC trend stop: BTC > SMA 3 consecutive days
-            if indicators["btc_above_sma_3d"].iloc[today_idx]:
+            # BTC trend stop: BTC > SMA 2 consecutive days
+            if indicators["btc_above_sma_2d"].iloc[today_idx]:
                 exits.append({"symbol": symbol, "side": side, "reason": "btc_trend_stop"})
+                continue
+
+            # ATR trailing stop (2.0x ATR)
+            current_price = indicators["alt_usdt_closes"].at[today, symbol]
+            pos["trough"] = min(pos.get("trough", current_price), current_price)
+            atr_val = indicators["alt_atr"].at[today, symbol] if symbol in indicators["alt_atr"].columns else None
+            if atr_val and current_price > (pos["trough"] + 2.0 * atr_val):
+                exits.append({"symbol": symbol, "side": side, "reason": "atr_trailing_stop"})
                 continue
 
     return exits
@@ -152,19 +168,19 @@ def evaluate_long_entry(indicators, today_idx, alt_btc_cols):
             logger.info(f"[BTC] Conditions Long ignorées : Volume BTC insuffisant (pas de confirmation institutionnelle).")
             return None
 
-    # Condition 1B: Momentum Trigger (BTC 5D return > median + 1σ)
-    if btc_ret <= (btc_med + btc_std_val):
+    # Condition 1B: Momentum Trigger (BTC 5D return > median + 0.5σ)
+    if btc_ret <= (btc_med + 0.5 * btc_std_val):
         return None
 
-    # Condition 2: BTC > SMA for 3 consecutive days
-    if not indicators["btc_above_sma_3d"].iloc[today_idx]:
+    # Condition 2: BTC > SMA for 2 consecutive days
+    if not indicators["btc_above_sma_2d"].iloc[today_idx]:
         return None
 
-    # Condition 3: Filter altcoins where ALT/BTC > SMA for 5 consecutive days
+    # Condition 3: Filter altcoins where ALT/BTC > SMA for 2 consecutive days
     filtered_alts = []
     for alt_btc_sym in alt_btc_cols:
-        if alt_btc_sym in indicators["alt_btc_above_sma_5d"].columns:
-            if indicators["alt_btc_above_sma_5d"].at[today, alt_btc_sym]:
+        if alt_btc_sym in indicators["alt_btc_above_sma_2d"].columns:
+            if indicators["alt_btc_above_sma_2d"].at[today, alt_btc_sym]:
                 # Convert ALT/BTC symbol to USDT symbol (e.g., ETHBTC → ETHUSDT)
                 usdt_sym = alt_btc_sym.replace("BTC", "USDT")
                 if usdt_sym in indicators["ret_3d"].columns:
@@ -182,7 +198,7 @@ def evaluate_long_entry(indicators, today_idx, alt_btc_cols):
 
     # Log the filtered basket with returns
     ret_sorted = ret_3d_today.sort_values(ascending=False)
-    print(f"   🟢 LONG BASKET — {len(ret_sorted)} altcoins pass ALT/BTC > SMA (5d):")
+    print(f"   🟢 LONG BASKET — {len(ret_sorted)} altcoins pass ALT/BTC > SMA (2d):")
     for sym, ret in ret_sorted.items():
         print(f"      {'→' if sym == ret_sorted.index[0] else ' '} {sym:<12s}  3D ret: {ret:+.2%}")
 
@@ -219,19 +235,19 @@ def evaluate_short_entry(indicators, today_idx, alt_btc_cols):
             logger.info(f"[BTC] Conditions Short ignorées : Volume BTC insuffisant (pas de confirmation institutionnelle).")
             return None
 
-    # Condition 1B: Momentum Trigger (BTC 5D return < median - 1σ)
-    if btc_ret >= (btc_med - btc_std_val):
+    # Condition 1B: Momentum Trigger (BTC 5D return < median - 0.5σ)
+    if btc_ret >= (btc_med - 0.5 * btc_std_val):
         return None
 
-    # Condition 2: BTC < SMA for 3 consecutive days
-    if not indicators["btc_below_sma_3d"].iloc[today_idx]:
+    # Condition 2: BTC < SMA for 2 consecutive days
+    if not indicators["btc_below_sma_2d"].iloc[today_idx]:
         return None
 
-    # Condition 3: Filter altcoins where ALT/BTC < SMA for 5 consecutive days
+    # Condition 3: Filter altcoins where ALT/BTC < SMA for 2 consecutive days
     filtered_alts = []
     for alt_btc_sym in alt_btc_cols:
-        if alt_btc_sym in indicators["alt_btc_below_sma_5d"].columns:
-            if indicators["alt_btc_below_sma_5d"].at[today, alt_btc_sym]:
+        if alt_btc_sym in indicators["alt_btc_below_sma_2d"].columns:
+            if indicators["alt_btc_below_sma_2d"].at[today, alt_btc_sym]:
                 usdt_sym = alt_btc_sym.replace("BTC", "USDT")
                 if usdt_sym in indicators["ret_3d"].columns:
                     filtered_alts.append(usdt_sym)
@@ -248,7 +264,7 @@ def evaluate_short_entry(indicators, today_idx, alt_btc_cols):
 
     # Log the filtered basket with returns
     ret_sorted = ret_3d_today.sort_values(ascending=True)
-    print(f"   🔴 SHORT BASKET — {len(ret_sorted)} altcoins pass ALT/BTC < SMA (5d):")
+    print(f"   🔴 SHORT BASKET — {len(ret_sorted)} altcoins pass ALT/BTC < SMA (2d):")
     for sym, ret in ret_sorted.items():
         print(f"      {'→' if sym == ret_sorted.index[0] else ' '} {sym:<12s}  3D ret: {ret:+.2%}")
 
@@ -298,55 +314,43 @@ def generate_daily_signals(indicators, state=None):
         state["underperf_streaks"].pop(streak_key, None)
 
     # ── STEP 2: Evaluate entries if we have capacity ──
-    # Count current open long and short positions
-    n_long = sum(1 for p in state["positions"] if p["side"] == "long")
-    n_short = sum(1 for p in state["positions"] if p["side"] == "short")
+    # ONLY 1 position total allowed in the portfolio (Long OR Short)
+    n_pos = len(state["positions"])
 
-    # Try Long entry (max 1 long position at a time for simplicity)
-    if n_long == 0:
+    if n_pos == 0:
+        # Evaluate both side signals
         long_signal = evaluate_long_entry(indicators, today_idx, alt_btc_cols)
-        if long_signal:
-            entry_price = float(indicators["alt_usdt_closes"].at[today, long_signal["symbol"]])
-            size_cash = state["cash"] * 0.25  # 25% allocation
-            qty = size_cash / entry_price if entry_price > 0 else 0
-
-            long_signal["entry_price"] = entry_price
-            long_signal["qty"] = qty
-            long_signal["entry_date"] = today_str
-            long_signal["size_cash"] = size_cash
-            report["entries"].append(long_signal)
-
-            state["positions"].append({
-                "symbol": long_signal["symbol"],
-                "side": "long",
-                "entry_price": entry_price,
-                "qty": qty,
-                "entry_date": today_str,
-            })
-            state["cash"] -= size_cash
-
-    # Try Short entry (max 1 short position at a time)
-    if n_short == 0:
         short_signal = evaluate_short_entry(indicators, today_idx, alt_btc_cols)
-        if short_signal:
-            entry_price = float(indicators["alt_usdt_closes"].at[today, short_signal["symbol"]])
-            size_cash = state["cash"] * 0.25  # 25% allocation
+
+        # Prioritize Long if both occur (rare)
+        signal = long_signal if long_signal else short_signal
+
+        if signal:
+            entry_price = float(indicators["alt_usdt_closes"].at[today, signal["symbol"]])
+            # 100% Allocation
+            size_cash = state["cash"]
             qty = size_cash / entry_price if entry_price > 0 else 0
 
-            short_signal["entry_price"] = entry_price
-            short_signal["qty"] = qty
-            short_signal["entry_date"] = today_str
-            short_signal["size_cash"] = size_cash
-            report["entries"].append(short_signal)
+            signal["entry_price"] = entry_price
+            signal["qty"] = qty
+            signal["entry_date"] = today_str
+            signal["size_cash"] = size_cash
+            report["entries"].append(signal)
 
-            state["positions"].append({
-                "symbol": short_signal["symbol"],
-                "side": "short",
+            new_pos = {
+                "symbol": signal["symbol"],
+                "side": signal["side"],
                 "entry_price": entry_price,
                 "qty": qty,
                 "entry_date": today_str,
-            })
-            state["cash"] -= size_cash  # margin reserved
+            }
+            if signal["side"] == "long":
+                new_pos["peak"] = entry_price
+            else:
+                new_pos["trough"] = entry_price
+                
+            state["positions"].append(new_pos)
+            state["cash"] -= size_cash
 
     # Save signal report
     signals_dir = _get_signals_dir()

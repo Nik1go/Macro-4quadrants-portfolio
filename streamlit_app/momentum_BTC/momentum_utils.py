@@ -232,6 +232,12 @@ def _build_signal_loop(
     daily_ret, basket_avg_ret,
     btc="BTCUSDT",
     top_n=20,
+    daily_universe_dict=None,
+    skew_thresh=0.15,
+    std_mult=0.5,
+    atr_mult=2.0,
+    streak_limit=3,
+    use_vol_filter=True,
 ):
     """
     Core signal generation loop shared by run_momentum_backtest and run_heatmap_simulation.
@@ -259,8 +265,15 @@ def _build_signal_loop(
         dt      = dates[i]
         prev_dt = dates[i - 1]  # All signal evaluation uses T-1 close
 
-        # ── ROLLING UNIVERSE — top-N by 30d avg volume at prev_dt ──
-        active_universe = get_rolling_universe(alt_usdt_volumes, prev_dt, n=top_n)
+        # ── ROLLING UNIVERSE — top-N by 30d avg volume at prev_dt OR EXACT DAILY LOG ──
+        dt_str = prev_dt.strftime("%Y-%m-%d")
+        if daily_universe_dict and dt_str in daily_universe_dict:
+            # Enforce exactly the universe that was recorded on that day by the live data fetcher
+            active_universe = daily_universe_dict[dt_str].get("usdt_symbols", [])
+        else:
+            # Fallback for historical days before live logging started
+            active_universe = get_rolling_universe(alt_usdt_volumes, prev_dt, n=top_n)
+            
         # Keep only symbols for which we actually have data in `close`
         active_universe = [s for s in active_universe if s in close.columns]
 
@@ -293,9 +306,9 @@ def _build_signal_loop(
             if sym in alt_atr_df.columns and prev_dt in alt_atr_df.index:
                 atr_val = alt_atr_df.at[prev_dt, sym]
                 if pd.notna(atr_val) and atr_val > 0 and pd.notna(current_price):
-                    if side == "long" and current_price < (current_pos.get("peak", current_price) - 2.0 * atr_val):
+                    if side == "long" and current_price < (current_pos.get("peak", current_price) - atr_mult * atr_val):
                         atr_stop = True
-                    elif side == "short" and current_price > (current_pos.get("trough", current_price) + 2.0 * atr_val):
+                    elif side == "short" and current_price > (current_pos.get("trough", current_price) + atr_mult * atr_val):
                         atr_stop = True
 
             # BTC trend reversal exit
@@ -304,7 +317,7 @@ def _build_signal_loop(
                 (side == "short" and bool(btc_above_sma_2d.at[prev_dt]))
             )
 
-            should_exit = underperf_streak >= 3 or btc_trend_exit or atr_stop
+            should_exit = underperf_streak >= streak_limit or btc_trend_exit or atr_stop
 
             if should_exit:
                 if side == "long" and sym in exits.columns:
@@ -324,13 +337,14 @@ def _build_signal_loop(
         med   = btc_median.at[prev_dt]
         std   = btc_std.at[prev_dt]
         skew  = btc_skew.at[prev_dt]
-        vol_ok = bool(btc_vol_confirm.at[prev_dt]) if prev_dt in btc_vol_confirm.index else True
+        vol_ok_val = bool(btc_vol_confirm.at[prev_dt]) if prev_dt in btc_vol_confirm.index else True
+        vol_ok = vol_ok_val if use_vol_filter else True
 
         if pd.isna(ret_5) or pd.isna(med) or pd.isna(std) or pd.isna(skew):
             continue
 
-        long_cond  = (ret_5 > (med + 0.5 * std)) and bool(btc_above_sma_2d.at[prev_dt]) and (skew > 0.15)  and vol_ok
-        short_cond = (ret_5 < (med - 0.5 * std)) and bool(btc_below_sma_2d.at[prev_dt]) and (skew < -0.15) and vol_ok
+        long_cond  = (ret_5 > (med + std_mult * std)) and bool(btc_above_sma_2d.at[prev_dt]) and (skew > skew_thresh)  and vol_ok
+        short_cond = (ret_5 < (med - std_mult * std)) and bool(btc_below_sma_2d.at[prev_dt]) and (skew < -skew_thresh) and vol_ok
 
         # ── LONG ENTRY ──
         if long_cond:
@@ -391,7 +405,13 @@ def run_momentum_backtest(
     sma_period=50,
     roll_lookback=180,
     fees_bps=6,
-    slippage_bps=10
+    slippage_bps=10,
+    daily_universe_dict=None,
+    skew_thresh=0.15,
+    std_mult=0.5,
+    atr_mult=2.0,
+    streak_limit=3,
+    use_vol_filter=True
 ):
     """
     Executes the Crypto Momentum Strategy (1 position max, 100% capital).
@@ -475,6 +495,12 @@ def run_momentum_backtest(
         alt_atr_df=alt_atr_df,
         daily_ret=daily_ret, basket_avg_ret=basket_avg_ret,
         btc=btc,
+        daily_universe_dict=daily_universe_dict,
+        skew_thresh=skew_thresh,
+        std_mult=std_mult,
+        atr_mult=atr_mult,
+        streak_limit=streak_limit,
+        use_vol_filter=use_vol_filter,
     )
 
     if not entries.any().any() and not short_entries.any().any():
@@ -501,18 +527,23 @@ def run_momentum_backtest(
     )
     return pf, None
 
-def run_heatmap_simulation(
+def run_grid_search_simulation(
     symbols,
     start_date="2020-01-01",
-    sma_periods=[20, 30, 40, 50, 60, 70, 80, 90, 100],
-    roll_lookbacks=[30, 60, 90, 120, 180, 240, 300, 400, 500, 600],
+    sma_periods=[30, 50, 80],
+    roll_lookbacks=[60, 120, 180],
+    skew_threshs=[0.0, 0.15],
+    std_mults=[0.3, 0.5],
+    atr_mults=[2.0, 3.0],
+    streak_limits=[3],
+    vol_filters=[True, False],
     fees_bps=6,
-    slippage_bps=10
+    slippage_bps=10,
+    daily_universe_dict=None
 ):
     """
-    Run the STRICT momentum strategy over a grid of (SMA, lookback) parameters.
-    NOW: 1 position max, 100% sizing, rolling volume universe (anti-survivorship).
-    Returns: Heatmap DF, Best Params, Best Portfolio, BTC Close Series
+    Run the STRICT momentum strategy over an n-dimensional grid.
+    Returns: DataFrame of all results, Best Params, Best Portfolio, BTC Close Series
     """
     all_closes_usdt  = {}
     all_opens_usdt   = {}
@@ -573,8 +604,10 @@ def run_heatmap_simulation(
 
     results     = []
     best_pf     = None
-    best_return = -1000.0
-    best_params = (None, None)
+    best_sharpe = -100.0
+    best_params = None
+
+    import itertools
 
     for sma in sma_periods:
         btc_sma          = close[btc].rolling(sma, min_periods=sma).mean()
@@ -590,45 +623,63 @@ def run_heatmap_simulation(
             btc_std    = btc_ret_5d.rolling(lookback, min_periods=30).std()
             btc_skew   = btc_ret_5d.rolling(lookback, min_periods=30).skew()
 
-            entries, exits, short_entries, short_exits = _build_signal_loop(
-                close=close,
-                open_price=alt_usdt_opens,
-                alt_usdt_volumes=alt_usdt_volumes,
-                btc_ret_5d=btc_ret_5d, btc_median=btc_median, btc_std=btc_std, btc_skew=btc_skew,
-                btc_above_sma_2d=btc_above_sma_2d, btc_below_sma_2d=btc_below_sma_2d,
-                btc_vol_confirm=btc_vol_confirm,
-                alt_btc_closes=alt_btc_closes,
-                alt_btc_above_sma_2d=alt_btc_above_sma_2d, alt_btc_below_sma_2d=alt_btc_below_sma_2d,
-                alt_atr_df=alt_atr_df,
-                daily_ret=daily_ret, basket_avg_ret=basket_avg_ret,
-                btc=btc,
-            )
-
-            if not entries[syms].any().any() and not short_entries[syms].any().any():
-                tot_ret = 0.0
-            else:
-                pf = vbt.Portfolio.from_signals(
-                    close=op,
-                    entries=entries[syms],
-                    exits=exits[syms],
-                    short_entries=short_entries[syms],
-                    short_exits=short_exits[syms],
-                    fees=fees,
-                    slippage=slip,
-                    init_cash=10000.0,
-                    cash_sharing=True,
-                    size=1.0,
-                    size_type="percent",
-                    freq="1D",
+            for sk, stm, atm, lim, vflt in itertools.product(skew_threshs, std_mults, atr_mults, streak_limits, vol_filters):
+                entries, exits, short_entries, short_exits = _build_signal_loop(
+                    close=close,
+                    open_price=alt_usdt_opens,
+                    alt_usdt_volumes=alt_usdt_volumes,
+                    btc_ret_5d=btc_ret_5d, btc_median=btc_median, btc_std=btc_std, btc_skew=btc_skew,
+                    btc_above_sma_2d=btc_above_sma_2d, btc_below_sma_2d=btc_below_sma_2d,
+                    btc_vol_confirm=btc_vol_confirm,
+                    alt_btc_closes=alt_btc_closes,
+                    alt_btc_above_sma_2d=alt_btc_above_sma_2d, alt_btc_below_sma_2d=alt_btc_below_sma_2d,
+                    alt_atr_df=alt_atr_df,
+                    daily_ret=daily_ret, basket_avg_ret=basket_avg_ret,
+                    btc=btc,
+                    daily_universe_dict=daily_universe_dict,
+                    skew_thresh=sk,
+                    std_mult=stm,
+                    atr_mult=atm,
+                    streak_limit=lim,
+                    use_vol_filter=vflt,
                 )
-                tot_ret = pf.stats().get("Total Return [%]", 0.0)
 
-                if tot_ret > best_return:
-                    best_return = tot_ret
-                    best_pf     = pf
-                    best_params = (sma, lookback)
+                if not entries[syms].any().any() and not short_entries[syms].any().any():
+                    tot_ret = 0.0
+                    sharpe = 0.0
+                    win_rate = 0.0
+                    max_dd = 0.0
+                    pf = None
+                else:
+                    pf = vbt.Portfolio.from_signals(
+                        close=op,
+                        entries=entries[syms],
+                        exits=exits[syms],
+                        short_entries=short_entries[syms],
+                        short_exits=short_exits[syms],
+                        fees=fees,
+                        slippage=slip,
+                        init_cash=10000.0,
+                        cash_sharing=True,
+                        size=1.0,
+                        size_type="percent",
+                        freq="1D",
+                    )
+                    stats = pf.stats()
+                    tot_ret = stats.get("Total Return [%]", 0.0)
+                    sharpe = stats.get("Sharpe Ratio", 0.0)
+                    win_rate = stats.get("Win Rate [%]", 0.0)
+                    max_dd = stats.get("Max Drawdown [%]", 0.0)
 
-            results.append({"SMA": sma, "Lookback": lookback, "Return": tot_ret})
+                    if sharpe > best_sharpe:
+                        best_sharpe = sharpe
+                        best_pf     = pf
+                        best_params = (sma, lookback, sk, stm, atm, lim, vflt)
 
-    heatmap_df = pd.DataFrame(results).pivot(index="SMA", columns="Lookback", values="Return")
-    return heatmap_df, best_params, best_pf, close[btc]
+                results.append({
+                    "SMA": sma, "Lookback": lookback, "Skew": sk, "StdMult": stm, "ATR": atm, "Streak": lim, "VolFilter": vflt,
+                    "Total Return (%)": tot_ret, "Sharpe Ratio": sharpe, "Win Rate (%)": win_rate, "Max Drawdown (%)": max_dd
+                })
+
+    results_df = pd.DataFrame(results)
+    return results_df, best_params, best_pf, close[btc]

@@ -150,6 +150,29 @@ def fetch_top_symbols(n=TOP_N):
     except Exception as e:
         print(f"⚠️ Could not save master universe: {e}")
         
+    # ── Log Daily Universe for Alpha Research ──
+    daily_univ_file = os.path.join(crypto_dir, "daily_universe.json")
+    today_str = pd.Timestamp.utcnow().strftime("%Y-%m-%d")
+    daily_univ = {}
+    if os.path.exists(daily_univ_file):
+        try:
+            with open(daily_univ_file, "r") as f:
+                daily_univ = json.load(f)
+        except Exception:
+            pass
+    
+    daily_univ[today_str] = {
+        "usdt_symbols": top_usdt,
+        "btc_symbols": btc_pairs
+    }
+    
+    try:
+        with open(daily_univ_file, "w") as f:
+            json.dump(daily_univ, f, indent=4)
+        print(f"💾 Daily Universe updated for {today_str}: {len(top_usdt)} USDT pairs.")
+    except Exception as e:
+        print(f"⚠️ Could not save daily universe: {e}")
+        
     # Return the full master list so the system downloads data for ALL historical + current top cryptos
     return list(master_usdt), list(master_btc)
     

@@ -100,6 +100,31 @@ ALLOCATIONS = {
     },
 }
 
+# Allocations réelles configurées sur IBKR (pour comparaison)
+IBKR_ALLOCATIONS = {
+    1: {
+        'NASDAQ_100': 0.4, 'SmallCAP': 0.3, 'SP500': 0.3,
+        'US_REIT_VNQ': 0.0, 'GOLD_OZ_USD': 0.0, 'TREASURY_10Y': 0.0,
+        'OBLIGATION': 0.0, 'COMMODITIES': 0.0, 'SHORT_SP500': 0.0
+    },
+    2: {
+        'SP500': 0.4, 'GOLD_OZ_USD': 0.3, 'COMMODITIES': 0.2, 'NASDAQ_100': 0.1,
+        'SmallCAP': 0.0, 'TREASURY_10Y': 0.0, 'US_REIT_VNQ': 0.0,
+        'OBLIGATION': 0.0, 'SHORT_SP500': 0.0
+    },
+    3: {
+        'GOLD_OZ_USD': 0.6, 'COMMODITIES': 0.2, 'TREASURY_10Y': 0.2,
+        'NASDAQ_100': 0.0, 'SP500': 0.0, 'SmallCAP': 0.0,
+        'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'SHORT_SP500': 0.0
+    },
+    4: {
+        'TREASURY_10Y': 0.6, 'GOLD_OZ_USD': 0.4,
+        'SP500': 0.0, 'NASDAQ_100': 0.0, 'SmallCAP': 0.0,
+        'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'COMMODITIES': 0.0,
+        'SHORT_SP500': 0.0
+    },
+}
+
 WEIGHTS = ALLOCATIONS
 
 ASSETS = ['SP500', 'GOLD_OZ_USD', 'SmallCAP', 'US_REIT_VNQ', 'OBLIGATION', 'TREASURY_10Y', 'NASDAQ_100', 'COMMODITIES', 'SHORT_SP500']

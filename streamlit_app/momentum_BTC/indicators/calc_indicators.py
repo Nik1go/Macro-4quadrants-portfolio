@@ -88,12 +88,14 @@ def compute_btc_indicators(btc_close, sma_period=50, roll_lookback=600, btc_volu
     btc_std = btc_ret_5d.rolling(roll_lookback, min_periods=30).std()
     btc_sma = btc_close.rolling(sma_period, min_periods=sma_period).mean()
 
-    # BTC > SMA for 3 consecutive days (using shift to avoid look-ahead)
+    # BTC > SMA for 2 and 3 consecutive days (using shift to avoid look-ahead)
     above_sma = btc_close.shift(1) > btc_sma.shift(1)
+    btc_above_sma_2d = above_sma & above_sma.shift(1)
     btc_above_sma_3d = above_sma & above_sma.shift(1) & above_sma.shift(2)
 
-    # BTC < SMA for 3 consecutive days
+    # BTC < SMA for 2 and 3 consecutive days
     below_sma = btc_close.shift(1) < btc_sma.shift(1)
+    btc_below_sma_2d = below_sma & below_sma.shift(1)
     btc_below_sma_3d = below_sma & below_sma.shift(1) & below_sma.shift(2)
 
     # Volume Filter: today's volume must exceed the 20-day SMA of volume
@@ -109,6 +111,8 @@ def compute_btc_indicators(btc_close, sma_period=50, roll_lookback=600, btc_volu
         "btc_median": btc_median,
         "btc_std": btc_std,
         "btc_sma": btc_sma,
+        "btc_above_sma_2d": btc_above_sma_2d,
+        "btc_below_sma_2d": btc_below_sma_2d,
         "btc_above_sma_3d": btc_above_sma_3d,
         "btc_below_sma_3d": btc_below_sma_3d,
         "btc_skew": btc_skew,
@@ -127,20 +131,28 @@ def compute_alt_btc_sma(alt_btc_closes, sma_period=50):
     """
     sma = alt_btc_closes.rolling(sma_period, min_periods=sma_period).mean()
 
-    # Above SMA for 5 consecutive days (shifted to avoid look-ahead)
+    # Above SMA for 2 and 5 consecutive days (shifted to avoid look-ahead)
     above = alt_btc_closes.shift(1) > sma.shift(1)
+    
+    above_2d = above & above.shift(1)
+    
     above_5d = above.copy()
     for lag in range(1, 5):
         above_5d = above_5d & above.shift(lag)
 
-    # Below SMA for 5 consecutive days
+    # Below SMA for 2 and 5 consecutive days
     below = alt_btc_closes.shift(1) < sma.shift(1)
+    
+    below_2d = below & below.shift(1)
+    
     below_5d = below.copy()
     for lag in range(1, 5):
         below_5d = below_5d & below.shift(lag)
 
     return {
         "alt_btc_sma": sma,
+        "alt_btc_above_sma_2d": above_2d,
+        "alt_btc_below_sma_2d": below_2d,
         "alt_btc_above_sma_5d": above_5d,
         "alt_btc_below_sma_5d": below_5d,
     }

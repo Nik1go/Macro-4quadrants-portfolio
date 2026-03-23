@@ -64,7 +64,79 @@ def bootstrap_confidence(returns, metric, actual_score, n_sims=500):
     return 0.0
 
 
-def get_dynamic_heatmap_data(daily_df, date_quadrant_df, quadrant_col, metric):
+def get_forex_carry_heatmap_data(forex_df, quadrants_df, quadrant_col, metric, inverse_fx=False):
+    """
+    Calcule la performance Forex incluant le Carry (différentiel de taux d'intérêt).
+    """
+    if forex_df is None or quadrants_df is None:
+        return None, None
+
+    # On s'assure d'avoir les taux
+    rate_cols = ['TAUX_FED', 'TAUX_ECB', 'TAUX_BOJ', 'TAUX_BOC', 'TAUX_RBA', 'TAUX_BCB']
+    missing_rates = [c for c in rate_cols if c not in quadrants_df.columns]
+    if missing_rates:
+        return None, None
+
+    # Merge
+    f_df = forex_df.copy()
+    f_df['date'] = pd.to_datetime(f_df['date'])
+    q_df = quadrants_df[['date', quadrant_col] + rate_cols].copy()
+    q_df['date'] = pd.to_datetime(q_df['date'])
+
+    df = pd.merge(f_df, q_df, on='date', how='inner').sort_values('date')
+    if df.empty:
+        return None, None
+
+    rate_map = {
+        'EUR': 'TAUX_ECB',
+        'JPY': 'TAUX_BOJ',
+        'CAD': 'TAUX_BOC',
+        'AUD': 'TAUX_RBA',
+        'BRL': 'TAUX_BCB'
+    }
+
+    pairs = [c for c in forex_df.columns if c.startswith('USD_')]
+    available_pairs = [p for p in pairs if p.split('_')[1] in rate_map]
+
+    if not available_pairs:
+        return None, None
+
+    results = []
+    
+    for pair in available_pairs:
+        curr = pair.split('_')[1]
+        rate_curr_col = rate_map[curr]
+        
+        if inverse_fx:
+            p = 1.0 / df[pair]
+            cap_ret = p.pct_change()
+            carry_series = (df[rate_curr_col] - df['TAUX_FED']) / 100.0 / 252.0
+            display_name = f"{curr}/USD"
+        else:
+            p = df[pair]
+            cap_ret = p.pct_change()
+            carry_series = (df['TAUX_FED'] - df[rate_curr_col]) / 100.0 / 252.0
+            display_name = f"USD/{curr}"
+            
+        total_ret_series = (cap_ret + carry_series).fillna(0)
+        
+        quad_returns = total_ret_series.groupby(df[quadrant_col])
+        row = {'Asset': display_name}
+        for q in [1, 2, 3, 4]:
+            if q in quad_returns.groups:
+                group = quad_returns.get_group(q)
+                row[f'Q{q}'] = compute_single_metric(group, metric)
+            else:
+                row[f'Q{q}'] = 0.0
+        results.append(row)
+
+    scores_df = pd.DataFrame(results).set_index('Asset')
+    conf_df = pd.DataFrame(100.0, index=scores_df.index, columns=scores_df.columns)
+    
+    return scores_df, conf_df
+
+
+def get_dynamic_heatmap_data(daily_df, date_quadrant_df, quadrant_col, metric, inverse_fx=False):
     if daily_df is None or date_quadrant_df is None or quadrant_col not in date_quadrant_df.columns:
         return None, None
         
@@ -90,18 +162,28 @@ def get_dynamic_heatmap_data(daily_df, date_quadrant_df, quadrant_col, metric):
     for q in [1, 2, 3, 4]:
         df_q = merged[merged[quadrant_col] == q]
         for a in assets:
-            # We must compute daily returns (pct_change) from the absolute prices
-            # We do this on the whole merged df to maintain day-to-day sequencing, then filter by quadrant
-            ret_series = merged[a].pct_change().loc[df_q.index].dropna()
+            # Inversion logic for Forex
+            if inverse_fx:
+                # If price is USD/EUR, return is (Old/New - 1)
+                ret_series = (merged[a].shift(1) / merged[a] - 1).loc[df_q.index].dropna()
+            else:
+                ret_series = merged[a].pct_change().loc[df_q.index].dropna()
             
             # Remove infinity values that might result from division by very small numbers
             ret_series = ret_series.replace([np.inf, -np.inf], np.nan).dropna()
             
             score = compute_single_metric(ret_series, metric)
             conf = bootstrap_confidence(ret_series, metric, score)
+            
             scores_matrix.at[a, q] = score
             conf_matrix.at[a, q] = conf
             
+    # If inverted, we rebuild the names (USD_EUR -> EUR/USD)
+    if inverse_fx:
+        new_index = [f"{c.split('_')[1]}/{c.split('_')[0]}" if '_' in c else f"Inv_{c}" for c in assets]
+        scores_matrix.index = new_index
+        conf_matrix.index = new_index
+
     return scores_matrix, conf_matrix
 
 
@@ -257,9 +339,9 @@ def render(data):
     st.divider()
 
     # =========================================================
-    # SECTION DYNAMIQUE (ROBUSTESSE)
+    # SECTION 1: ANALYSE DE PERFORMANCE DES ACTIFS (Actions/ETF)
     # =========================================================
-    st.subheader("Performance par Quadrant et Test de Robustesse (Bootstrap)")
+    st.subheader("Analyse de Performance des Actifs (Actions/ETF)")
     
     selected_metric = st.selectbox(
         "Choisissez la Métrique d'Évaluation :",
@@ -268,47 +350,66 @@ def render(data):
         help="Sharpe: Rendement vs Volatilité Globale | Sortino: Rendement vs Volatilité à la Baisse | Win Rate: % de Jours Positifs"
     )
 
-    # 2 colonnes pour un affichage plus dense
-    col1, col2 = st.columns(2)
+    st.info("ℹ **Score de Confiance (Conf: X%) :** Ce score indique le pourcentage des échantillons qui ont la meme polarité (mesure l'homogénéité de la distribution). ")
 
-    with col1:
+    col1_assets, col2_assets = st.columns(2)
+
+    with col1_assets:
         st.markdown("**Quadrants PREDITS (Modèle ML)**")
-        # Actions
         scores_acc, conf_acc = get_dynamic_heatmap_data(data.get('daily_assets'), data.get('backtest'), 'smooth_quadrant', selected_metric)
         perf_source = data.get('perf_smooth') if data.get('perf_smooth') is not None else data.get('perf')
         if not _render_heatmap(scores_acc, conf_acc, perf_source, "Actions/ETF — PREDIT", "ML predict_proba + EMA", selected_metric, height=350):
-            st.info("Donnees de perf Actions ML non dispo.")
+            st.info("Données de performance Actions ML non disponibles.")
 
-        # Forex
-        scores_fx, conf_fx = get_dynamic_heatmap_data(data.get('daily_forex'), data.get('backtest'), 'smooth_quadrant', selected_metric)
-        if not _render_heatmap(scores_fx, conf_fx, data.get('forex_perf'), "Forex — PREDIT", "Paires Forex", selected_metric, height=300):
-            st.info("Donnees de perf Forex ML non dispo.")
-
-    with col2:
+    with col2_assets:
         st.markdown("**Quadrants TARGET (Ground Truth)**")
-        # Actions
         scores_tgt, conf_tgt = get_dynamic_heatmap_data(data.get('daily_assets'), data.get('quadrants'), 'target_quadrant', selected_metric)
         if not _render_heatmap(scores_tgt, conf_tgt, data.get('perf_target'), "Actions/ETF — TARGET", "Quadrants parfaits selon les targets", selected_metric, height=350):
-            st.info("Donnees de perf Actions Target non dispo.")
-
-        # Forex
-        scores_fxtgt, conf_fxtgt = get_dynamic_heatmap_data(data.get('daily_forex'), data.get('quadrants'), 'target_quadrant', selected_metric)
-        if not _render_heatmap(scores_fxtgt, conf_fxtgt, data.get('forex_perf_target'), "Forex — TARGET", "Paires Forex cibles", selected_metric, height=300):
-            st.info("Donnees de perf Forex Target non dispo.")
-
-    st.info("ℹ **Score de Confiance (Conf: X%) :** Ce score indique le pourcentage des échantillons qui ont la meme polarité (mesure l'homogénéité de la distribution). ")
+            st.info("Données de performance Actions Target non disponibles.")
 
     st.divider()
 
     # =========================================================
-    # HEATMAP HAUTE CONVICTION (>65% Probabilité)
+    # SECTION 2: ANALYSE DE PERFORMANCE FOREX
     # =========================================================
-    st.subheader("Performance par Quadrant : Signaux Haute Conviction (>65%)")
-    st.markdown("Cette section affiche la performance de la stratégie uniquement lors des jours où le modèle est fortement convaincu de son régime de Croissance ET/OU d'Inflation (probabilités >65% ou <35% sur *les deux* axes).")
+    st.subheader("Analyse de Performance Forex")
+    
+    col_fx_ui1, col_fx_ui2 = st.columns([2, 1])
+    with col_fx_ui2:
+        inverse_fx = st.toggle("Inverser paires Forex (ex: EUR/USD)", value=False)
+    
+    col1_fx, col2_fx = st.columns(2)
+
+    with col1_fx:
+        st.markdown("**Quadrants PREDITS (Modèle ML)**")
+        scores_fx, conf_fx = get_dynamic_heatmap_data(data.get('daily_forex'), data.get('backtest'), 'smooth_quadrant', selected_metric, inverse_fx=inverse_fx)
+        if not _render_heatmap(scores_fx, conf_fx, data.get('forex_perf'), "Forex — PREDIT", "Paires Forex", selected_metric, height=330):
+            st.info("Données de performance Forex ML non disponibles.")
+
+    with col2_fx:
+        st.markdown("**Quadrants TARGET (Ground Truth)**")
+        scores_fxtgt, conf_fxtgt = get_dynamic_heatmap_data(data.get('daily_forex'), data.get('quadrants'), 'target_quadrant', selected_metric, inverse_fx=inverse_fx)
+        if not _render_heatmap(scores_fxtgt, conf_fxtgt, data.get('forex_perf_target'), "Forex — TARGET", "Paires Forex cibles", selected_metric, height=330):
+            st.info("Données de performance Forex Target non disponibles.")
+
+    with st.expander("Focus sur le Marché des Changes (Forex)", expanded=False):
+        st.markdown(
+            "J'ai intégré une analyse spécifique au Forex pour explorer des opportunités de Carry Trading. "
+            "Les Ratios de Sharpe affichés incluent les swaps d'intérêt journaliers.\n\n"
+            "**Observations :**\n\n"
+            "- Bien que le modèle identifie des disparités (ex: force du JPY ou de l'USD selon les quadrants), aucune stratégie systématique n'a été retenue pour le moment.\n"
+            "- Le modèle évoluant principalement en Q2 et Q4 (avec Q1/Q3 comme phases de transition rapides), l'extraction d'un \"edge\" persistant sur le Forex reste un défi. Pour l'instant, je juge la fiabilité des classes d'actifs (Actions/Obligations) supérieure."
+        )
+
+    st.divider()
+
+    # =========================================================
+    # SECTION 3: SIGNAUX HAUTE CONVICTION (>65% Probabilité)
+    # =========================================================
+    st.subheader("Signaux Haute Conviction (>65%)")
+    st.markdown("Cette section affiche la performance uniquement lors des jours où le modèle est fortement convaincu de son régime.")
 
     if data.get('quadrants') is not None and 'PROB_GROWTH_EMA' in data['quadrants'].columns and 'PROB_INFLATION_EMA' in data['quadrants'].columns:
-        # Filtrer pour ne garder que les jours de haute conviction
-        # Conviction = probabilité "loins de 50%" sur les deux axes (>65% ou <35%)
         high_conviction_mask = (abs(data['quadrants']['PROB_GROWTH_EMA'] - 0.5) >= 0.15) & \
                                (abs(data['quadrants']['PROB_INFLATION_EMA'] - 0.5) >= 0.15)
         
@@ -317,7 +418,6 @@ def render(data):
         if not df_high_conviction.empty:
             st.write(f"Nombre de jours de Haute Conviction : **{len(df_high_conviction)}** jours sur {len(data['quadrants'])}.")
             
-            # Ne récupérer que la DataFrame de Backtest filtrée sur ces jours précis
             if data.get('backtest') is not None:
                 bt_filtered = data['backtest'][data['backtest']['date'].isin(df_high_conviction['date'])]
                 
@@ -327,19 +427,20 @@ def render(data):
                     st.markdown("**Actions/ETF — HAUTE CONVICTION**")
                     scores_hc, conf_hc = get_dynamic_heatmap_data(data.get('daily_assets'), bt_filtered, 'smooth_quadrant', selected_metric)
                     if not _render_heatmap(scores_hc, conf_hc, None, "Actions/ETF — HAUTE CONVICTION", f"Signaux nets (>65% proba)", selected_metric, height=350):
-                        st.info("Données insuffisantes pour calculer le heatmap Haute Conviction Actions.")
+                        st.info("Données insuffisantes pour le heatmap HC Actions.")
                 
                 with hc_col2:
                     st.markdown("**Forex — HAUTE CONVICTION**")
-                    scores_hcfx, conf_hcfx = get_dynamic_heatmap_data(data.get('daily_forex'), bt_filtered, 'smooth_quadrant', selected_metric)
+                    scores_hcfx, conf_hcfx = get_dynamic_heatmap_data(data.get('daily_forex'), bt_filtered, 'smooth_quadrant', selected_metric, inverse_fx=inverse_fx)
                     if not _render_heatmap(scores_hcfx, conf_hcfx, None, "Forex — HAUTE CONVICTION", f"Signaux nets (>65% proba)", selected_metric, height=300):
-                        st.info("Données insuffisantes pour calculer le heatmap Haute Conviction Forex.")
+                        st.info("Données insuffisantes pour le heatmap HC Forex.")
         else:
-            st.warning("Aucun jour ne correspond à ce critère de conviction (>65%) simultanément sur les deux axes.")
+            st.warning("Aucun jour de haute conviction détecté.")
     else:
-        st.warning("Les données de probabilités étendues (PROB_GROWTH_EMA, PROB_INFLATION_EMA) ne sont pas chargées.")
+        st.warning("Probabilités non disponibles.")
 
     st.divider()
+
 
     with st.expander("Stratégie d'Allocation", expanded=True):
         st.markdown(
@@ -395,13 +496,5 @@ def render(data):
             "Si le S&P 500, le NASDAQ 100 ou l'Or clôturent sous leur moyenne mobile à 200 jours pendant 5 jours consécutifs, leur pondération est instantanément coupée à 0% et réallouée en bons du Trésor à 10 ans (Treasuries) jusqu'à ce que la tendance soit reprise."
         )
 
-    with st.expander("Focus sur le Marché des Changes (Forex)", expanded=False):
-        st.markdown(
-            "J'ai intégré une analyse spécifique au Forex pour explorer des opportunités de Carry Trading. "
-            "Les Ratios de Sharpe affichés incluent les swaps d'intérêt journaliers.\n\n"
-            "**Observations :**\n\n"
-            "- Bien que le modèle identifie des disparités (ex: force du JPY ou de l'USD selon les quadrants), aucune stratégie systématique n'a été retenue pour le moment.\n"
-            "- Le modèle évoluant principalement en Q2 et Q4 (avec Q1/Q3 comme phases de transition rapides), l'extraction d'un \"edge\" persistant sur le Forex reste un défi. Pour l'instant, je juge la fiabilité des classes d'actifs (Actions/Obligations) supérieure."
-        )
 
     st.divider()

@@ -179,7 +179,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Equity Research", "Tokenisation Project"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -191,7 +191,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "dice-5", "coin", "journal-code", "robot"],
+            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "dice-5", "coin", "box-seam", "robot", "journal-code"],
             menu_icon="cast",
             default_index=default_idx,
             manual_select=default_idx,
@@ -217,7 +217,7 @@ def render_sidebar():
         )
         
         st.markdown("---")
-        st.markdown("###  Tech Stack")
+        st.markdown("### Tech Stack")
         st.markdown("""
         - Python 
         - Streamlit 
@@ -239,22 +239,22 @@ def render_sidebar():
 def render_home():
     apply_home_css()
     
-    st.title(" Quantitative Finance Portfolio")
-    st.markdown("###  Quantitative Analyst | Data Engineer")
+    st.title("Quantitative Finance Portfolio")
+    st.markdown("### Quantitative Analyst | Data Engineer")
     st.markdown("---")
     
     # Profile Section
-    col1, col2 = st.columns([1, 2])
+    col1, col2 = st.columns([1.2, 2])
     
     with col1:
         img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "portfoliotete.jpeg")
         if os.path.exists(img_path):
-            st.image(img_path, width=400)
+            st.image(img_path, use_container_width=True)
         else:
             st.image("https://img.icons8.com/fluency/256/000000/financial-analytics.png", width=200)
         
     with col2:
-        st.markdown("### 💻 About Me")
+        st.markdown("### About Me")
         st.markdown("""
         Passionate engineer who likes building financial models, 
         data pipelines, and some fun trading strategies.""")
@@ -279,11 +279,11 @@ def render_home():
     with col1:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3> Macro Strategy Pipeline</h3>
-            <p><strong>Tech:</strong> Apache Airflow, Random Forest, Spark, IBKR  </p>
-            <p>Designed ETL pipeline ingesting macro indicators via Airflow DAGs and procces them with Random Forest ML model. 
-            Orchestrated "4 Seasons" strategy based on probability of growth/inflation regime detection.</p>
-            <p><strong>Key Achievement:</strong> Automated portfolio management less volatile than the market with real-time streamlit dashboards.</p>
+            <h3>Macro 4 seasons Strategy</h3>
+            <p><strong>Tech:</strong> Apache Airflow, Random Forest ML, Spark, IBKR  </p>
+            <p>ETL pipeline ingesting and processing macro indicators via Airflow. 
+            Orchestrated and backtested strategy based on probability of growth/inflation regime detection.</p>
+            <p><strong>Key Achievement:</strong> Portfolio management less volatile than the market.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
@@ -295,11 +295,11 @@ def render_home():
     with col2:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>Crypto Hype Cycles Trading</h3>
+            <h3>Crypto Hype Momentum</h3>
             <p><strong>Tech:</strong> Binance API, VectorBT, Plotly</p>
-            <p>Momentum-based crypto strategy detecting "hype cycles" in BTC to trade altcoin market. 
-            Trades top performing altcoins when BTC shows strength.</p>
-            <p><strong>Key Result:</strong> Captured volatility during bullish crypto trends.</p>
+            <p>Momentum-based crypto live trading strategy detecting "hype cycles" in crypto market to trade altcoins. 
+            Main idea is to follow BTC trend: long the strongest altcoins, short the weakest.</p>
+            <p><strong>Key Result:</strong> Captured volatility during hype cycles.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
@@ -311,8 +311,8 @@ def render_home():
     with col3:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3> Monte Carlo Gambling Strategies</h3>
-            <p><strong>Tech:</strong> NumPy, Matplotlib, Plotly</p>
+            <h3> Martingale Gambling</h3>
+            <p><strong>Tech:</strong> NumPy, Plotly</p>
             <p>Simulated 1000+ roulette games using Martingale strategy with vectorized operations. 
             Achieved statistical analysis showing 82% win rate but negative expected value.</p>
             <p><strong>Key Result:</strong> Demonstrated the mathematical impossibility of beating the house edge.</p>
@@ -342,22 +342,8 @@ def render_home():
             st.session_state.current_page = "DCA Investment Strategy"
             st.rerun()
 
+    
     with col5:
-        st.markdown("""
-        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3> Tokenisation Project</h3>
-            <p><strong>Tech:</strong> FEC parsing, Financial KPIs, AI Health Score</p>
-            <p>Company valuation and tokenization project based on FEC (Audit File). 
-            Analyze historical financial data to calculate KPIs and determine token price.</p>
-            <hr>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_token", use_container_width=True):
-            st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Tokenisation Project"
-            st.rerun()
-
-    with col6:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3> Pairs Trading Arbitrage</h3>
@@ -370,28 +356,13 @@ def render_home():
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Equity Research"
+            st.session_state.current_page = "Arbitrage Or-Argent"
             st.rerun()
     
     
     col7, col8, col9 = st.columns(3)
     
-    with col7:
-        st.markdown("""
-        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>Financial Modeling Suite</h3>
-            <p><strong>Tech:</strong> NumPy, Pandas, LaTeX (for formulas)</p>
-            <p>Built comprehensive equity valuation models including DCF, multiples analysis, 
-            and options pricing (Black-Scholes). Interactive sensitivity analysis with Plotly.</p>
-            <p><strong>Key Result:</strong> End-to-end equity research framework.</p>
-            <hr>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_finmod", use_container_width=True):
-            st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Equity Research"
-            st.rerun()
-    
+   
     st.markdown("---")
     
     # Contact Section
@@ -448,15 +419,16 @@ if __name__ == "__main__":
         except Exception as e:
             st.error(f"Could not load the Crypto Momentum Trading app: {str(e)}")
 
-    elif st.session_state.current_page == "Tokenisation Project":
-        _render_nav_sidebar("Tokenisation Project")
+    elif st.session_state.current_page == "Arbitrage Or-Argent":
+        _render_nav_sidebar("Arbitrage Or-Argent")
         try:
             apply_home_css()
-            import tokenisation_ia.app_tokenisation as app_tokenisation
-            app_tokenisation.render()
+            import arbitrage.app_arbitrage as app_arbitrage
+            app_arbitrage.render()
         except Exception as e:
-            st.error(f"Could not load the Tokenisation Project app: {str(e)}")
+            st.error(f"Could not load the Arbitrage app: {str(e)}")
 
+   
     elif st.session_state.current_page == "Equity Research":
         _render_nav_sidebar("Equity Research")
         st.title("Equity Research")

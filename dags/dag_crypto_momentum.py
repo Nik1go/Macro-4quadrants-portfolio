@@ -84,21 +84,21 @@ def task_calc_indicators(**kwargs):
     btc_ret = indicators["btc_ret_5d"].iloc[-1]
     btc_med = indicators["btc_median"].iloc[-1]
     btc_std = indicators["btc_std"].iloc[-1]
-    above = indicators["btc_above_sma_3d"].iloc[-1]
-    below = indicators["btc_below_sma_3d"].iloc[-1]
+    above = indicators["btc_above_sma_2d"].iloc[-1]
+    below = indicators["btc_below_sma_2d"].iloc[-1]
 
-    long_threshold = btc_med + btc_std
-    short_threshold = btc_med - btc_std
+    long_threshold = btc_med + 0.5 * btc_std
+    short_threshold = btc_med - 0.5 * btc_std
 
     print(f"\n📈 BTC Close: ${btc_close:,.0f}")
     print(f"📉 BTC SMA({SMA_PERIOD}): ${btc_sma:,.0f}")
     print(f"📊 BTC 5D Return: {btc_ret:.2%}")
     print(f"📏 Rolling Median (5D): {btc_med:.2%}")
     print(f"📐 Rolling StdDev (5D): {btc_std:.2%}")
-    print(f"🟢 Long Threshold (Med + 1σ): {long_threshold:.2%}  {'✅ TRIGGERED' if btc_ret > long_threshold else '❌ Not met'}")
-    print(f"🔴 Short Threshold (Med - 1σ): {short_threshold:.2%}  {'✅ TRIGGERED' if btc_ret < short_threshold else '❌ Not met'}")
-    print(f"🟢 BTC > SMA (3d): {above}")
-    print(f"🔴 BTC < SMA (3d): {below}")
+    print(f"🟢 Long Threshold (Med + 0.5σ): {long_threshold:.2%}  {'✅ TRIGGERED' if btc_ret > long_threshold else '❌ Not met'}")
+    print(f"🔴 Short Threshold (Med - 0.5σ): {short_threshold:.2%}  {'✅ TRIGGERED' if btc_ret < short_threshold else '❌ Not met'}")
+    print(f"🟢 BTC > SMA (2d): {above}")
+    print(f"🔴 BTC < SMA (2d): {below}")
 
     # ── Preview: which altcoins would be selected ──
     import pandas as pd
@@ -112,8 +112,8 @@ def task_calc_indicators(**kwargs):
     if long_conditions_met:
         long_filtered = []
         for sym in alt_btc_cols:
-            if sym in indicators["alt_btc_above_sma_5d"].columns:
-                if indicators["alt_btc_above_sma_5d"].at[today, sym]:
+            if sym in indicators["alt_btc_above_sma_2d"].columns:
+                if indicators["alt_btc_above_sma_2d"].at[today, sym]:
                     usdt_sym = sym.replace("BTC", "USDT")
                     if usdt_sym in indicators["ret_3d"].columns:
                         ret_val = indicators["ret_3d"].at[today, usdt_sym]
@@ -127,7 +127,7 @@ def task_calc_indicators(**kwargs):
                 print(f"   {marker} {sym:<12s}  3D ret: {ret:+.2%}")
             print(f"   → Crypto ⭐ star du moment: {long_filtered[0][0]} ({long_filtered[0][1]:+.2%})")
         else:
-            print("🟢 LONG: BTC conditions ✅ mais aucune alt ne passe le filtre ALT/BTC > SMA (5d)")
+            print("🟢 LONG: BTC conditions ✅ mais aucune alt ne passe le filtre ALT/BTC > SMA (2d)")
     else:
         print("🟢 LONG: Pas de signal (conditions BTC non remplies)")
 
@@ -136,8 +136,8 @@ def task_calc_indicators(**kwargs):
     if short_conditions_met:
         short_filtered = []
         for sym in alt_btc_cols:
-            if sym in indicators["alt_btc_below_sma_5d"].columns:
-                if indicators["alt_btc_below_sma_5d"].at[today, sym]:
+            if sym in indicators["alt_btc_below_sma_2d"].columns:
+                if indicators["alt_btc_below_sma_2d"].at[today, sym]:
                     usdt_sym = sym.replace("BTC", "USDT")
                     if usdt_sym in indicators["ret_3d"].columns:
                         ret_val = indicators["ret_3d"].at[today, usdt_sym]
@@ -151,7 +151,7 @@ def task_calc_indicators(**kwargs):
                 print(f"   {marker} {sym:<12s}  3D ret: {ret:+.2%}")
             print(f"   → Crypto 💀 absente du moment: {short_filtered[0][0]} ({short_filtered[0][1]:+.2%})")
         else:
-            print("🔴 SHORT: BTC conditions ✅ mais aucune alt ne passe le filtre ALT/BTC < SMA (5d)")
+            print("🔴 SHORT: BTC conditions ✅ mais aucune alt ne passe le filtre ALT/BTC < SMA (2d)")
     else:
         print("🔴 SHORT: Pas de signal (conditions BTC non remplies)")
     print(f"{'─' * 50}")
@@ -257,6 +257,7 @@ with DAG(
     description='Crypto Momentum Trading Pipeline (Long & Short) — Top 20 Altcoins',
     schedule='5 0 * * *',  # Daily at 00:05 UTC
     catchup=False,
+    max_active_runs=1,
     tags=['crypto', 'momentum', 'trading'],
 ) as dag:
 

@@ -30,31 +30,48 @@ def run_offline_backtest():
     os.makedirs(backtest_out_dir, exist_ok=True)
     
     # 2. Parameters
-    start_date = "2020-01-01"
+    start_date = "2026-01-01"
     
     # 3. Dynamic Universe (Top 20 Cryptos by 24h Volume + BTC)
     print("Fetching dynamic universe for backtest (Top 20 by Volume)...")
     top_symbols, _ = dfetch.fetch_top_symbols(n=80)  # Wide universe for rolling volume filter
     print(f"Universe selected: {top_symbols}")
     
+    # 3b. Load the recorded daily universe history
+    daily_univ_path = os.path.join(crypto_data_dir, "daily_universe.json")
+    daily_universe_dict = {}
+    if os.path.exists(daily_univ_path):
+        with open(daily_univ_path, "r") as f:
+            daily_universe_dict = json.load(f)
+        print(f"Loaded daily universe history for {len(daily_universe_dict)} distinct days.")
+    else:
+        print("No daily_universe.json found. Engine will rely completely on historical rolling 30d baseline.")
+    
     # 4. Execute Grid Search
-    heatmap_df, best_params, pf, btc_close = mu.run_heatmap_simulation(
+    # Using a focused grid to avoid hours of calculation (3x3x2x2x2 = 72 tests)
+    results_df, best_params, pf, btc_close = mu.run_grid_search_simulation(
         symbols=top_symbols,
         start_date=start_date,
-        sma_periods=[20, 30, 40, 50, 60, 70, 80, 90, 100],
-        roll_lookbacks=[30, 60, 90, 120, 180, 240, 300, 350, 400, 450, 500, 550, 600],
+        sma_periods=[30, 50, 80],
+        roll_lookbacks=[60, 120, 180],
+        skew_threshs=[0.0, 0.15],
+        std_mults=[0.3, 0.5],
+        atr_mults=[2.0, 3.0],
+        streak_limits=[3],
+        vol_filters=[True, False],
         fees_bps=6,
-        slippage_bps=10
+        slippage_bps=10,
+        daily_universe_dict=daily_universe_dict
     )
     
     if pf is None:
         print("Backtest failed: No data or no trades triggered.")
         return
         
-    # 4. Save Heatmap Data
-    heatmap_path = os.path.join(backtest_out_dir, "heatmap.csv")
-    heatmap_df.to_csv(heatmap_path)
-    print(f"Saved: {heatmap_path}")
+    # 4. Save Grid Search Data
+    grid_path = os.path.join(backtest_out_dir, "grid_search_results.csv")
+    results_df.to_csv(grid_path, index=False)
+    print(f"Saved: {grid_path}")
     
     # 5. Save Equity Curve Data
     equity_series = pf.value()

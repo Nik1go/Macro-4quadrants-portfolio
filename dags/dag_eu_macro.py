@@ -323,6 +323,7 @@ with DAG(
     description='European Macro Data Ingestion Layer',
     schedule='0 8 * * *',
     catchup=False,
+    max_active_runs=1,
     tags=['macro','eu','data']
 ) as dag:
 

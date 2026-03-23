@@ -24,7 +24,6 @@ VENV_PYTHON = os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'python')
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-# IBKR Integration
 
 """ Pipeline Airflow : macro_trading_dag.py
 
@@ -70,9 +69,7 @@ FRED_SERIES_MAPPING = {
     'IND_PRODUCTION': 'INDPRO',
     'WTI_CRUDE_OIL': 'DCOILWTICO',
     'BREAKEVEN_10Y': 'T10YIE',
-    # Chicago Fed National Financial Conditions Index (Weekly - Wednesday)
-    'NFCI': 'NFCI',
-    # Philadelphia Fed Coincident Index - Ground Truth for Growth (ML Target)
+    'NFCI': 'NFCI', # Philadelphia Fed Coincident Index - Ground Truth for Growth (ML Target)
     'USPHCI': 'USPHCI',
     # Net Liquidity Components
     'WALCL': 'WALCL',        # Fed Total Assets (Weekly - Wednesday)
@@ -89,31 +86,18 @@ FRED_SERIES_MAPPING = {
 
 # Yahoo Finance INDICATORS
 YF_INDICATORS_MAPPING = {
-    # Dollar strength: Strong = Deflation signal
     'US_DOLLAR_INDEX': {'ticker': 'DX-Y.NYB', 'series_id': 'US_DOLLAR_INDEX'},
-    # Copper Futures: Industrial demand = Growth signal
     'COPPER': {'ticker': 'HG=F', 'series_id': 'COPPER'}
 }
 
-# Yahoo Finance ASSETS (tradable securities for portfolio)
 YF_SERIES_MAPPING = {
-    # Inception 1993
     'S&P500(LARGE CAP)': {'ticker': 'SPY', 'series_id': 'SP500'},
-    # Inception 2004
     "GOLD_OZ_USD": {'ticker': 'GLD', 'series_id': 'GOLD_OZ_USD'},
-    # Inception 2000
     "RUSSELL2000(Small CAP)": {'ticker': 'IWM', 'series_id': 'SmallCAP'},
-    # Inception 2004
     "REITs(Immobilier US)": {'ticker': 'VNQ', 'series_id': 'US_REIT_VNQ'},
-    # Inception 2002
     'US_TREASURY_10Y': {'ticker': 'IEF', 'series_id': 'TREASURY_10Y'},
-    # Inception 2002
     "OBLIGATION ENTREPRISE": {'ticker': 'LQD', "series_id": "OBLIGATION"},
-    # Inception 1999
-    'NASDAQ_100': {'ticker': 'QQQ', 'series_id': 'NASDAQ_100'},
-    # Broad Commodities
-    'COMMODITIES': {'ticker': 'DBC', 'series_id': 'COMMODITIES'},
-    # ProShares Short S&P500 (Inception 2006) - Inverse ETF
+    'NASDAQ_100': {'ticker': 'QQQ', 'series_id': 'NASDAQ_100'},    'COMMODITIES': {'ticker': 'DBC', 'series_id': 'COMMODITIES'},
     'SHORT_SP500': {'ticker': 'SH', 'series_id': 'SHORT_SP500'}
 }
 
@@ -581,8 +565,9 @@ with DAG(
     dag_id='dag_us_macro',
     default_args=default_args,
     description='Stratégie contre-cyclique avec données FRED et Yahoo Finance',
-    schedule='0 8 * * *',
+    schedule='30 16 * * *',
     catchup=False,
+    max_active_runs=1,
     tags=['macro', 'assets', 'performance']
 ) as dag:
 

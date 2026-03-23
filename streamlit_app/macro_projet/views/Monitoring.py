@@ -97,7 +97,7 @@ def render_ibkr_dashboard(data):
         if positions_df is not None and not positions_df.empty:
             st.dataframe(positions_df, use_container_width=True)
         elif data.get('ibkr_last_positions'):
-            st.info("📊 Affichage des derniers poids connus (Logs)")
+            st.info("Affichage des derniers poids connus (Logs)")
             last_pos = data['ibkr_last_positions']
             # Convert weights dict to DataFrame
             weights_df = pd.DataFrame([

@@ -89,7 +89,7 @@ def render():
     )
 
     # === TABS ===
-    tab_strat, tab_live, tab_backtest = st.tabs(["STRATEGIE", "LIVE PIPELINE MONITORING", "BACKTEST & PERF"])
+    tab_strat, tab_live, tab_backtest = st.tabs(["STRATEGIE", "LIVE PIPELINE MONITORING", "ALPHA RESEARCH (LIVE)"])
 
     # ══════════════════════════════════════════════════════════════
     # TAB 1: STRATEGY EXPLANATION
@@ -103,60 +103,66 @@ def render():
 
         **Le mécanisme observé est le suivant :**
         * **L'effet de richesse :** Lorsque le Bitcoin affiche une tendance haussière forte, les capitaux ont tendance à se déplacer vers les actifs plus risqués (**Altcoins**), créant des phénomènes de momentum à court et moyen terme.
-        * **L'abandon massif :** À l'inverse, en période de chute du Bitcoin, les altcoins affichant une faiblesse relative sont délaissés prioritairement, offrant des opportunités de **Vente à découvert (Short)**.
+        * **L'abandon massif :** À l'inverse, en période de chute du Bitcoin, les altcoins affichant une faiblesse relative sont délaissés prioritairement, offrant des opportunités de Short.
 
-        L'idée générale est donc d'identifier quelles cryptomonnaies captent l'attention du marché (ou sont délaissées) pour exploiter le **momentum** généré par ces flux de capitaux.
+        L'idée est donc d'identifier quelles cryptomonnaies captent l'attention du marché (ou sont délaissées) pour exploiter le **momentum** généré par les flux de capitaux sur le BTC.
         """)
 
         st.markdown("---")
 
         with st.expander("Conditions d'Entrée & Sortie", expanded=False):
-            # Long/Short side by side
-            col_long, col_short = st.columns(2)
+            st.info("💡 **Principe de Gestion :** Le portefeuille est investi à **100%** sur une seule position à la fois (soit Long, soit Short).")
+            col_l, col_s = st.columns(2)
             
-
-            with col_long:
-                st.markdown("### Position Long (Achat)")
+            with col_l:
+                st.markdown("### 🟢 Position Long (Bullish)")
                 st.markdown("""
-                **Conditions d'Entrée :**
-                1. **Univers :** Sélection des 20 altcoins avec le plus gros volume (hors stablecoins).
-                2. **Régime de Distribution :** *120d Skewness > 0.15* (asymétrie positive significative).
-                3. **Force du Mouvement :** *BTC 5D Return > Médiane + 0.5σ* (momentum haussier exceptionnel).
-            4. **Confirmation Volume :** Volume BTC du jour > SMA(20) des volumes (le mouvement est soutenu par de vrais flux).
-            5. **Confirmation BTC :** Prix > SMA depuis **2 jours consécutifs**.
-            6. **Performance Relative :** Paire ALT/BTC > SMA depuis **2 jours consécutifs**.
-            7. **Sélection finale :** L'actif ayant la **meilleure performance sur 3 jours** parmi les filtrés.
-            8. **Allocation :** 50% du cash disponible.
+                **Signal d'Entrée :**
+                1.  **Univers :** Sélection parmi le top 120 volumes (hors stablecoins).
+                2.  **Régime :** Skewness BTC (120j) > **0.15** (Biais haussier).
+                3.  **Momentum :** Retour 5j BTC > Médiane + **0.5σ**.
+                4.  **Volume :** Volume BTC > SMA 20 des volumes.
+                5.  **Tendance BTC :** Prix > SMA(50) depuis **2 jours**.
+                6.  **Tendance Relative :** Paire ALT/BTC > SMA(50) depuis **2 jours**.
+                7.  **Sélection :** Actif avec la **meilleure performance 3j**.
 
-            **Conditions de Sortie :**
-            * L'actif sous-performe le panier moyen des altcoins pendant **3 jours** consécutifs.
-            * **OU :** Le BTC repasse sous sa SMA pendant **2 jours** consécutifs.
-            * **OU :** **Trailing Stop ATR** : le prix chute de plus de **2× ATR(14)** depuis son plus haut en position.
-            """)
+                **Conditions de Sortie :**
+                -   **Momentum Stop :** Sous-performance vs panier altcoins pendant 3 jours.
+                -   **Trend Stop :** BTC repasse sous SMA(50) pendant **2 jours**.
+                -   **Trailing Stop :** Baisse de **2.0× ATR(14)** depuis le sommet.
+                """)
 
-        with col_short:
-            st.markdown("### Position Short (Vente)")
+            with col_s:
+                st.markdown("### 🔴 Position Short (Bearish)")
+                st.markdown("""
+                **Signal d'Entrée :**
+                1.  **Univers :** Sélection parmi le top 120 volumes (hors stablecoins).
+                2.  **Régime :** Skewness BTC (120j) < **-0.15** (Biais baissier).
+                3.  **Momentum :** Retour 5j BTC < Médiane - **0.5σ**.
+                4.  **Volume :** Volume BTC > SMA 20 des volumes.
+                5.  **Tendance BTC :** Prix < SMA(50) depuis **2 jours**.
+                6.  **Tendance Relative :** Paire ALT/BTC < SMA(50) depuis **2 jours**.
+                7.  **Sélection :** Actif avec la **pire performance 3j**.
+
+                **Conditions de Sortie :**
+                -   **Momentum Stop :** Sur-performance vs panier altcoins pendant 3 jours.
+                -   **Trend Stop :** BTC repasse au-dessus de SMA(50) pendant **2 jours**.
+                -   **Trailing Stop :** Hausse de **2.0× ATR(14)** depuis le creux.
+                """)
+
+        with st.expander("Méthodologie d'Évaluation & alpha research", expanded=False):
             st.markdown("""
-            **Conditions d'Entrée :**
-            1. **Univers :** Sélection des 20 altcoins avec le plus gros volume (hors stablecoins).
-            2. **Régime de Distribution :** *120d Skewness < -0.15* (asymétrie négative forte).
-            3. **Force du Mouvement :** *BTC 5D Return < Médiane - 0.5σ* (momentum baissier marqué).
-            4. **Confirmation Volume :** Volume BTC du jour > SMA(20) des volumes (le mouvement est soutenu par de vrais flux).
-            5. **Confirmation BTC :** Prix < SMA depuis **2 jours consécutifs**.
-            6. **Performance Relative :** Paire ALT/BTC < SMA depuis **2 jours consécutifs**.
-            7. **Sélection finale :** L'actif ayant la **pire performance sur 3 jours** parmi les filtrés.
-            8. **Allocation :** 25% du cash disponible.
+            Pour valider cette stratégie, l'approche retenue s'appuie sur la constitution quotidienne d'un univers de trading en temps réel (live paper), plutôt que sur un backtest historique classique à long terme.
 
-            **Conditions de Sortie :**
-            * L'actif sur-performe le panier moyen pendant **3 jours** consécutifs.
-            * **OU :** Le BTC repasse au-dessus de sa SMA pendant **2 jours** consécutifs.
-            * **OU :** **Trailing Stop ATR** : le prix rebondit de plus de **2× ATR(14)** depuis son plus bas en position.
+            La raison principale est le biais de survie. Si l'on teste une stratégie sur les années passées en utilisant la liste des cryptomonnaies les plus populaires d'aujourd'hui, les résultats seront artificiellement gonflés. En effet, tester dans le passé des actifs qui ont survécu et dominé le marché jusqu'à aujourd'hui donne un avantage prédictif irréaliste et omet toutes les cryptomonnaies qui étaient populaires à l'époque mais qui se sont effondrées depuis.
+
+            Pour obtenir une évaluation réaliste et mathématiquement neutre, le système observe et enregistre chaque jour les actifs ayant le plus de volume au moment présent. L'optimisation et la recherche de performance (backtest) ne s'effectuent que sur ces données collectées dynamiquement, garantissant que l'algorithme ne triche pas en regardant l'avenir.
             """)
 
         st.markdown("---")
         with st.expander("1. Architecture Technique (Data Engineering Pipeline)", expanded=False):
             st.markdown("""
-            L'ensemble du pipeline est entièrement automatisé et executé chaque jours à 00H05 UTC (01H05/02H05 heure de Paris) par **Apache Airflow**, via **Apache Spark**, de l'ingestion de la donnée jusqu'à l'exécution d'ordres de trading via l'API d'Interactive Brokers.
+            L'ensemble du pipeline est entièrement automatisé et executé chaque jours à 00H05 UTC (01H05/02H05 heure de Paris) par **Apache Airflow** sur mon serveur.
             """)
         
             try:
@@ -172,33 +178,32 @@ def render():
             except Exception as e:
                 st.error(f"Erreur d'ouverture de l'image : {e} (Chemin essayé : {image_path})")
             
-        st.markdown("""
-        **Pipeline ETL & ML :**
-        1. **Ingestion (Task `fetch_data`)** : Récupération des données brutes via l'API FRED (macroéconomie) et Yahoo Finance (prix des actifs).
-        2. **Feature Engineering (Task `prepare_indicators`)** : Nettoyage, synchronisation temporelle, et calcul des métriques dérivées.
-        3. **Modélisation ML (Spark Job `train_model`)** : Entraînement distribué des classifieurs Random Forest (GridSearchCV + Walk-Forward test).
-        4. **Inférence (Spark Job `compute_quadrants`)** : Prédiction mensuelle probabiliste et assignation au quadrant correspondant.
-        5. **Simulation & Trading (Spark/IBKR)** : Backtesting de la stratégie avec prise en compte des coûts de transaction, exécution automatique des ordres de réallocation.
-        """)
+      
 
     # ══════════════════════════════════════════════════════════════
-    # TAB 2: BACKTEST (Offline from Airflow pipeline)
+    # TAB 3: ALPHA RESEARCH (Live Paper Tracking)
     # ══════════════════════════════════════════════════════════════
     with tab_backtest:
-        st.markdown("### Optimisation des Paramètres (Heatmap)")
-        st.markdown("*Résultats de la stratégie Long/Short (Sizing 25%) pré-calculés hors ligne par Airflow via VectorBT.*")
+        st.markdown("### Recherche d'Alpha (Live Paper)")
+        st.markdown("*Ces résultats simulent les performances de la stratégie sur différents paramètres de portefeuille. **L'optimisation repose strictement sur l'univers de trading dynamique collecté par le live paper chaque jour**, garantissant une évaluation sans biais de survie.*")
 
+        st.markdown("---")
+        
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
+        crypto_data_dir = os.path.join(project_root, "data", "crypto")
+
+        st.markdown("### Optimisation Globale Multi-Critères (Grid Search Offline)")
+        
         backtest_out_dir = os.path.join(project_root, "data", "crypto", "backtest_results")
 
-        heatmap_path = os.path.join(backtest_out_dir, "heatmap.csv")
+        grid_path = os.path.join(backtest_out_dir, "grid_search_results.csv")
         equity_path = os.path.join(backtest_out_dir, "equity_curves.csv")
         summary_path = os.path.join(backtest_out_dir, "backtest_summary.json")
         trades_path = os.path.join(backtest_out_dir, "trades_log.csv")
 
-        if not os.path.exists(heatmap_path) or not os.path.exists(summary_path):
-            st.warning(" Les résultats du Backtest ne sont pas encore générés.")
+        if not os.path.exists(grid_path) or not os.path.exists(summary_path):
+            st.warning(" Les résultats ne sont pas encore générés.")
             st.info("Lancez le script `pipeline_crypto_momentum/backtest/run_backtest.py` via Airflow pour calculer l'optimisation.")
 
         else:
@@ -209,14 +214,14 @@ def render():
                 with open(summary_path, "r") as f:
                     summary = json.load(f)
 
-                st.markdown("#### Informations du Backtest")
-                st.markdown("**Univers :** Top 12 Cryptos (Filtre ALT/BTC)")
+                st.markdown("#### Informations d'évaluation")
+                st.markdown("**Univers :** Top 80 Cryptos par Volume (Dynamique)")
                 st.markdown(f"**Date de début :** {summary.get('start_date', 'N/A')}")
                 st.markdown(f"**Frais :** 6 bps | **Slippage :** 10 bps")
 
                 st.markdown("---")
                 st.markdown("### Meilleure Configuration")
-                st.info(f" SMA : **{summary.get('best_sma', 'N/A')}**\n\n🏆 Lookback : **{summary.get('best_lookback', 'N/A')}**")
+                st.info(f" SMA : **{summary.get('best_sma', 'N/A')}**\n\n Lookback : **{summary.get('best_lookback', 'N/A')}**")
 
                 st.markdown("### Métriques globales")
                 st.metric("Rendement Total", f"{summary.get('tot_ret_pct', 0.0):.2f}%")
@@ -225,27 +230,62 @@ def render():
                 st.metric("Max Drawdown", f"{summary.get('max_dd_pct', 0.0):.2f}%")
 
             with col_results:
-                # 1. Heatmap
-                st.markdown("#### Matrice des Rendements par Paramètres")
-                heatmap_df = pd.read_csv(heatmap_path, index_col=0)
-                heatmap_df.columns = [int(float(c)) for c in heatmap_df.columns] # Clean column headers
+                grid_df = pd.read_csv(grid_path)
+                grid_df = grid_df.sort_values(by="Sharpe Ratio", ascending=False).reset_index(drop=True)
+                
+                # Extrêmes
+                st.markdown("#### Extrêmes de la Recherche (Best vs Worst)")
+                if not grid_df.empty:
+                    best_row = grid_df.iloc[0]
+                    worst_row = grid_df.iloc[-1]
+                    
+                    c_best, c_worst = st.columns(2)
+                    with c_best:
+                        st.success(f"**Meilleure Combinaison (Sharpe: {best_row.get('Sharpe Ratio', 0.0):.2f})**\n\nSMA: {int(best_row.get('SMA',0))} | Lookback: {int(best_row.get('Lookback',0))} | Skew: {best_row.get('Skew',0.0)} | Vol: {bool(best_row.get('VolFilter',True))}")
+                    with c_worst:
+                        st.error(f"** Pire Combinaison (Sharpe: {worst_row.get('Sharpe Ratio', 0.0):.2f})**\n\nSMA: {int(worst_row.get('SMA',0))} | Lookback: {int(worst_row.get('Lookback',0))} | Skew: {worst_row.get('Skew',0.0)} | Vol: {bool(worst_row.get('VolFilter',True))}")
+                
+                st.markdown("---")
+                
+                # Robustness Charts
+                st.markdown("#### Indice de Robustesse (Stabilité face à l'Overfitting)")
+                st.markdown("*Une stratégie robuste affiche une variance faible et une médiane élevée, indiquant que sa rentabilité ne dépend pas 'juste de la chance' sur un paramètre précis.*")
                 
                 import plotly.express as px
-                fig_hm = px.imshow(
-                    heatmap_df,
-                    labels=dict(x="Lookback (Jours)", y="SMA (Jours)", color="Rendement (%)"),
-                    x=heatmap_df.columns,
-                    y=heatmap_df.index,
-                    color_continuous_scale="Viridis",
-                    aspect="auto"
-                )
-                fig_hm.update_layout(
-                    plot_bgcolor="#0a0e27",
-                    paper_bgcolor="#0a0e27",
-                    font_color="white",
-                    margin=dict(l=20, r=20, t=30, b=20)
-                )
-                st.plotly_chart(fig_hm, use_container_width=True)
+                tab_sma, tab_look = st.tabs(["Variance par SMA", "Variance par Lookback"])
+                
+                with tab_sma:
+                    if "SMA" in grid_df.columns:
+                        # Convert SMA to string for discrete color handling in box plot
+                        fig_sma = px.box(grid_df, x=grid_df["SMA"].astype(str), y="Sharpe Ratio", color=grid_df["SMA"].astype(str), 
+                                         title="Dispersion du Ratio de Sharpe par SMA", labels={"x": "SMA (Jours)", "y": "Sharpe Ratio", "color":"SMA"})
+                        fig_sma.update_layout(plot_bgcolor="#0a0e27", paper_bgcolor="#0a0e27", font_color="white", showlegend=False)
+                        st.plotly_chart(fig_sma, use_container_width=True)
+                
+                with tab_look:
+                    if "Lookback" in grid_df.columns:
+                        fig_look = px.box(grid_df, x=grid_df["Lookback"].astype(str), y="Sharpe Ratio", color=grid_df["Lookback"].astype(str), 
+                                          title="Dispersion du Ratio de Sharpe par Lookback", labels={"x": "Lookback Momentum", "y": "Sharpe Ratio", "color":"Lookback"})
+                        fig_look.update_layout(plot_bgcolor="#0a0e27", paper_bgcolor="#0a0e27", font_color="white", showlegend=False)
+                        st.plotly_chart(fig_look, use_container_width=True)
+
+                st.markdown("---")
+
+                # 1. Grid Search Table
+                st.markdown("####  Top Stratégies Evaluées (Tableau Exhaustif)")
+                def color_returns(val):
+                    if pd.isna(val): return ''
+                    try:
+                        color = '#00ff00' if float(val) > 0 else '#ff4444' if float(val) < 0 else 'white'
+                        return f'color: {color}'
+                    except:
+                        return ''
+
+                try:
+                    styled_grid = grid_df.style.applymap(color_returns, subset=["Total Return (%)", "Sharpe Ratio"])
+                    st.dataframe(styled_grid, use_container_width=True)
+                except Exception:
+                    st.dataframe(grid_df, use_container_width=True)
 
                 # 2. Equity Curve
                 st.markdown("#### Évolution du Capital (vs Buy & Hold BTC)")
@@ -296,6 +336,80 @@ def render():
                         st.dataframe(trades_df.tail(20))
                 else:
                     st.warning("Aucun csv de trades trouvé.")
+
+        st.markdown("---")
+
+        # Simulateur Interactif
+        st.markdown("### Simulateur Interactif")
+        st.markdown("Ajustez les paramètres ci-dessous pour lancer une simulation instantanée (depuis le 1er Janvier 2026).")
+        
+        with st.form("sim_form"):
+            c1, c2, c3, c4 = st.columns(4)
+            sim_sma = c1.number_input("SMA BTC/ALT", min_value=10, max_value=200, value=50, step=10)
+            sim_lookback = c2.number_input("Lookback Momentum", min_value=10, max_value=600, value=120, step=10)
+            sim_skew = c3.number_input("Seuil Skewness", min_value=-1.0, max_value=1.0, value=0.15, step=0.05)
+            sim_std = c4.number_input("Multiplicateur Std", min_value=0.0, max_value=3.0, value=0.5, step=0.1)
+            
+            c5, c6, c7, c8 = st.columns(4)
+            sim_atr = c5.number_input("Trailing Stop (ATRx)", min_value=0.5, max_value=5.0, value=2.0, step=0.5)
+            sim_streak = c6.number_input("Max Sous-performance (j)", min_value=1, max_value=10, value=3, step=1)
+            sim_vol = c7.checkbox("Activer Filtre Volume", value=True)
+            submit_sim = st.form_submit_button("Calculer la Simulation", use_container_width=True)
+            
+        if submit_sim:
+            with st.spinner("Simulation en cours"):
+                import momentum_BTC.momentum_utils as mu
+                alt_usdt_dir = os.path.join(crypto_data_dir, "ALT_USDT")
+                if os.path.exists(alt_usdt_dir):
+                    sim_symbols = [f.replace(".csv", "") for f in os.listdir(alt_usdt_dir) if f.endswith(".csv")]
+                    
+                    daily_univ_path = os.path.join(crypto_data_dir, "daily_universe.json")
+                    sim_univ = {}
+                    if os.path.exists(daily_univ_path):
+                        import json
+                        with open(daily_univ_path, "r") as f:
+                            sim_univ = json.load(f)
+                            
+                    pf, _ = mu.run_momentum_backtest(
+                        symbols=sim_symbols,
+                        start_date="2026-01-01",
+                        sma_period=sim_sma,
+                        roll_lookback=sim_lookback,
+                        daily_universe_dict=sim_univ,
+                        skew_thresh=sim_skew,
+                        std_mult=sim_std,
+                        atr_mult=sim_atr,
+                        streak_limit=sim_streak,
+                        use_vol_filter=sim_vol
+                    )
+                    
+                    if pf is not None:
+                        sim_stats = pf.stats()
+                        st.success("✅ Simulation terminée !")
+                        
+                        st.markdown("#### Performances Théoriques de l'Option")
+                        sc1, sc2, sc3, sc4 = st.columns(4)
+                        sc1.metric("Rendement Total", f"{sim_stats.get('Total Return [%]', 0.0):.2f}%")
+                        sc2.metric("Win Rate", f"{sim_stats.get('Win Rate [%]', 0.0):.2f}%")
+                        sc3.metric("Ratio de Sharpe", f"{sim_stats.get('Sharpe Ratio', 0.0):.2f}")
+                        sc4.metric("Max Drawdown", f"{sim_stats.get('Max Drawdown [%]', 0.0):.2f}%")
+                        
+                        import plotly.express as px
+                        eq_series = pf.value()
+                        fig_eq = px.line(eq_series, title="Capital (Evolution Théorique)")
+                        fig_eq.update_layout(
+                            plot_bgcolor="#0a0e27",
+                            paper_bgcolor="#0a0e27",
+                            font_color="white",
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=40, b=20)
+                        )
+                        fig_eq.update_traces(line_color="#00d4ff")
+                        st.plotly_chart(fig_eq, use_container_width=True)
+                    else:
+                        st.error("Aucun trade généré avec ces paramètres.")
+                else:
+                    st.error("Dossier de données ALT_USDT introuvable.")
 
     # ══════════════════════════════════════════════════════════════
     # TAB 3: LIVE MONITORING
