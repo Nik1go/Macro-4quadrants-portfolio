@@ -40,6 +40,7 @@ except ImportError:
 def apply_home_css():
     st.markdown("""
         <style>
+        @import url("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css");
         /* Main theme - same as macro page */
         .stApp {
             background-color: #0a0e27 !important;
@@ -179,7 +180,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research","Portfolio Optimization"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -191,7 +192,8 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "graph-up-arrow", "file-earmark-text", "dice-5", "coin", "box-seam", "robot", "journal-code"],
+            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier"], 
+            #bootstrap icons (7 icons for 7 options)
             menu_icon="cast",
             default_index=default_idx,
             manual_select=default_idx,
@@ -279,7 +281,7 @@ def render_home():
     with col1:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>Macro 4 seasons Strategy</h3>
+            <h3><i class="bi bi-safe"></i> Macro 4 seasons Strategy</h3>
             <p><strong>Tech:</strong> Apache Airflow, Random Forest ML, Spark, IBKR  </p>
             <p>ETL pipeline ingesting and processing macro indicators via Airflow. 
             Orchestrated and backtested strategy based on probability of growth/inflation regime detection.</p>
@@ -295,7 +297,7 @@ def render_home():
     with col2:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3>Crypto Hype Momentum</h3>
+            <h3><i class="bi bi-coin"></i> Crypto Momentum</h3>
             <p><strong>Tech:</strong> Binance API, VectorBT, Plotly</p>
             <p>Momentum-based crypto live trading strategy detecting "hype cycles" in crypto market to trade altcoins. 
             Main idea is to follow BTC trend: long the strongest altcoins, short the weakest.</p>
@@ -311,17 +313,17 @@ def render_home():
     with col3:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3> Martingale Gambling</h3>
-            <p><strong>Tech:</strong> NumPy, Plotly</p>
-            <p>Simulated 1000+ roulette games using Martingale strategy with vectorized operations. 
-            Achieved statistical analysis showing 82% win rate but negative expected value.</p>
-            <p><strong>Key Result:</strong> Demonstrated the mathematical impossibility of beating the house edge.</p>
+            <h3><i class="bi bi-arrows-expand"></i> Statistical Arbitrage</h3>
+            <p><strong>Tech:</strong> Statsmodels, Scikit-learn, Scipy</p>
+            <p>Developed pairs trading strategy for Gold-Silver correlation. Applied cointegration tests 
+            (Augmented Dickey-Fuller) and linear regression for spread modeling.</p>
+            <p><strong>Key Result:</strong> Statistical arbitrage based on mean reversion principles.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Monte Carlo Gambling"
+            st.session_state.current_page = "Arbitrage Or-Argent"
             st.rerun()
     
     
@@ -330,9 +332,9 @@ def render_home():
     with col4:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3> DCA Investment Strategy</h3>
-            <p><strong>Tech:</strong> Pandas, yFinance, VectorBT</p>
-            <p>trying to improve Dollar Cost Averaging backtesting framework for SP500, Gold, and Bitcoin. 
+            <h3><i class="bi bi-hourglass-split"></i> DCA Investment Strategy</h3>
+            <p><strong>Tech:</strong> Pandas, yFinance, NumPy</p>
+            <p>Trying to improve Dollar Cost Averaging backtesting framework for SP500, Gold, and Bitcoin. 
             Implemented bi-weekly rebalancing with z-score optimisation.</p>
             <hr>
         </div>
@@ -346,19 +348,34 @@ def render_home():
     with col5:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3> Pairs Trading Arbitrage</h3>
-            <p><strong>Tech:</strong> Statsmodels, Scikit-learn, Scipy</p>
-            <p>Developed pairs trading strategy for Gold-Silver correlation. Applied cointegration tests 
-            (Augmented Dickey-Fuller) and linear regression for spread modeling.</p>
-            <p><strong>Key Result:</strong> Statistical arbitrage based on mean reversion principles.</p>
+            <h3><i class="bi bi-dice-5"></i> Martingale Gambling</h3>
+            <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
+            <p>Monte carlo simulation of roulette games using Martingale strategy. 
+            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Arbitrage Or-Argent"
+            st.session_state.current_page = "Monte Carlo Gambling"
             st.rerun()
     
+
+    with col6:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+            <h3><i class="bi bi-bezier"></i> Portfolio Optimizer</h3>
+            <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
+            <p>Optimization of a portfolio of assets using Monte Carlo simulation and genetic algorithms. 
+            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_opti", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Portfolio Optimizer"
+            st.rerun()
+        
     
     col7, col8, col9 = st.columns(3)
     
@@ -427,7 +444,15 @@ if __name__ == "__main__":
             app_arbitrage.render()
         except Exception as e:
             st.error(f"Could not load the Arbitrage app: {str(e)}")
-
+    
+    elif st.session_state.current_page == "Portfolio Optimizer":
+        _render_nav_sidebar("Portfolio Optimizer")
+        try:
+            apply_home_css()
+            import portfolio_optimizer.app_optimizer as app_optimizer
+            app_optimizer.render()
+        except Exception as e:
+            st.error(f"Could not load the Portfolio Optimizer app: {str(e)}")
    
     elif st.session_state.current_page == "Equity Research":
         _render_nav_sidebar("Equity Research")

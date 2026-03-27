@@ -53,7 +53,7 @@ def task_fetch_data(**kwargs):
     from data_fetcher import fetch_all_crypto_data
 
     print("=" * 60)
-    print("📡 TASK 1: Fetching crypto data from Binance...")
+    print("TASK 1: Fetching crypto data from Binance...")
     print("=" * 60)
 
     results = fetch_all_crypto_data(start_date=START_DATE)
@@ -70,7 +70,7 @@ def task_calc_indicators(**kwargs):
     from indicators.calc_indicators import compute_all_indicators
 
     print("=" * 60)
-    print("📊 TASK 2: Computing indicators...")
+    print("TASK 2: Computing indicators...")
     print("=" * 60)
 
     indicators = compute_all_indicators(
@@ -90,15 +90,15 @@ def task_calc_indicators(**kwargs):
     long_threshold = btc_med + 0.5 * btc_std
     short_threshold = btc_med - 0.5 * btc_std
 
-    print(f"\n📈 BTC Close: ${btc_close:,.0f}")
-    print(f"📉 BTC SMA({SMA_PERIOD}): ${btc_sma:,.0f}")
-    print(f"📊 BTC 5D Return: {btc_ret:.2%}")
-    print(f"📏 Rolling Median (5D): {btc_med:.2%}")
-    print(f"📐 Rolling StdDev (5D): {btc_std:.2%}")
-    print(f"🟢 Long Threshold (Med + 0.5σ): {long_threshold:.2%}  {'✅ TRIGGERED' if btc_ret > long_threshold else '❌ Not met'}")
-    print(f"🔴 Short Threshold (Med - 0.5σ): {short_threshold:.2%}  {'✅ TRIGGERED' if btc_ret < short_threshold else '❌ Not met'}")
-    print(f"🟢 BTC > SMA (2d): {above}")
-    print(f"🔴 BTC < SMA (2d): {below}")
+    print(f"\n BTC Close: ${btc_close:,.0f}")
+    print(f" BTC SMA({SMA_PERIOD}): ${btc_sma:,.0f}")
+    print(f" BTC 5D Return: {btc_ret:.2%}")
+    print(f" Rolling Median (5D): {btc_med:.2%}")
+    print(f" Rolling StdDev (5D): {btc_std:.2%}")
+    print(f" Long Threshold (Med + 0.5σ): {long_threshold:.2%}  {'✅ TRIGGERED' if btc_ret > long_threshold else '❌ Not met'}")
+    print(f" Short Threshold (Med - 0.5σ): {short_threshold:.2%}  {'✅ TRIGGERED' if btc_ret < short_threshold else '❌ Not met'}")
+    print(f" BTC > SMA (2d): {above}")
+    print(f" BTC < SMA (2d): {below}")
 
     # ── Preview: which altcoins would be selected ──
     import pandas as pd
@@ -121,15 +121,15 @@ def task_calc_indicators(**kwargs):
                             long_filtered.append((usdt_sym, ret_val))
         if long_filtered:
             long_filtered.sort(key=lambda x: x[1], reverse=True)
-            print(f"🟢 LONG SIGNAL PREVIEW — {len(long_filtered)} alts pass filter:")
+            print(f"LONG SIGNAL PREVIEW — {len(long_filtered)} alts pass filter:")
             for sym, ret in long_filtered:
                 marker = "⭐" if sym == long_filtered[0][0] else "  "
                 print(f"   {marker} {sym:<12s}  3D ret: {ret:+.2%}")
-            print(f"   → Crypto ⭐ star du moment: {long_filtered[0][0]} ({long_filtered[0][1]:+.2%})")
+            print(f"   → Crypto star du moment: {long_filtered[0][0]} ({long_filtered[0][1]:+.2%})")
         else:
-            print("🟢 LONG: BTC conditions ✅ mais aucune alt ne passe le filtre ALT/BTC > SMA (2d)")
+            print("LONG: BTC conditions  mais aucune alt ne passe le filtre ALT/BTC > SMA (2d)")
     else:
-        print("🟢 LONG: Pas de signal (conditions BTC non remplies)")
+        print("LONG: Pas de signal (conditions BTC non remplies)")
 
     # Short candidate preview
     short_conditions_met = (btc_ret < short_threshold) and below
@@ -145,15 +145,15 @@ def task_calc_indicators(**kwargs):
                             short_filtered.append((usdt_sym, ret_val))
         if short_filtered:
             short_filtered.sort(key=lambda x: x[1])
-            print(f"🔴 SHORT SIGNAL PREVIEW — {len(short_filtered)} alts pass filter:")
+            print(f"SHORT SIGNAL PREVIEW — {len(short_filtered)} alts pass filter:")
             for sym, ret in short_filtered:
                 marker = "💀" if sym == short_filtered[0][0] else "  "
                 print(f"   {marker} {sym:<12s}  3D ret: {ret:+.2%}")
-            print(f"   → Crypto 💀 absente du moment: {short_filtered[0][0]} ({short_filtered[0][1]:+.2%})")
+            print(f"   → Crypto  absente du moment: {short_filtered[0][0]} ({short_filtered[0][1]:+.2%})")
         else:
-            print("🔴 SHORT: BTC conditions ✅ mais aucune alt ne passe le filtre ALT/BTC < SMA (2d)")
+            print("SHORT: BTC conditions  mais aucune alt ne passe le filtre ALT/BTC < SMA (2d)")
     else:
-        print("🔴 SHORT: Pas de signal (conditions BTC non remplies)")
+        print("SHORT: Pas de signal (conditions BTC non remplies)")
     print(f"{'─' * 50}")
 
     # Store indicators in XCom (serializable summary only)
@@ -169,7 +169,7 @@ def task_generate_signals(**kwargs):
     from signals.generate_signals import generate_daily_signals
 
     print("=" * 60)
-    print("🎯 TASK 3: Generating signals...")
+    print(" TASK 3: Generating signals...")
     print("=" * 60)
 
     indicators = compute_all_indicators(
@@ -179,17 +179,17 @@ def task_generate_signals(**kwargs):
     report, state = generate_daily_signals(indicators)
 
     # Log summary
-    print(f"\n📅 Date: {report['date']}")
-    print(f"🚪 Exits: {len(report['exits'])}")
+    print(f"\n Date: {report['date']}")
+    print(f" Exits: {len(report['exits'])}")
     for ex in report['exits']:
         print(f"   → {ex['side'].upper()} EXIT {ex['symbol']} ({ex['reason']})")
 
-    print(f"🎯 Entries: {len(report['entries'])}")
+    print(f"Entries: {len(report['entries'])}")
     for entry in report['entries']:
         print(f"   → {entry['side'].upper()} ENTRY {entry['symbol']} @ ${entry['entry_price']:,.2f}")
 
-    print(f"💰 Cash remaining: ${state['cash']:,.2f}")
-    print(f"📦 Open positions: {len(state['positions'])}")
+    print(f"Cash remaining: ${state['cash']:,.2f}")
+    print(f"Open positions: {len(state['positions'])}")
 
     # Push report path for next task
     kwargs['ti'].xcom_push(key='signal_report', value=report)
@@ -202,7 +202,7 @@ def task_execute_orders(**kwargs):
     from execution.binance_executor import execute_signals
 
     print("=" * 60)
-    print(f"⚡ TASK 4: Executing orders ({'DRY RUN' if DRY_RUN else 'LIVE TESTNET'})...")
+    print(f" TASK 4: Executing orders ({'DRY RUN' if DRY_RUN else 'LIVE TESTNET'})...")
     print("=" * 60)
 
     ti = kwargs['ti']
@@ -227,7 +227,7 @@ def task_update_monitoring(**kwargs):
     from monitoring.portfolio_tracker import update_monitoring
 
     print("=" * 60)
-    print("📊 TASK 5: Updating monitoring...")
+    print(" TASK 5: Updating monitoring...")
     print("=" * 60)
 
     ti = kwargs['ti']
@@ -245,7 +245,7 @@ def task_update_monitoring(**kwargs):
     )
 
     nav = update_monitoring(signal_report, execution_log or {}, indicators)
-    print(f"\n✅ Monitoring updated — NAV: ${nav:,.2f}")
+    print(f"\n Monitoring updated — NAV: ${nav:,.2f}")
 
     return nav
 

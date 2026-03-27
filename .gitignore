@@ -19,3 +19,8 @@ ib-gateway/.env
 .env
 *.parquet
 data/US/*
+airflow/
+airflow_venv/
+ibkr/.config.py.swp
+data/crypto
+skills/

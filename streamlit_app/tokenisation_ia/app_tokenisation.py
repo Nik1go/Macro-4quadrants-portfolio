@@ -103,8 +103,9 @@ def render():
     st.markdown("---")
     
     st.markdown("""
-    Cette plateforme permet d'importer les Fichiers d'Écritures Comptables (FEC) d'une entreprise sur plusieurs années, 
-    d'en extraire les KPIs financiers, de calculer une valorisation multi-critères et de simuler une tokenisation du capital.
+    Cette plateforme (en construction) permet d'importer les Fichiers d'Écritures Comptables (FEC) d'une entreprise sur plusieurs années, 
+    d'en extraire les KPIs financiers (marge, croissance etc...), de calculer une valorisation multi-critères et de simuler une tokenisation du capital.
+    Cela s'incrit dans une idée de projet qui permettrait de pouvoir échanger des parts d'entreprises (tokenisé), et a l'aide de smartcontract et d'un oracle, de pouvoir verser des dividendes aux holders des tokens (actionnaires de la société).
     """)
 
     st.header(" 1. Import des Fichiers FEC")
@@ -321,6 +322,7 @@ def render():
     with col_t3:
         st.subheader("AI Health Score")
         # 1. Solvabilité (Gearing)
+        st.markdown("en construction... ")
         gearing = last_year_data['Dette Nette'] / last_year_data['Capitaux Propres'] if last_year_data['Capitaux Propres'] > 0 else 5
         score_solv = max(0, min(100, 100 - (gearing * 20)))
         
@@ -341,3 +343,4 @@ def render():
         st.write(f"-  Solvabilité : {score_solv:.0f}/100")
         st.write(f"-  Rentabilité : {score_rent:.0f}/100")
         st.write(f"-  Croissance : {score_croiss:.0f}/100")
+

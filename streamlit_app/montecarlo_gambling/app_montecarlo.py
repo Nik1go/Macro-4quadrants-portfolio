@@ -163,11 +163,11 @@ def render():
         st.info("💡Même avec un taux de réussite élevé, les rares séquences de pertes consécutives viennent détruire le capital. D'où un retour moyen négatif.")
 
     st.markdown("---")
-    st.markdown("A des fins d'entrainement, j'ai voulu apprendre a utiliser VectorBT pour optimiser les paramètres de la Martingale.")
-    st.subheader(" Optimisation des paramètres (VectorBT / Heatmap)")
+    st.markdown("A des fins d'entrainement, ce module permet d'analyser l'impact de la volatilité sur une stratégie de Martingale.")
+    st.subheader(" Optimisation des paramètres (NumPy / Heatmap)")
     st.markdown("Existe-t-il statistiquement un ratio `Portefeuille Initial / Mise Initiale` qui permettrait d'être rentable sur la durée ? Nous calculons ici **12 000 backtests de trajectoires** sur 10 000 tirages.")
     
-    if st.button("Lancer la recherche VectorBT (Prendra quelques secondes)", key="mc_run_vbt"):  
+    if st.button("Lancer la recherche d'optimisation (Prendra quelques secondes)", key="mc_run_vbt"):  
         with st.spinner("Exécution de l'optimisation en arrière-plan..."):
             df_resultats = run_optimization()
         
@@ -228,7 +228,7 @@ def render():
         
         st.plotly_chart(fig_heatmap, use_container_width=True, key="mc_heatmap")
         
-        with st.expander("Détail des résultats VectorBT", expanded=False):
+        with st.expander("Détail des résultats de l'optimisation", expanded=False):
             st.dataframe(df_resultats.style.highlight_max(subset=['Return Moyen (%)', 'Sharpe Ratio', '% Gain'], axis=0), use_container_width=True)
         
         best_sharpe = df_resultats.loc[df_resultats['Sharpe Ratio'].idxmax()]

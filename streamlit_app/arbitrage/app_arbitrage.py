@@ -148,9 +148,11 @@ def render():
 
     with st.expander("Comprendre la Stratégie (Introduction)", expanded=False):
         st.markdown("""
-        L'arbitrage de paires repose sur le principe de **retour à la moyenne**.
-        Si deux actifs sont liés économiquement, leur écart (spread) devrait rester stable. 
-        Trader l'arbitrage, c'est parier sur la convergence de cet écart lorsqu'il devient anormalement haut ou bas.
+        L'arbitrage de paires repose sur le principe de **mean reversion**.
+        Si deux actifs sont liés économiquement, leur écart (spread) devrait revenir à sa moyenne. 
+        Arbitrer, c'est donc parier sur la convergence de cet écart lorsqu'il devient anormalement haut ou bas.
+        **Cette page n'a pas pour but de trouvé un réel alpha, mais plutot d'illustrer et de comprendre 
+        comment fonctionne ce type de stratégie.**
         """)
 
     # --- DATA FETCHING ---
@@ -188,7 +190,7 @@ def render():
         with st.expander("Bloc Corrélation", expanded=True):
             st.write("Pour cette étude de cas, nous avons sélectionné une période de données (2018-2026) montrant une corrélation forte (>0.80) pour établir une base d'analyse logique. Une corrélation forte indique que les deux actifs réagissent de manière similaire aux chocs macroéconomiques.")
         with st.expander("Pourquoi la Corrélation ?", expanded=True):
-            st.write("C'est la première étape du filtrage. La corrélation est une condition nécessaire mais non suffisante.")
+            st.write("C'est la première étape du filtrage. La corrélation est une **condition nécessaire mais non suffisante**.")
 
     # --- STEP 2: REGRESSION ---
     st.divider()
@@ -220,10 +222,10 @@ def render():
         st.error(f"**Warning: P-Value ({pvalue:.4f}) > 0.05. Statistiquement, la paire n'est PAS cointégrée. Le spread peut dériver et l'arbitrage théorique est risqué.**")
     with c6:
         with st.expander("Pourquoi la Cointégration ?", expanded=True):
-            st.write("C'est la certitude mathématique que l'écart finira par revenir à sa moyenne.")
-            st.write("Pourquoi c'est différent ? La corrélation, c'est deux personnes qui marchent ensemble dans la même direction. La cointégration, c'est deux personnes reliées par un élastique. Seul l'élastique garantit que s'ils s'écartent trop, ils se retrouveront. C'est plus fort car c'est une relation de long terme.")
+            st.write("C'est la certitude mathématique que l'écart ne depend pas du temps et donc que ce spread finira par revenir à sa moyenne.")
+            st.write("Pourquoi c'est différent de la corrélation ? c'est deux personnes qui marchent ensemble dans la même direction. La cointégration, c'est deux personnes reliées par un élastique. Seul l'élastique garantit que s'ils s'écartent trop, les propriétés physiques de l'élastique font qu'ils se retrouveront. ")
     
-    st.info("Note : Bien que la cointégration théorique manque ici, nous avons choisi de tester la stratégie pour observer les conséquences concrètes d'une rupture de cointégration (Mean Reversion vs Drift).")
+    st.info("Note : Bien que la cointégration théorique manque ici, j'ai quand même choisi de tester l'arbitrage pour observer dans un second temps la difference avec 1 paire cointégrée comme coca cola et pepsi.")
 
     # --- STEP 4: SIGNALS ---
     st.divider()
@@ -249,6 +251,12 @@ def render():
     # --- STEP 5: PERFORMANCE ---
     st.divider()
     st.header("Partie 5 : Bilan de Performance et Analyse Post-Mortem")
+    
+    with st.expander("Comprendre les types de stratégies", expanded=True):
+        st.write("**Stratégie Fixe** : Se base sur des niveaux d'écart (spread) constants et prédéfinis. Les signaux d'achat et de vente sont déclenchés dès que l'écart atteint une valeur fixe (ex: +20 ou -20), sans tenir compte de l'évolution de la volatilité du marché.")
+        st.write("*Exemple concret* : Si le Spread atteint 20, on vend. Ce seuil reste identique que le marché soit calme ou très agité.")
+        st.write("**Stratégie Z-Score** : Se base sur un écart standardisé (le nombre d'écarts-types par rapport à la moyenne). Elle s'adapte automatiquement à la volatilité du marché.")
+        st.write("*Exemple concret* : Si l'écart type du spread est de 2, un Z-Score de 2 déclenche une vente à un spread de +4 au-dessus de la moyenne. Si le marché devient nerveux et que l'écart type monte à 5, le même Z-Score de 2 ne déclenchera une vente qu'à +10. Cela permet d'éviter d'entrer trop tôt quand le marché est agité.")
     eq_f, tr_f = run_strategy(df, 'fixed')
     eq_d, tr_d = run_strategy(df, 'dynamic')
     s_f, s_d = calculate_stats(eq_f, tr_f), calculate_stats(eq_d, tr_d)
@@ -275,7 +283,6 @@ def render():
 
     st.markdown("### Analyse des Résultats et Interprétation")
     st.write("Bien que l'equity curve s'effondre à la fin, cette étude de cas est riche en enseignements. La contre-performance à partir de 2026 confirme la P-Value élevée de cointégration (Step 3). L'élastique a rompu. Le spread a dérivé indéfiniment, transformant une stratégie de retour à la moyenne en une dérive pure et simple. C'est la preuve que la validation de la cointégration est l'étape la plus critique, et non la corrélation seule.")
-    st.write("**En résumé, j'ai pu identifier les prérequis techniques (Corrélation & Cointégration) et analyser les raisons d'un échec.**")
 
 if __name__ == "__main__":
     render()
