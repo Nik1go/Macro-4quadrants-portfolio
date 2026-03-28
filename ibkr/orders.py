@@ -13,7 +13,8 @@ from ib_insync import IB, Stock, MarketOrder, LimitOrder
 from .connection import IBKRConnection
 from .config import (
     REBALANCE_THRESHOLD, MAX_ORDER_VALUE_USD, MIN_ORDER_SIZE_USD,
-    ORDER_TYPE, CONTRACT_DETAILS
+    ORDER_TYPE, CONTRACT_DETAILS, HOST, CURRENT_PORT, CLIENT_ID,
+    CONNECTION_TIMEOUT, ETF_MAPPING
 )
 
 logger = logging.getLogger(__name__)
