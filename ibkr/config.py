@@ -30,6 +30,11 @@ ETF_MAPPING = {
     'COMMODITIES': 'EXXY',  # iShares Diversified Commodity Swap UCITS (AEB)
 }
 
+# Contract detail overrides (optional - if SMART routing fails or needs primaryExchange)
+CONTRACT_DETAILS = {
+    'SXRM': {'primaryExchange': 'IBIS', 'currency': 'EUR'}, # Xetra
+}
+
 # Yahoo Finance tickers (used for price lookup - need exchange suffix)
 YFINANCE_MAPPING = {
     'SP500': 'SXR8.DE',        # Xetra (Germany)

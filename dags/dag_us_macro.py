@@ -1,5 +1,6 @@
 from ibkr.config import DRY_RUN_DEFAULT, REBALANCE_THRESHOLD
 from ibkr.executor import airflow_execute_strategy
+from ibkr.alerts import send_alert
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
@@ -97,8 +98,10 @@ YF_SERIES_MAPPING = {
     "REITs(Immobilier US)": {'ticker': 'VNQ', 'series_id': 'US_REIT_VNQ'},
     'US_TREASURY_10Y': {'ticker': 'IEF', 'series_id': 'TREASURY_10Y'},
     "OBLIGATION ENTREPRISE": {'ticker': 'LQD', "series_id": "OBLIGATION"},
-    'NASDAQ_100': {'ticker': 'QQQ', 'series_id': 'NASDAQ_100'},    'COMMODITIES': {'ticker': 'DBC', 'series_id': 'COMMODITIES'},
-    'SHORT_SP500': {'ticker': 'SH', 'series_id': 'SHORT_SP500'}
+    'NASDAQ_100': {'ticker': 'QQQ', 'series_id': 'NASDAQ_100'},   
+    'COMMODITIES': {'ticker': 'DBC', 'series_id': 'COMMODITIES'},
+    'SHORT_SP500': {'ticker': 'SH', 'series_id': 'SHORT_SP500'},
+    'BITCOIN': {'ticker': 'BTC-USD', 'series_id': 'BTC_USD'}
 }
 
 # Yahoo Finance FOREX pairs (currency rates for forex analysis)
@@ -117,6 +120,22 @@ default_args = {
     'retries': 2,
     'retry_delay': timedelta(minutes=3)
 }
+
+def on_dag_failure(context):
+    """Callback for DAG failure."""
+    dag_id = context.get('task_instance').dag_id
+    task_id = context.get('task_instance').task_id
+    error = context.get('exception')
+    execution_date = context.get('execution_date')
+    
+    msg = (
+        f"<b>Airflow DAG Failed</b>\n"
+        f"DAG: {dag_id}\n"
+        f"Task: {task_id}\n"
+        f"Date: {execution_date}\n"
+        f"Error: {error}"
+    )
+    send_alert(msg, severity="error")
 
 
 def fetch_and_save_data(**kwargs):
@@ -568,7 +587,8 @@ with DAG(
     schedule='30 16 * * *',
     catchup=False,
     max_active_runs=1,
-    tags=['macro', 'assets', 'performance']
+    tags=['macro', 'assets', 'performance'],
+    on_failure_callback=on_dag_failure
 ) as dag:
 
     fetch_task = PythonOperator(

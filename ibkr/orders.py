@@ -12,9 +12,8 @@ from ib_insync import IB, Stock, MarketOrder, LimitOrder
 
 from .connection import IBKRConnection
 from .config import (
-    ETF_MAPPING, HOST, CURRENT_PORT, CLIENT_ID, CONNECTION_TIMEOUT,
     REBALANCE_THRESHOLD, MAX_ORDER_VALUE_USD, MIN_ORDER_SIZE_USD,
-    ORDER_TYPE
+    ORDER_TYPE, CONTRACT_DETAILS
 )
 
 logger = logging.getLogger(__name__)
@@ -95,9 +94,19 @@ class OrderManager:
         
         try:
             # Create contract (same as used for orders)
-            contract = Stock(ibkr_symbol, 'SMART', 'EUR')
+            details = CONTRACT_DETAILS.get(ibkr_symbol, {})
+            currency = details.get('currency', 'EUR')
+            primary_exchange = details.get('primaryExchange', None)
+            
+            contract = Stock(ibkr_symbol, 'SMART', currency, primaryExchange=primary_exchange)
             qualified = self.ib.qualifyContracts(contract)
             
+            # Fallback: If SMART fails and we have a primaryExchange, try absolute exchange
+            if (not qualified or not contract.conId) and primary_exchange:
+                logger.warning(f"SMART qualification failed for {ibkr_symbol}, trying {primary_exchange}")
+                contract = Stock(ibkr_symbol, primary_exchange, currency)
+                qualified = self.ib.qualifyContracts(contract)
+
             if not qualified or not contract.conId:
                 logger.error(f"❌ Contract not found for {asset_name} ({ibkr_symbol})")
                 return None
@@ -253,10 +262,20 @@ class OrderManager:
                     })
                     continue
                 
-                # Create contract (SMART routing, EUR for European UCITS ETFs)
-                contract = Stock(order.symbol, 'SMART', 'EUR')
+                # Create contract (using details from config)
+                details = CONTRACT_DETAILS.get(order.symbol, {})
+                currency = details.get('currency', 'EUR')
+                primary_exchange = details.get('primaryExchange', None)
+                
+                contract = Stock(order.symbol, 'SMART', currency, primaryExchange=primary_exchange)
                 qualified = self.ib.qualifyContracts(contract)
                 
+                # Fallback: If SMART fails and we have a primaryExchange, try absolute exchange
+                if (not qualified or not contract.conId) and primary_exchange:
+                    logger.warning(f"SMART qualification failed for {order.symbol}, trying {primary_exchange}")
+                    contract = Stock(order.symbol, primary_exchange, currency)
+                    qualified = self.ib.qualifyContracts(contract)
+
                 # Check if contract was found
                 if not qualified or not contract.conId:
                     logger.error(f"❌ Contract not found for {order.symbol} - skipping order")

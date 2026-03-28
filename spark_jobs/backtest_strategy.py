@@ -37,7 +37,8 @@ TER = {
     'OBLIGATION': 0.0020,    # LQDE: 0.20% (iShares $ Corp Bond UCITS)
     'NASDAQ_100': 0.0033,    # SXRV: 0.33% (iShares Nasdaq 100 UCITS)
     'COMMODITIES': 0.0046,   # EXXY: 0.46% (iShares Diversified Commodity Swap UCITS)
-    'SHORT_SP500': 0.0089    # SH: 0.89% - ProShares Short S&P500 (Inverse ETF)
+    'SHORT_SP500': 0.0089,   # SH: 0.89% - ProShares Short S&P500 (Inverse ETF)
+    'BTC_USD': 0.0095        # CoinShares Physical Bitcoin ETP: 0.95%
 }
 
 # Allocations Optimisées par Quadrant (Data-Driven 2005-2025)
@@ -54,7 +55,8 @@ ALLOCATIONS = {
         'TREASURY_10Y': 0.0, 
         'OBLIGATION': 0.0, 
         'COMMODITIES': 0.0,
-        'SHORT_SP500': 0.0
+        'SHORT_SP500': 0.0,
+        'BTC_USD': 0.0
     },
     
     # Q2 (Inflation): QUALITÉ & RÉEL.
@@ -69,7 +71,8 @@ ALLOCATIONS = {
         'TREASURY_10Y': 0.0, 
         'US_REIT_VNQ': 0.0,
         'OBLIGATION': 0.0,
-        'SHORT_SP500': 0.0
+        'SHORT_SP500': 0.0,
+        'BTC_USD': 0.0
     },
     
     # Q3 (Stagflation): DÉFENSE TOTALE.
@@ -82,7 +85,8 @@ ALLOCATIONS = {
         'SmallCAP': 0.0, 
         'US_REIT_VNQ': 0.0,
         'OBLIGATION': 0.0,
-        'SHORT_SP500': 0.0
+        'SHORT_SP500': 0.0,
+        'BTC_USD': 0.0
     },
     
     # Q4 (Crash Déflationniste): BUNKER.
@@ -96,7 +100,8 @@ ALLOCATIONS = {
         'US_REIT_VNQ': 0.0, 
         'OBLIGATION': 0.2,
         'COMMODITIES': 0.0,
-        'SHORT_SP500': 0.0
+        'SHORT_SP500': 0.0,
+        'BTC_USD': 0.0
     },
 }
 
@@ -105,29 +110,29 @@ IBKR_ALLOCATIONS = {
     1: {
         'NASDAQ_100': 0.4, 'SmallCAP': 0.3, 'SP500': 0.3,
         'US_REIT_VNQ': 0.0, 'GOLD_OZ_USD': 0.0, 'TREASURY_10Y': 0.0,
-        'OBLIGATION': 0.0, 'COMMODITIES': 0.0, 'SHORT_SP500': 0.0
+        'OBLIGATION': 0.0, 'COMMODITIES': 0.0, 'SHORT_SP500': 0.0, 'BTC_USD': 0.0
     },
     2: {
         'SP500': 0.4, 'GOLD_OZ_USD': 0.3, 'COMMODITIES': 0.2, 'NASDAQ_100': 0.1,
         'SmallCAP': 0.0, 'TREASURY_10Y': 0.0, 'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0, 'SHORT_SP500': 0.0
+        'OBLIGATION': 0.0, 'SHORT_SP500': 0.0, 'BTC_USD': 0.0
     },
     3: {
         'GOLD_OZ_USD': 0.6, 'COMMODITIES': 0.2, 'TREASURY_10Y': 0.2,
         'NASDAQ_100': 0.0, 'SP500': 0.0, 'SmallCAP': 0.0,
-        'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'SHORT_SP500': 0.0
+        'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'SHORT_SP500': 0.0, 'BTC_USD': 0.0
     },
     4: {
         'TREASURY_10Y': 0.6, 'GOLD_OZ_USD': 0.4,
         'SP500': 0.0, 'NASDAQ_100': 0.0, 'SmallCAP': 0.0,
         'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'COMMODITIES': 0.0,
-        'SHORT_SP500': 0.0
+        'SHORT_SP500': 0.0, 'BTC_USD': 0.0
     },
 }
 
 WEIGHTS = ALLOCATIONS
 
-ASSETS = ['SP500', 'GOLD_OZ_USD', 'SmallCAP', 'US_REIT_VNQ', 'OBLIGATION', 'TREASURY_10Y', 'NASDAQ_100', 'COMMODITIES', 'SHORT_SP500']
+ASSETS = ['SP500', 'GOLD_OZ_USD', 'SmallCAP', 'US_REIT_VNQ', 'OBLIGATION', 'TREASURY_10Y', 'NASDAQ_100', 'COMMODITIES', 'SHORT_SP500', 'BTC_USD']
 
 
 # rolling_mode removed: ML model handles smoothing via EMA in compute_quadrants.py

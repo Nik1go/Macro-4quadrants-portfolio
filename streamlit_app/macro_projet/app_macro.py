@@ -59,36 +59,42 @@ def render():
         # RISK REGIME
         if 'MACRO_GROWTH_SCORE' in latest:
             risk_score = latest['MACRO_GROWTH_SCORE']
-            risk_prob = sigmoid(risk_score)
+            risk_prob_on = sigmoid(risk_score)
             risk_label = "Risk On" if risk_score > 0 else "Risk Off"
-            c_header3.metric("Probability of Risk Regime", f"{risk_label} ({risk_prob:.0%})")
+            risk_display_prob = risk_prob_on if risk_score > 0 else (1 - risk_prob_on)
+            c_header3.metric("Risk Confidence Score", f"{risk_label} ({risk_display_prob:.0%})")
         elif 'PROB_GROWTH_EMA' in latest:
-            risk_prob = latest['PROB_GROWTH_EMA']
-            risk_label = "Risk On" if risk_prob > 0.5 else "Risk Off"
-            c_header3.metric("Probability of Risk Regime", f"{risk_label} ({risk_prob:.0%})")
+            risk_prob_on = latest['PROB_GROWTH_EMA']
+            risk_label = "Risk On" if risk_prob_on > 0.5 else "Risk Off"
+            risk_display_prob = risk_prob_on if risk_prob_on > 0.5 else (1 - risk_prob_on)
+            c_header3.metric("Risk Confidence Score", f"{risk_label} ({risk_display_prob:.0%})")
         else:
             # Legacy fallback
             risk_score = latest.get('score_Q1', 0) - latest.get('score_Q3', 0)
-            risk_prob = sigmoid(risk_score / 2.0) # Scale down naive scores for better sigmoid
+            risk_prob_on = sigmoid(risk_score / 2.0)
             risk_label = "Risk On" if risk_score > 0 else "Risk Off"
-            c_header3.metric("Probability of Risk Regime", f"{risk_label} ({risk_prob:.0%})")
+            risk_display_prob = risk_prob_on if risk_score > 0 else (1 - risk_prob_on)
+            c_header3.metric("Risk Confidence Score", f"{risk_label} ({risk_display_prob:.0%})")
     
         # RATES REGIME
         if 'MACRO_INFLATION_SCORE' in latest:
             rates_score = latest['MACRO_INFLATION_SCORE']
-            rates_prob = sigmoid(rates_score)
+            rates_prob_refl = sigmoid(rates_score)
             rates_label = "Reflation" if rates_score > 0 else "Disinflation"
-            c_header4.metric("Probability of Rates Regime", f"{rates_label} ({rates_prob:.0%})")
+            rates_display_prob = rates_prob_refl if rates_score > 0 else (1 - rates_prob_refl)
+            c_header4.metric("Rates Confidence Score", f"{rates_label} ({rates_display_prob:.0%})")
         elif 'PROB_INFLATION_EMA' in latest:
-            rates_prob = latest['PROB_INFLATION_EMA']
-            rates_label = "Reflation" if rates_prob > 0.5 else "Disinflation"
-            c_header4.metric("Probability of Rates Regime", f"{rates_label} ({rates_prob:.0%})")
+            rates_prob_refl = latest['PROB_INFLATION_EMA']
+            rates_label = "Reflation" if rates_prob_refl > 0.5 else "Disinflation"
+            rates_display_prob = rates_prob_refl if rates_prob_refl > 0.5 else (1 - rates_prob_refl)
+            c_header4.metric("Rates Confidence Score", f"{rates_label} ({rates_display_prob:.0%})")
         else:
             # Legacy fallback
             rates_score = latest.get('score_Q2', 0) - latest.get('score_Q4', 0)
-            rates_prob = sigmoid(rates_score / 2.0) # Scale down naive scores for better sigmoid
+            rates_prob_refl = sigmoid(rates_score / 2.0)
             rates_label = "Reflation" if rates_score > 0 else "Disinflation"
-            c_header4.metric("Probability of Rates Regime", f"{rates_label} ({rates_prob:.0%})")
+            rates_display_prob = rates_prob_refl if rates_score > 0 else (1 - rates_prob_refl)
+            c_header4.metric("Rates Confidence Score", f"{rates_label} ({rates_display_prob:.0%})")
     
         last_date = latest['date'].strftime("%Y-%m-%d") if pd.notnull(latest['date']) else "N/A"
         c_header5.metric("Last Update", last_date)

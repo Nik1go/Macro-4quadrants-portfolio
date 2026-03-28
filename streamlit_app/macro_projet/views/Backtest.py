@@ -352,20 +352,30 @@ def render(data):
 
     st.info("ℹ **Score de Confiance (Conf: X%) :** Ce score indique le pourcentage des échantillons qui ont la meme polarité (mesure l'homogénéité de la distribution). ")
 
+    # Prepare daily_assets with BTC_USD only from 2024-03-01
+    daily_assets_for_heatmap = None
+    if data.get('daily_assets') is not None:
+        daily_assets_for_heatmap = data['daily_assets'].copy()
+        if 'BTC_USD' in daily_assets_for_heatmap.columns:
+            daily_assets_for_heatmap['date'] = pd.to_datetime(daily_assets_for_heatmap['date'])
+            daily_assets_for_heatmap.loc[daily_assets_for_heatmap['date'] < pd.Timestamp('2024-03-01'), 'BTC_USD'] = np.nan
+
     col1_assets, col2_assets = st.columns(2)
 
     with col1_assets:
         st.markdown("**Quadrants PREDITS (Modèle ML)**")
-        scores_acc, conf_acc = get_dynamic_heatmap_data(data.get('daily_assets'), data.get('backtest'), 'smooth_quadrant', selected_metric)
+        scores_acc, conf_acc = get_dynamic_heatmap_data(daily_assets_for_heatmap, data.get('backtest'), 'smooth_quadrant', selected_metric)
         perf_source = data.get('perf_smooth') if data.get('perf_smooth') is not None else data.get('perf')
-        if not _render_heatmap(scores_acc, conf_acc, perf_source, "Actions/ETF — PREDIT", "ML predict_proba + EMA", selected_metric, height=350):
+        if not _render_heatmap(scores_acc, conf_acc, perf_source, "Actions/ETF — PREDIT", "ML predict_proba + EMA", selected_metric, height=400):
             st.info("Données de performance Actions ML non disponibles.")
 
     with col2_assets:
         st.markdown("**Quadrants TARGET (Ground Truth)**")
-        scores_tgt, conf_tgt = get_dynamic_heatmap_data(data.get('daily_assets'), data.get('quadrants'), 'target_quadrant', selected_metric)
-        if not _render_heatmap(scores_tgt, conf_tgt, data.get('perf_target'), "Actions/ETF — TARGET", "Quadrants parfaits selon les targets", selected_metric, height=350):
+        scores_tgt, conf_tgt = get_dynamic_heatmap_data(daily_assets_for_heatmap, data.get('quadrants'), 'target_quadrant', selected_metric)
+        if not _render_heatmap(scores_tgt, conf_tgt, data.get('perf_target'), "Actions/ETF — TARGET", "Quadrants parfaits selon les targets", selected_metric, height=400):
             st.info("Données de performance Actions Target non disponibles.")
+
+    st.caption("ℹ BTC (Bitcoin) est inclus uniquement depuis 03/2024, date de son institutionnalisation via les ETF spot.")
 
     st.divider()
 
@@ -404,12 +414,17 @@ def render(data):
     st.divider()
 
     # =========================================================
-    # SECTION 3: SIGNAUX HAUTE CONVICTION (>65% Probabilité)
+    # SECTION 3: SIGNAUX DE CONVICTION STRUCTURELLE (Intensité du Régime)
     # =========================================================
-    st.subheader("Signaux Haute Conviction (>65%)")
-    st.markdown("Cette section affiche la performance uniquement lors des jours où le modèle est fortement convaincu de son régime.")
+    st.subheader("Signaux de Conviction Structurelle")
+    st.markdown(
+        "Cette section affiche la performance uniquement lors des jours où le modèle a une **forte conviction** sur le régime macro-économique. "
+        "Ce niveau de conviction traduit un **alignement fort des différents indicateurs** économiques en faveur d'un quadrant spécifique. "
+        "Le modèle sort ainsi de sa zone d'incertitude centrale (proche de 50%) pour valider un régime clair et réduire le risque de faux signaux."
+    )
 
     if data.get('quadrants') is not None and 'PROB_GROWTH_EMA' in data['quadrants'].columns and 'PROB_INFLATION_EMA' in data['quadrants'].columns:
+        # High Conviction = far from the 0.5 center (uncertainty)
         high_conviction_mask = (abs(data['quadrants']['PROB_GROWTH_EMA'] - 0.5) >= 0.15) & \
                                (abs(data['quadrants']['PROB_INFLATION_EMA'] - 0.5) >= 0.15)
         
@@ -425,8 +440,10 @@ def render(data):
                 
                 with hc_col1:
                     st.markdown("**Actions/ETF — HAUTE CONVICTION**")
-                    scores_hc, conf_hc = get_dynamic_heatmap_data(data.get('daily_assets'), bt_filtered, 'smooth_quadrant', selected_metric)
-                    if not _render_heatmap(scores_hc, conf_hc, None, "Actions/ETF — HAUTE CONVICTION", f"Signaux nets (>65% proba)", selected_metric, height=350):
+                    # Remove BTC for High Conviction Heatmap
+                    assets_no_btc = data.get('daily_assets').drop(columns=['BTC_USD'], errors='ignore') if data.get('daily_assets') is not None else None
+                    scores_hc, conf_hc = get_dynamic_heatmap_data(assets_no_btc, bt_filtered, 'smooth_quadrant', selected_metric)
+                    if not _render_heatmap(scores_hc, conf_hc, None, "Actions/ETF — HAUTE CONVICTION", f"Signaux profonds (éloignement des axes)", selected_metric, height=350):
                         st.info("Données insuffisantes pour le heatmap HC Actions.")
                 
                 with hc_col2:
@@ -439,8 +456,12 @@ def render(data):
     else:
         st.warning("Probabilités non disponibles.")
 
-    st.divider()
+    with st.expander("Focus sur les Signaux à forte Conviction", expanded=False):
+        st.markdown(
+            "On observe qu'en Q1 profond renvoi effectivement vers un marché fortement Risk-ON. Il est intéressant de tenter une strategie autour de ces signaux."
+        )
 
+    st.divider()
 
     with st.expander("Stratégie d'Allocation", expanded=True):
         st.markdown(

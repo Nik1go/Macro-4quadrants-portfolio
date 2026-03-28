@@ -13,6 +13,7 @@ import pandas as pd
 
 from .portfolio import PortfolioManager
 from .orders import OrderManager
+from .alerts import send_alert
 from .config import (
     ETF_MAPPING, REBALANCE_THRESHOLD, HOST, CURRENT_PORT, CLIENT_ID
 )
@@ -226,7 +227,16 @@ def execute_strategy(
         logger.error(f"Strategy execution failed: {e}")
         result['error'] = str(e)
         result['success'] = False
+        
+        # Send alert on failure
+        send_alert(f"<b>Strategy Execution Failed</b>\nError: {e}", severity="error")
     
+    # Send alert if there are failed orders
+    if result.get('execution_result') and result['execution_result'].get('failed'):
+        failed_count = len(result['execution_result']['failed'])
+        failed_assets = ", ".join([f["symbol"] for f in result['execution_result']['failed']])
+        send_alert(f"<b>IBKR Orders Partially Failed</b>\n{failed_count} orders failed: {failed_assets}", severity="warning")
+
     # Save execution log
     execution_end = datetime.now()
     result['duration_seconds'] = (execution_end - execution_start).total_seconds()
