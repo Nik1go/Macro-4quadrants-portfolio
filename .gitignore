@@ -24,3 +24,9 @@ airflow_venv/
 ibkr/.config.py.swp
 data/crypto
 skills/
+polymarket_arbitrage/.env
+polymarket_arbitrage/.env.example
+polymarket_arbitrage/data/arbitrage.db
+polymarket_arbitrage/data/arbitrage.db-journal
+polymarket_arbitrage/data/arbitrage.db-shm
+polymarket_arbitrage/data/arbitrage.db-wal

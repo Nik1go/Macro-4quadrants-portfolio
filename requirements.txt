@@ -186,3 +186,4 @@ statsmodels==0.16.2
 ibapi
 ib_insync
 scikit-learn
+PyPortfolioOpt
