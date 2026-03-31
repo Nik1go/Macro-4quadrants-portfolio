@@ -9,7 +9,7 @@ HOST = "127.0.0.1"          # Localhost (IB Gateway runs on the same VPS via Doc
 PAPER_PORT = 4002           # Paper trading port (IB Gateway default)
 LIVE_PORT = 4001            # Live trading port (IB Gateway default)
 CLIENT_ID = 1               # Unique client ID for this application
-CONNECTION_TIMEOUT = 30     # Timeout in seconds for API connection
+CONNECTION_TIMEOUT = 90     # Timeout in seconds for API connection
 
 # Use paper trading by default for safety
 CURRENT_PORT = PAPER_PORT
@@ -28,11 +28,17 @@ ETF_MAPPING = {
     'OBLIGATION': 'LQDE',   # iShares $ Corp Bond UCITS (AEB)
     'NASDAQ_100': 'SXRV',   # iShares Nasdaq 100 UCITS (Xetra ticker on AEB)
     'COMMODITIES': 'EXXY',  # iShares Diversified Commodity Swap UCITS (AEB)
+    'SHORT_SP500': 'DXS3',  # Xtrackers S&P 500 Inverse Daily Swap UCITS ETF (ISIN: LU0322251520)
+    'USD_JPY': 'USD_JPY',   # Forex pairing, using custom CONTRACT_DETAILS below
+    'USD_EUR': 'USD_EUR',   # Forex pairing
 }
 
 # Contract detail overrides (optional - if SMART routing fails or needs primaryExchange)
 CONTRACT_DETAILS = {
     'SXRM': {'primaryExchange': 'IBIS', 'currency': 'EUR'}, # Xetra
+    'DXS3': {'secIdType': 'ISIN', 'secId': 'LU0322251520', 'exchange': 'SMART', 'currency': 'EUR'},
+    'USD_JPY': {'symbol': 'USD', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'JPY'},
+    'USD_EUR': {'symbol': 'USD', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'EUR'},
 }
 
 # Yahoo Finance tickers (used for price lookup - need exchange suffix)

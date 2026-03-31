@@ -225,8 +225,8 @@ def render(data):
                 latest = df_q.iloc[-1]
                 cur_inflation = latest['MACRO_INFLATION_SCORE']
                 cur_growth = latest['MACRO_GROWTH_SCORE']
-                x_title = "Weighted Inflation Score (New Logic) ->"
-                y_title = "Weighted Growth Score (New Logic) ->"
+                x_title = "Weighted Inflation Score "
+                y_title = "Weighted Growth Score "
                 st.caption("Affichage base sur la nouvelle logique **2-Axes (Moyenne Ponderee)**")
             else:
                 inflation_hist = df_q['score_Q2'] - df_q['score_Q4']
@@ -314,12 +314,31 @@ def render(data):
         st.subheader("Allocation Actuelle")
 
         if data['backtest'] is not None:
-            current_bt_q = int(data['backtest'].iloc[-1].get('smooth_quadrant', 1))
-            alloc = ALLOCATIONS.get(current_bt_q, ALLOCATIONS[1])
+            last_row = data['backtest'].iloc[-1]
+            current_bt_q = int(last_row.get('smooth_quadrant', 1))
             st.caption(f"Base sur le **Regime Modele Q{current_bt_q}** (Lisse)")
-            alloc_df = pd.DataFrame({'Asset': alloc.keys(), 'Weight': alloc.values()})
-            fig_pie = px.pie(alloc_df, values='Weight', names='Asset', hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # Extract actual weights from backtest result columns
+            weight_cols = [c for c in data['backtest'].columns if c.endswith('_base_weight') and '_hc_' not in c]
+            weights = last_row[weight_cols]
+            weights = weights[weights > 0.005] # Filter tiny values
+            
+            if not weights.empty:
+                alloc_df = pd.DataFrame({
+                    'Asset': [c.replace('_base_weight', '').replace('_weight', '') for c in weights.index],
+                    'Weight': weights.values
+                })
+                fig_pie = px.pie(alloc_df, values='Weight', names='Asset', hole=0.4,
+                                color_discrete_sequence=px.colors.qualitative.Pastel)
+                fig_pie.update_traces(textinfo='percent+label', hole=.45)
+                fig_pie.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0))
+                st.plotly_chart(fig_pie, use_container_width=True)
+            else:
+                # Fallback to hardcoded if columns missing
+                alloc = ALLOCATIONS.get(current_bt_q, ALLOCATIONS[1])
+                alloc_df = pd.DataFrame({'Asset': alloc.keys(), 'Weight': alloc.values()})
+                fig_pie = px.pie(alloc_df, values='Weight', names='Asset', hole=0.4)
+                st.plotly_chart(fig_pie, use_container_width=True)
         elif data['quadrants'] is not None:
             current_q = int(data['quadrants'].iloc[-1].get('assigned_quadrant', 1))
             alloc = ALLOCATIONS.get(current_q, ALLOCATIONS[1])

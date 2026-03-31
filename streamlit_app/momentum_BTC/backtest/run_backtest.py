@@ -52,8 +52,8 @@ def run_offline_backtest():
     results_df, best_params, pf, btc_close = mu.run_grid_search_simulation(
         symbols=top_symbols,
         start_date=start_date,
-        sma_periods=[30, 50, 80],
-        roll_lookbacks=[60, 120, 180],
+        sma_periods=[30, 50, 80,120],
+        roll_lookbacks=[60, 120, 180, 240],
         skew_threshs=[0.0, 0.15],
         std_mults=[0.3, 0.5],
         atr_mults=[2.0, 3.0],

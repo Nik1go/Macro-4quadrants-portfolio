@@ -733,6 +733,8 @@ with DAG(
         application_args=[
             QUADRANT_CSV,
             "{{ ti.xcom_pull(task_ids='format_assets_data') }}",
+            "{{ ti.xcom_pull(task_ids='format_forex_data') }}",
+            INDICATORS_PARQUET,
             "1000",
             BACKTEST_OUTPUT
         ],

@@ -95,17 +95,28 @@ class OrderManager:
         
         try:
             # Create contract (same as used for orders)
+            from ib_insync import Contract
             details = CONTRACT_DETAILS.get(ibkr_symbol, {})
-            currency = details.get('currency', 'EUR')
-            primary_exchange = details.get('primaryExchange', None)
             
-            contract = Stock(ibkr_symbol, 'SMART', currency, primaryExchange=primary_exchange)
+            contract_kwargs = {
+                'symbol': details.get('symbol', ibkr_symbol),
+                'secType': details.get('secType', 'STK'),
+                'exchange': details.get('exchange', 'SMART'),
+                'currency': details.get('currency', 'EUR')
+            }
+            if 'primaryExchange' in details:
+                contract_kwargs['primaryExchange'] = details['primaryExchange']
+            if 'secIdType' in details:
+                contract_kwargs['secIdType'] = details['secIdType']
+                contract_kwargs['secId'] = details['secId']
+                
+            contract = Contract(**contract_kwargs)
             qualified = self.ib.qualifyContracts(contract)
             
             # Fallback: If SMART fails and we have a primaryExchange, try absolute exchange
-            if (not qualified or not contract.conId) and primary_exchange:
-                logger.warning(f"SMART qualification failed for {ibkr_symbol}, trying {primary_exchange}")
-                contract = Stock(ibkr_symbol, primary_exchange, currency)
+            if (not qualified or not contract.conId) and 'primaryExchange' in details:
+                logger.warning(f"SMART qualification failed for {ibkr_symbol}, trying {details['primaryExchange']}")
+                contract.exchange = details['primaryExchange']
                 qualified = self.ib.qualifyContracts(contract)
 
             if not qualified or not contract.conId:
@@ -263,18 +274,28 @@ class OrderManager:
                     })
                     continue
                 
-                # Create contract (using details from config)
+                from ib_insync import Contract
                 details = CONTRACT_DETAILS.get(order.symbol, {})
-                currency = details.get('currency', 'EUR')
-                primary_exchange = details.get('primaryExchange', None)
                 
-                contract = Stock(order.symbol, 'SMART', currency, primaryExchange=primary_exchange)
+                contract_kwargs = {
+                    'symbol': details.get('symbol', order.symbol),
+                    'secType': details.get('secType', 'STK'),
+                    'exchange': details.get('exchange', 'SMART'),
+                    'currency': details.get('currency', 'EUR')
+                }
+                if 'primaryExchange' in details:
+                    contract_kwargs['primaryExchange'] = details['primaryExchange']
+                if 'secIdType' in details:
+                    contract_kwargs['secIdType'] = details['secIdType']
+                    contract_kwargs['secId'] = details['secId']
+                    
+                contract = Contract(**contract_kwargs)
                 qualified = self.ib.qualifyContracts(contract)
                 
                 # Fallback: If SMART fails and we have a primaryExchange, try absolute exchange
-                if (not qualified or not contract.conId) and primary_exchange:
-                    logger.warning(f"SMART qualification failed for {order.symbol}, trying {primary_exchange}")
-                    contract = Stock(order.symbol, primary_exchange, currency)
+                if (not qualified or not contract.conId) and 'primaryExchange' in details:
+                    logger.warning(f"SMART qualification failed for {order.symbol}, trying {details['primaryExchange']}")
+                    contract.exchange = details['primaryExchange']
                     qualified = self.ib.qualifyContracts(contract)
 
                 # Check if contract was found

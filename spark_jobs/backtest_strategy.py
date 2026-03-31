@@ -15,7 +15,7 @@ Core Strategy:
 4. Annualized Stats: 252 trading days.
 
 dans le venv active  
-python spark_jobs/backtest_strategy.py data/US/output_dag/quadrants.csv data/US/output_dag/Assets_daily.parquet 1000 data/US/backtest_results
+python spark_jobs/backtest_strategy.py data/US/output_dag/quadrants.csv data/US/output_dag/Assets_daily.parquet data/US/output_dag/Forex_daily.parquet data/US/output_dag/combined_indicators.csv 1000 data/US/backtest_results
 on peu ajt une start-date a la fin de la cmd YYYY-MM-JJ
 
 """
@@ -37,102 +37,20 @@ TER = {
     'OBLIGATION': 0.0020,    # LQDE: 0.20% (iShares $ Corp Bond UCITS)
     'NASDAQ_100': 0.0033,    # SXRV: 0.33% (iShares Nasdaq 100 UCITS)
     'COMMODITIES': 0.0046,   # EXXY: 0.46% (iShares Diversified Commodity Swap UCITS)
-    'SHORT_SP500': 0.0089,   # SH: 0.89% - ProShares Short S&P500 (Inverse ETF)
-    'BTC_USD': 0.0095        # CoinShares Physical Bitcoin ETP: 0.95%
+    'SHORT_SP500': 0.0089    # SH: 0.89% - ProShares Short S&P500 (Inverse ETF)
 }
 
-# Allocations Optimisées par Quadrant (Data-Driven 2005-2025)
-# Basé sur l'analyse des heatmaps de performance et Sharpe ratios historiques
-ALLOCATIONS = {
-    # Q1 (Croissance Saine): ON FONCE.
-    # Ici, ta logique est bonne. On prend du risque (Beta).
-    1: {
-        'NASDAQ_100': 0.4,      # Moteur de performance
-        'SmallCAP': 0.3,        # Beta élevé
-        'SP500': 0.3,           #cd  Stabilité relative
-        'US_REIT_VNQ': 0.0, 
-        'GOLD_OZ_USD': 0.0, 
-        'TREASURY_10Y': 0.0, 
-        'OBLIGATION': 0.0, 
-        'COMMODITIES': 0.0,
-        'SHORT_SP500': 0.0,
-        'BTC_USD': 0.0
-    },
-    
-    # Q2 (Inflation): QUALITÉ & RÉEL.
-    # On vire les SmallCaps (trop fragiles) et on réduit la Tech (taux).
-    # On mise sur les grosses boîtes (SP500) et les matières premières.
-    2: {
-        'SP500': 0.4,           # Pricing Power
-        'GOLD_OZ_USD': 0.0,     # Protection Monétaire
-        'COMMODITIES': 0.0,     # Hedge Inflation direct
-        'NASDAQ_100': 0.3,      # On garde un pied dans la tech
-        'SmallCAP': 0.3,
-        'TREASURY_10Y': 0.0, 
-        'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0,
-        'SHORT_SP500': 0.0,
-        'BTC_USD': 0.0
-    },
-    
-    # Q3 (Stagflation): DÉFENSE TOTALE.
-    3: {
-        'GOLD_OZ_USD': 0.4,  
-        'COMMODITIES': 0.3,     # La cause de l'inflation
-        'TREASURY_10Y': 0.3,    # Sécurité
-        'NASDAQ_100': 0.0,
-        'SP500': 0.0,
-        'SmallCAP': 0.0, 
-        'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0,
-        'SHORT_SP500': 0.0,
-        'BTC_USD': 0.0
-    },
-    
-    # Q4 (Crash Déflationniste): BUNKER.
-    # On enlève les Obligations Corporate. On veut du sans risque.
-    4: {
-        'TREASURY_10Y': 0.5,    # Profite de la baisse des taux
-        'GOLD_OZ_USD': 0.3,     # Peur / Valeur Refuge
-        'SP500': 0.0, 
-        'NASDAQ_100': 0.0, 
-        'SmallCAP': 0.0, 
-        'US_REIT_VNQ': 0.0, 
-        'OBLIGATION': 0.2,
-        'COMMODITIES': 0.0,
-        'SHORT_SP500': 0.0,
-        'BTC_USD': 0.0
-    },
-}
 
-# Allocations réelles configurées sur IBKR (pour comparaison)
-IBKR_ALLOCATIONS = {
-    1: {
-        'NASDAQ_100': 0.4, 'SmallCAP': 0.3, 'SP500': 0.3,
-        'US_REIT_VNQ': 0.0, 'GOLD_OZ_USD': 0.0, 'TREASURY_10Y': 0.0,
-        'OBLIGATION': 0.0, 'COMMODITIES': 0.0, 'SHORT_SP500': 0.0, 'BTC_USD': 0.0
-    },
-    2: {
-        'SP500': 0.4, 'GOLD_OZ_USD': 0.3, 'COMMODITIES': 0.2, 'NASDAQ_100': 0.1,
-        'SmallCAP': 0.0, 'TREASURY_10Y': 0.0, 'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0, 'SHORT_SP500': 0.0, 'BTC_USD': 0.0
-    },
-    3: {
-        'GOLD_OZ_USD': 0.6, 'COMMODITIES': 0.2, 'TREASURY_10Y': 0.2,
-        'NASDAQ_100': 0.0, 'SP500': 0.0, 'SmallCAP': 0.0,
-        'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'SHORT_SP500': 0.0, 'BTC_USD': 0.0
-    },
-    4: {
-        'TREASURY_10Y': 0.6, 'GOLD_OZ_USD': 0.4,
-        'SP500': 0.0, 'NASDAQ_100': 0.0, 'SmallCAP': 0.0,
-        'US_REIT_VNQ': 0.0, 'OBLIGATION': 0.0, 'COMMODITIES': 0.0,
-        'SHORT_SP500': 0.0, 'BTC_USD': 0.0
-    },
-}
+# The assets available in the daily data
+ASSETS_CORE = ['SP500', 'GOLD_OZ_USD', 'SmallCAP', 'US_REIT_VNQ', 'OBLIGATION', 'TREASURY_10Y', 'NASDAQ_100', 'COMMODITIES', 'SHORT_SP500']
+FOREX_CORE = ['USD_EUR', 'USD_JPY', 'USD_CAD', 'USD_AUD', 'USD_BRL']
+ASSETS = ASSETS_CORE + FOREX_CORE
 
-WEIGHTS = ALLOCATIONS
+# Import optimization functions
+from optimization_engine import get_carry_adjusted_returns_wide, optimize_for_metric
 
-ASSETS = ['SP500', 'GOLD_OZ_USD', 'SmallCAP', 'US_REIT_VNQ', 'OBLIGATION', 'TREASURY_10Y', 'NASDAQ_100', 'COMMODITIES', 'SHORT_SP500', 'BTC_USD']
+# We will fill WEIGHTS dynamically during startup
+WEIGHTS = {}
 
 
 # rolling_mode removed: ML model handles smoothing via EMA in compute_quadrants.py
@@ -162,17 +80,16 @@ def calculate_stats(returns, wealth, label):
 
 
 def main():
-    if len(sys.argv) < 5:
-        print("Usage: backtest_strategy.py <quadrants.csv> <Assets_daily.parquet> <initial_capital> <output_dir> [start_date]")
-        print("  start_date: Optional, format YYYY-MM-DD (e.g., 2010-01-01)")
+    if len(sys.argv) < 7:
+        print("Usage: backtest_strategy.py <quadrants.csv> <Assets_daily.parquet> <Forex_daily.parquet> <Indicators.csv> <initial_capital> <output_dir> [start_date]")
         sys.exit(1)
 
-    quadrants_csv, assets_parquet, initial_capital, output_dir = sys.argv[1:5]
+    quadrants_csv, assets_parquet, forex_parquet, indicators_csv, initial_capital, output_dir = sys.argv[1:7]
     initial_capital = float(initial_capital)
     
     # Start date (default: 2005-01-01)
-    if len(sys.argv) >= 6:
-        start_date = pd.to_datetime(sys.argv[5])
+    if len(sys.argv) >= 8:
+        start_date = pd.to_datetime(sys.argv[7])
     else:
         start_date = pd.to_datetime('2005-01-01')
     print(f" Backtest starting from: {start_date.strftime('%Y-%m-%d')}")
@@ -199,9 +116,54 @@ def main():
     df_a['date'] = pd.to_datetime(df_a['date'])
     df_a = df_a.drop_duplicates(subset=['date']).set_index('date').sort_index()
 
+    df_f = pd.read_parquet(forex_parquet)
+    df_f['date'] = pd.to_datetime(df_f['date'])
+    df_f = df_f.drop_duplicates(subset=['date']).set_index('date').sort_index()
+    
+    df_ind = pd.read_csv(indicators_csv, parse_dates=['date']).set_index('date').sort_index()
+
+    # Pre-calculate optimized weight allocation for the Backtest using Monte-Carlo ZScore Custom Custom Function
+    df_returns_all = get_carry_adjusted_returns_wide(df_a.reset_index(), df_f.reset_index(), df_ind.reset_index())
+    df_returns_all = df_returns_all.dropna(how='all')
+    
+    # Combine assets + forex
+    df_a_combined = pd.merge(df_a, df_f, left_index=True, right_index=True, how='outer').ffill()
+
+    # Dynamic PyPortfolioOpt per quadrant
+    print("Optimization des Poids en cours...")
+    for q in [1, 2, 3, 4]:
+        q_dates = df_q[df_q['assigned_quadrant'] == q].index.intersection(df_returns_all.index)
+        if len(q_dates) < 50:
+            print(f"   [Alerte] Manque de données pour le quadrant {q}. Poids uniformes utilisés.")
+            WEIGHTS[q] = {a: 1.0/len(ASSETS) for a in ASSETS}
+            continue
+            
+        # We use TAUX_FED as RF Rate
+        rf = 0.02
+        shared_idx = q_dates.intersection(df_ind.index)
+        if len(shared_idx) > 0 and 'TAUX_FED' in df_ind.columns:
+            rf = df_ind.loc[shared_idx, 'TAUX_FED'].mean() / 100.0
+            
+        TARGET_ASSETS = {
+            1: ['NASDAQ_100', 'SmallCAP', 'SP500', 'US_REIT_VNQ'],
+            2: ['NASDAQ_100', 'SmallCAP', 'SP500', 'GOLD_OZ_USD', 'COMMODITIES'],
+            3: ['SHORT_SP500', 'COMMODITIES', 'USD_JPY', 'USD_EUR'],
+            4: ['TREASURY_10Y', 'OBLIGATION', 'GOLD_OZ_USD']
+        }
+        
+        allowed_assets = [c for c in TARGET_ASSETS.get(q, ASSETS) if c in df_returns_all.columns]
+        ret_q = df_returns_all.loc[q_dates, allowed_assets].fillna(0)
+            
+        opt_w = optimize_for_metric(ret_q, rf, metric="custom", max_weight=0.40)
+        # Ensure all ASSETS are present
+        for a in ASSETS:
+            if a not in opt_w:
+                opt_w[a] = 0.0
+        WEIGHTS[q] = opt_w
+        print(f"Optimal Portfolio for Q{q} Computed via Z-Score Custom Metric.")
+
     # ========== 2. INNER JOIN ==========
-    # Merge on data, include raw probabilities for the new High Conviction strategy
-    df = df_a[ASSETS].join(df_q[['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW']], how='inner')
+    df = df_a_combined[ASSETS].join(df_q[['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW']], how='inner')
     df = df.dropna(subset=['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW'])
     df['assigned_quadrant'] = df['assigned_quadrant'].astype(int)
     
@@ -211,7 +173,12 @@ def main():
 
     # ========== 3. DAILY RETURNS ==========
     for asset in ASSETS:
-        df[f'{asset}_ret'] = df[asset].pct_change().fillna(0.0)
+        # Use our pre-calculated carry adjusted returns where applicable!
+        if asset in df_returns_all.columns:
+            df[f'{asset}_ret'] = df_returns_all[asset]
+        else:
+            df[f'{asset}_ret'] = df[asset].pct_change().fillna(0.0)
+
 
     # ========== 4. USE ML QUADRANTS DIRECTLY ==========
     # ML model (compute_quadrants.py) already applies EMA(5) smoothing on probabilities
@@ -406,8 +373,9 @@ def main():
         pd.DataFrame(perf_rows).to_csv(f"{output_dir}/assets_performance_by_smooth_quadrant.csv", index=False)
 
     # Timeseries
+    base_weight_cols = [f'{a}_base_weight' for a in ASSETS]
     out_cols = ['smooth_quadrant', 'portfolio_return', 'wealth', 'hc_return', 'hc_wealth', 'SP500_wealth', 'GOLD_wealth',
-                'transaction_cost', 'ter_cost'] + weight_cols
+                'transaction_cost', 'ter_cost'] + weight_cols + base_weight_cols
     df_out = df[out_cols].copy()
     df_out.index.name = 'date'
     df_out.to_csv(f"{output_dir}/backtest_timeseries.csv")

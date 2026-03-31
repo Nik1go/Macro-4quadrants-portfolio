@@ -8,7 +8,19 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import plotly.express as px
+import sys
+import os
+import plotly.express as px
 from data_loader import QUADRANT_NAMES, QUADRANT_COLORS
+
+# Add spark_jobs to path to import optimization_engine
+import sys
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_dir)))
+spark_jobs_dir = os.path.join(project_root, 'spark_jobs')
+if spark_jobs_dir not in sys.path:
+    sys.path.append(spark_jobs_dir)
+from optimization_engine import get_carry_adjusted_returns_wide, run_efficient_frontier_points
 
 
 def compute_single_metric(returns, metric):
@@ -288,135 +300,332 @@ def render(data):
     st.divider()
 
     # === Strategy vs Benchmark ===
-    st.subheader("Strategie vs Benchmark")
+    st.subheader("Strategie vs Benchmark & Impact Devise (EUR)")
     if data['backtest'] is not None:
         df_bt = data['backtest']
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['wealth'], name='Strategy', line=dict(color='cyan')))
+        fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['wealth'], name='Strategy (USD)', line=dict(color='cyan')))
+        
+        # Check if EUR/USD conversion is possible
+        df_f = data.get('daily_forex')
+        df_ind = data.get('indicators')
+        
+        if df_f is not None and not df_f.empty and 'USD_EUR' in df_f.columns:
+            # Reconstruct Returns in EUR
+            df_ret_f = df_f.copy()
+            df_ret_f['date'] = pd.to_datetime(df_ret_f['date'])
+            df_ret_f = df_ret_f.set_index('date').sort_index()
+            eur_usd_ret = df_ret_f['USD_EUR'].pct_change().fillna(0)
+            
+            # Align with backtest dates
+            idx = df_bt['date'].dt.tz_localize(None)
+            eur_usd_ret = eur_usd_ret.reindex(idx).fillna(0)
+            
+            # (1 + strat_ret_usd) * (1 + eur_usd_ret) - 1
+            strat_ret = df_bt['portfolio_return'].values
+            eur_ret = (1 + strat_ret) * (1 + eur_usd_ret.values) - 1
+            wealth_eur = 1000 * (1 + eur_ret).cumprod()
+            
+            fig.add_trace(go.Scatter(x=df_bt['date'], y=wealth_eur, name='Strategy (EUR)', line=dict(color='#00ff88', dash='dash')))
+
         if 'hc_wealth' in df_bt.columns:
             fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['hc_wealth'], name='Strategy Haute Conviction', line=dict(color='#39FF14', dash='dot')))
         fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['SP500_wealth'], name='SP500', line=dict(color='orange')))
         fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['GOLD_wealth'], name='Gold', line=dict(color='gold')))
-        fig.update_layout(height=400, yaxis_title="Wealth ($)", xaxis_title="Date")
+        fig.update_layout(height=450, yaxis_title="Wealth", xaxis_title="Date", legend=dict(orientation="h", y=1.05))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("Donnees backtest non disponibles")
 
-    # Key Metrics
-    if data['stats'] is not None:
+    # =========================================================
+    # SECTION 1.B: COMPARAISON DE PERFORMANCE
+    # =========================================================
+    st.divider()
+    if data['stats'] is not None and data['backtest'] is not None:
         stats_dict = data['stats'].iloc[0].to_dict() if len(data['stats']) > 0 else {}
+        df_bt = data['backtest']
         
-        st.markdown("#####  Stratégie d'Allocation (Tous régimes)")
-        st.caption("On définit une allocation systématique pour chaque quadrant, le portefeuille est toujours investi.")
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total Return", f"{stats_dict.get('total_return', 0) * 100:.1f}%")
-        m2.metric("Max Drawdown", f"{stats_dict.get('strategy_max_drawdown', 0) * 100:.1f}%")
-        m3.metric("Sharpe Ratio", f"{stats_dict.get('strategy_sharpe_annual', 0):.2f}")
-        m4.metric("Annual Vol", f"{stats_dict.get('strategy_vol_annual', 0) * 100:.1f}%")
+        # Calculate years for CAGR
+        days = (df_bt['date'].max() - df_bt['date'].min()).days
+        years = days / 365.25 if days > 0 else 1.0
 
-        if 'hc_total_return' in stats_dict:
-            st.markdown("##### Stratégie Trading (Haute Conviction)")
-            st.caption("On trade uniquement les jours de forte conviction (>65%). Nous ne tradons pas le Q3 car le signal n'est pas détecté avec suffisamment de probabilité/stabilité.")
-            m1b, m2b, m3b, m4b = st.columns(4)
-            m1b.metric("Total Return", f"{stats_dict.get('hc_total_return', 0) * 100:.1f}%")
-            m2b.metric("Max Drawdown", f"{stats_dict.get('strategy_hc_max_drawdown', 0) * 100:.1f}%")
-            m3b.metric("Sharpe Ratio", f"{stats_dict.get('strategy_hc_sharpe_annual', 0):.2f}")
-            m4b.metric("Annual Vol", f"{stats_dict.get('strategy_hc_vol_annual', 0) * 100:.1f}%")
+        # Build a map of available strategies
+        wealth_map = {
+            "Stratégie (USD)": {"wealth": df_bt['wealth'], "prefix": "strategy"},
+            "S&P 500 (Benchmark)": {"wealth": df_bt['SP500_wealth'], "prefix": "SP500"},
+            "Or (Gold)": {"wealth": df_bt['GOLD_wealth'], "prefix": "GOLD"},
+        }
+        
+        # Optional strategies
+        if 'hc_wealth' in df_bt.columns:
+            wealth_map["Stratégie (Haute Conviction)"] = {"wealth": df_bt['hc_wealth'], "prefix": "strategy_hc"}
+        
+        # Strategy EUR is calculated above as wealth_eur if forex is available
+        if 'wealth_eur' in locals():
+            wealth_map["Stratégie (EUR)"] = {"wealth": wealth_eur, "prefix": "strategy_eur"}
 
-        if data['backtest'] is not None and 'SP500_wealth' in data['backtest'].columns:
-            sp500_wealth = data['backtest']['SP500_wealth']
-            sp500_tot_ret = (sp500_wealth.iloc[-1] / sp500_wealth.iloc[0]) - 1 if len(sp500_wealth) > 0 else 0
+        def display_compare_panel(key_id, default_selection_idx):
+            choice = st.selectbox(f"Sélecteur {key_id} :", options=list(wealth_map.keys()), index=default_selection_idx, key=f"sel_{key_id}")
+            config = wealth_map[choice]
+            w = config['wealth']
+            p = config['prefix']
             
-            st.markdown("##### Benchmark (S&P 500 B&H)")
-            st.caption("Acheter et conserver le marché américain (Buy & Hold).")
-            m1c, m2c, m3c, m4c = st.columns(4)
-            m1c.metric("Total Return", f"{sp500_tot_ret * 100:.1f}%")
-            m2c.metric("Max Drawdown", f"{stats_dict.get('SP500_max_drawdown', 0) * 100:.1f}%")
-            m3c.metric("Sharpe Ratio", f"{stats_dict.get('SP500_sharpe_annual', 0):.2f}")
-            m4c.metric("Annual Vol", f"{stats_dict.get('SP500_vol_annual', 0) * 100:.1f}%")
+            if w is not None and not w.empty:
+                # Calculated Metrics
+                tot_ret = (w.iloc[-1] / w.iloc[0]) - 1
+                cagr = (1 + tot_ret) ** (1 / years) - 1
+                
+                # Fetch or calculate other stats
+                m_dd = stats_dict.get(f"{p}_max_drawdown", 0)
+                m_sharpe = stats_dict.get(f"{p}_sharpe_annual", 0)
+                m_vol = stats_dict.get(f"{p}_vol_annual", 0)
+                
+                # Re-calculate if prefix is new/missing (like EUR)
+                if f"{p}_max_drawdown" not in stats_dict or np.isnan(m_sharpe):
+                    peak = w.expanding(min_periods=1).max()
+                    m_dd = ((w - peak) / peak).min()
+                    rets = w.pct_change().dropna()
+                    m_vol = rets.std() * np.sqrt(252)
+                    m_sharpe = (rets.mean() * 252) / m_vol if m_vol > 0 else 0
+
+                # Display metrics in a clean vertical grid
+                st.write(f"### {choice}")
+                m_c1, m_c2 = st.columns(2)
+                m_c1.metric("Total Return", f"{tot_ret * 100:.1f}%")
+                m_c1.metric("Annual Return", f"{cagr * 100:.1f}%")
+                m_c1.metric("Max Drawdown", f"{abs(m_dd) * 100:.1f}%")
+                
+                m_c2.metric("Sharpe Ratio", f"{m_sharpe:.2f}")
+                m_c2.metric("Annual Vol", f"{m_vol * 100:.1f}%")
+            else:
+                st.info("Données non disponibles.")
+
+        st.write("### Comparaison de Performance")
+        # Side-by-side comparison
+        comp_col1, comp_col2 = st.columns(2)
+        with comp_col1:
+            display_compare_panel("A", 0)
+        with comp_col2:
+            display_compare_panel("B", 1)
+
 
     st.divider()
 
+
     # =========================================================
-    # SECTION 1: ANALYSE DE PERFORMANCE DES ACTIFS (Actions/ETF)
+    # SECTION 2.B: FRONTIERE EFFICIENTE PAR QUADRANT
     # =========================================================
-    st.subheader("Analyse de Performance des Actifs (Actions/ETF)")
+    st.subheader("Optimisation et Frontiere Efficiente (Par Quadrant)")
+    st.markdown("Recherche de l'allocation optimale combinant l'ensemble de notre univers (Actions, Obligations, Or, Forex).")
     
-    selected_metric = st.selectbox(
-        "Choisissez la Métrique d'Évaluation :",
-        ["Sharpe Ratio", "Sortino Ratio", "Win Rate (% de jours positifs)"],
-        index=0,
-        help="Sharpe: Rendement vs Volatilité Globale | Sortino: Rendement vs Volatilité à la Baisse | Win Rate: % de Jours Positifs"
-    )
+    col_q, col_m = st.columns(2)
+    with col_q:
+        selected_q = st.selectbox("Sélectionnez le Régime (Quadrant) :", options=[1, 2, 3, 4], 
+            format_func=lambda x: f"Q{x} - {QUADRANT_NAMES.get(x)}")
+    with col_m:
+        selected_opt_metric = st.selectbox("Sélectionnez la Métrique d'Optimisation :",
+            options=["custom", "sharpe", "sortino", "calmar"],
+            format_func=lambda x: "Custom Z-Score Average" if x == "custom" else x.capitalize() + " Ratio")
 
-    st.info("ℹ **Score de Confiance (Conf: X%) :** Ce score indique le pourcentage des échantillons qui ont la meme polarité (mesure l'homogénéité de la distribution). ")
+    if data.get('daily_assets') is not None and data.get('quadrants') is not None:
+        try:
+            df_returns_all = get_carry_adjusted_returns_wide(
+                data['daily_assets'], 
+                data.get('daily_forex'), 
+                data.get('indicators')
+            )
+            df_q = data['quadrants'].copy()
+            df_q['date'] = pd.to_datetime(df_q['date'])
+            df_q = df_q.set_index('date')
+            
+            # Shift quadrant by 1 day as in backtest to align predicting close with trading return
+            df_q['assigned_quadrant'] = df_q['assigned_quadrant'].shift(1)
+            q_dates = df_q[df_q['assigned_quadrant'] == selected_q].index.intersection(df_returns_all.index)
+            
+            if len(q_dates) < 20:
+                st.warning("⚠️ Pas assez de données historiques pour ce quadrant.")
+            else:
+                TARGET_ASSETS = {
+                    1: ['NASDAQ_100', 'SmallCAP', 'SP500', 'US_REIT_VNQ'],
+                    2: ['NASDAQ_100', 'SmallCAP', 'SP500', 'GOLD_OZ_USD', 'COMMODITIES'],
+                    3: ['SHORT_SP500', 'COMMODITIES', 'USD_JPY', 'USD_EUR'],
+                    4: ['TREASURY_10Y', 'OBLIGATION', 'GOLD_OZ_USD']
+                }
+                
+                allowed_assets = [c for c in TARGET_ASSETS.get(selected_q, []) if c in df_returns_all.columns]
+                ret_q_opt = df_returns_all.loc[q_dates, allowed_assets].fillna(0)
 
-    # Prepare daily_assets with BTC_USD only from 2024-03-01
-    daily_assets_for_heatmap = None
-    if data.get('daily_assets') is not None:
-        daily_assets_for_heatmap = data['daily_assets'].copy()
-        if 'BTC_USD' in daily_assets_for_heatmap.columns:
-            daily_assets_for_heatmap['date'] = pd.to_datetime(daily_assets_for_heatmap['date'])
-            daily_assets_for_heatmap.loc[daily_assets_for_heatmap['date'] < pd.Timestamp('2024-03-01'), 'BTC_USD'] = np.nan
+                # Drop cols with absolutely zero return inside this quadrant
+                ret_q_opt = ret_q_opt.loc[:, (ret_q_opt != 0).any(axis=0)]
+                
+                rf = 0.02
+                if data.get('indicators') is not None and 'TAUX_FED' in data['indicators'].columns:
+                    # Align dates with indicators
+                    shared_idx = q_dates.intersection(data['indicators']['date'])
+                    if len(shared_idx) > 0:
+                        rf = data['indicators'].set_index('date').loc[shared_idx, 'TAUX_FED'].mean() / 100.0
+                
+                # Execute PyPortfolioOpt Efficient Frontier Simulation
+                # Use cache for performance to prevent 3000 montecarlo on every ui click unless parameters change
+                @st.cache_data(ttl=3600, show_spinner="Simulation de 8000 portefeuilles Monte-Carlo...")
+                def compute_ef_v6(returns_df_bytes, rf_rate):
+                    import io
+                    # Streamlit cache bug bypass by passing parquet bytes
+                    r = pd.read_parquet(io.BytesIO(returns_df_bytes))
+                    return run_efficient_frontier_points(r, rf_rate, n_sims=8000)
 
-    col1_assets, col2_assets = st.columns(2)
+                # Convert dataframe to bytes for caching properly
+                import io
+                parquet_bytes = io.BytesIO()
+                ret_q_opt.to_parquet(parquet_bytes)
+                ef_res = compute_ef_v6(parquet_bytes.getvalue(), rf)
+                
+                # Render Plot
+                mc = ef_res['mc_data']
+                opt_key = f"opt_{selected_opt_metric}"
+                opt_w = ef_res[opt_key]
+                
+                # Compute return and vol of the chosen optimal portfolio
+                opt_w_array = np.array([opt_w.get(c, 0) for c in ret_q_opt.columns])
+                opt_rp = ret_q_opt.dot(opt_w_array)
+                opt_mean = opt_rp.mean() * 252
+                opt_vol = opt_rp.std() * np.sqrt(252)
+                
+                # Min vol portfolio
+                min_w_array = np.array([ef_res['min_vol_weights'].get(c, 0) for c in ret_q_opt.columns])
+                min_rp = ret_q_opt.dot(min_w_array)
+                min_mean = min_rp.mean() * 252
+                min_vol = min_rp.std() * np.sqrt(252)
 
-    with col1_assets:
-        st.markdown("**Quadrants PREDITS (Modèle ML)**")
-        scores_acc, conf_acc = get_dynamic_heatmap_data(daily_assets_for_heatmap, data.get('backtest'), 'smooth_quadrant', selected_metric)
-        perf_source = data.get('perf_smooth') if data.get('perf_smooth') is not None else data.get('perf')
-        if not _render_heatmap(scores_acc, conf_acc, perf_source, "Actions/ETF — PREDIT", "ML predict_proba + EMA", selected_metric, height=400):
-            st.info("Données de performance Actions ML non disponibles.")
+                # Extract EXACT weights used in the BACKTEST (Source of Truth)
+                backtest_w_array = np.zeros(len(ret_q_opt.columns))
+                if data.get('backtest') is not None:
+                    df_b = data['backtest']
+                    df_q = df_b[df_b['smooth_quadrant'] == selected_q]
+                    if not df_q.empty:
+                        for i, col in enumerate(ret_q_opt.columns):
+                            # The column in CSV is 'ASSET_base_weight'
+                            bw_col = f"{col}_base_weight"
+                            if bw_col in df_q.columns:
+                                backtest_w_array[i] = df_q[bw_col].median()
+                
+                # If no backtest data, just ignore
+                bt_mean, bt_vol = None, None
+                if backtest_w_array.sum() > 0.95: # Ensure we found the weights
+                    backtest_w_array = backtest_w_array / backtest_w_array.sum()
+                    bt_rp = ret_q_opt.dot(backtest_w_array)
+                    bt_mean = bt_rp.mean() * 252
+                    bt_vol = bt_rp.std() * np.sqrt(252)
 
-    with col2_assets:
-        st.markdown("**Quadrants TARGET (Ground Truth)**")
-        scores_tgt, conf_tgt = get_dynamic_heatmap_data(daily_assets_for_heatmap, data.get('quadrants'), 'target_quadrant', selected_metric)
-        if not _render_heatmap(scores_tgt, conf_tgt, data.get('perf_target'), "Actions/ETF — TARGET", "Quadrants parfaits selon les targets", selected_metric, height=400):
-            st.info("Données de performance Actions Target non disponibles.")
+                old_rp = ret_q_opt.sum(axis=1) * 0 # Removed IBKR old alloc logic
 
-    st.caption("ℹ BTC (Bitcoin) est inclus uniquement depuis 03/2024, date de son institutionnalisation via les ETF spot.")
+                fig_ef = go.Figure()
+                
+                # Add scatter of simulated portfolios
+                metric_col_map = {
+                    'custom': 'customs',
+                    'sharpe': 'sharpes',
+                    'sortino': 'sortinos',
+                    'calmar': 'calmars'
+                }
+                metric_name_map = {
+                    'custom': 'Custom Z-Score Average',
+                    'sharpe': 'Sharpe Ratio',
+                    'sortino': 'Sortino Ratio',
+                    'calmar': 'Calmar Ratio'
+                }
+                c_key = metric_col_map.get(selected_opt_metric, 'sharpes')
+                c_title = metric_name_map.get(selected_opt_metric, 'Sharpe Ratio')
+                metric_color = mc[c_key]
+                
+                # Format weights for hover template
+                weights_hover = []
+                for w in mc['weights']:
+                    hover_text = "<br>".join([f"{a}: {w[i]*100:.1f}%" for i, a in enumerate(ret_q_opt.columns) if w[i] > 0.005])
+                    weights_hover.append(hover_text)
+                    
+                fig_ef.add_trace(go.Scatter(
+                    x=mc['volatilities']*100, y=mc['returns']*100,
+                    mode='markers',
+                    marker=dict(size=4, color=metric_color, colorscale='Viridis', showscale=True, 
+                                colorbar=dict(title=c_title)),
+                    name='Monte Carlo',
+                    customdata=weights_hover,
+                    hovertemplate="<b>Volatilité:</b> %{x:.2f}%<br><b>Rendement:</b> %{y:.2f}%<br><b>" + c_title + ":</b> %{marker.color:.2f}<br><br><b>Allocation:</b><br>%{customdata}<extra></extra>"
+                ))
+                
+                # Prepare hover texts
+                def format_hover(w_arr):
+                    return "<br>".join([f"{a}: {w_arr[i]*100:.1f}%" for i, a in enumerate(ret_q_opt.columns) if w_arr[i] > 0.005])
+                    
+                # Min Volatility
+                fig_ef.add_trace(go.Scatter(
+                    x=[min_vol*100], y=[min_mean*100],
+                    mode='markers', marker=dict(size=14, color='#00e5ff', symbol='star'),
+                    name='Minimum Volatility',
+                    customdata=[format_hover(min_w_array)],
+                    hovertemplate="<b>%{y:.2f}%</b> Rendement, %{x:.2f}% Volatilité<br><br><b>Allocation:</b><br>%{customdata}<extra></extra>"
+                ))
+                
+                # Optimal
+                fig_ef.add_trace(go.Scatter(
+                    x=[opt_vol*100], y=[opt_mean*100],
+                    mode='markers', marker=dict(size=16, color='#ff00ff', symbol='diamond'),
+                    name=f'Optimal ({selected_opt_metric.capitalize()})',
+                    customdata=[format_hover(opt_w_array)],
+                    hovertemplate="<b>%{y:.2f}%</b> Rendement, %{x:.2f}% Volatilité<br><br><b>Allocation:</b><br>%{customdata}<extra></extra>"
+                ))
 
-    st.divider()
-
-    # =========================================================
-    # SECTION 2: ANALYSE DE PERFORMANCE FOREX
-    # =========================================================
-    st.subheader("Analyse de Performance Forex")
-    
-    col_fx_ui1, col_fx_ui2 = st.columns([2, 1])
-    with col_fx_ui2:
-        inverse_fx = st.toggle("Inverser paires Forex (ex: EUR/USD)", value=False)
-    
-    col1_fx, col2_fx = st.columns(2)
-
-    with col1_fx:
-        st.markdown("**Quadrants PREDITS (Modèle ML)**")
-        scores_fx, conf_fx = get_dynamic_heatmap_data(data.get('daily_forex'), data.get('backtest'), 'smooth_quadrant', selected_metric, inverse_fx=inverse_fx)
-        if not _render_heatmap(scores_fx, conf_fx, data.get('forex_perf'), "Forex — PREDIT", "Paires Forex", selected_metric, height=330):
-            st.info("Données de performance Forex ML non disponibles.")
-
-    with col2_fx:
-        st.markdown("**Quadrants TARGET (Ground Truth)**")
-        scores_fxtgt, conf_fxtgt = get_dynamic_heatmap_data(data.get('daily_forex'), data.get('quadrants'), 'target_quadrant', selected_metric, inverse_fx=inverse_fx)
-        if not _render_heatmap(scores_fxtgt, conf_fxtgt, data.get('forex_perf_target'), "Forex — TARGET", "Paires Forex cibles", selected_metric, height=330):
-            st.info("Données de performance Forex Target non disponibles.")
-
-    with st.expander("Focus sur le Marché des Changes (Forex)", expanded=False):
-        st.markdown(
-            "J'ai intégré une analyse spécifique au Forex pour explorer des opportunités de Carry Trading. "
-            "Les Ratios de Sharpe affichés incluent les swaps d'intérêt journaliers.\n\n"
-            "**Observations :**\n\n"
-            "- Bien que le modèle identifie des disparités (ex: force du JPY ou de l'USD selon les quadrants), aucune stratégie systématique n'a été retenue pour le moment.\n"
-            "- Le modèle évoluant principalement en Q2 et Q4 (avec Q1/Q3 comme phases de transition rapides), l'extraction d'un \"edge\" persistant sur le Forex reste un défi. Pour l'instant, je juge la fiabilité des classes d'actifs (Actions/Obligations) supérieure."
-        )
-
+                # Red Star: Official Backtest Allocation
+                if bt_mean is not None and bt_vol is not None:
+                    fig_ef.add_trace(go.Scatter(
+                        x=[bt_vol*100], y=[bt_mean*100],
+                        mode='markers', marker=dict(size=18, color='red', symbol='star-diamond', line=dict(width=2, color='white')),
+                        name='Configuration Officielle (Backtest)',
+                        customdata=[format_hover(backtest_w_array)],
+                        hovertemplate="<b>%{y:.2f}%</b> Rendement, %{x:.2f}% Volatilité<br><br><b>ALLOCATION OFFICIELLE:</b><br>%{customdata}<extra></extra>"
+                    ))
+                
+                fig_ef.update_layout(
+                    title=f"Frontière Efficiente — {QUADRANT_NAMES[selected_q]}",
+                    xaxis_title="Volatilité Annualisée (%)",
+                    yaxis_title="Rendement Annualisé (%)",
+                    legend=dict(yanchor="top", y=-0.15, xanchor="center", x=0.5, orientation="h")
+                )
+                
+                st.plotly_chart(fig_ef, use_container_width=True)
+                
+                # Composition du Portefeuille Optimal
+                st.markdown(f"**Composition du Portefeuille Optimal ({selected_opt_metric.capitalize()}) :**")
+                weights_s = pd.Series(opt_w).sort_values(ascending=False)
+                # Strict 5% display filter
+                weights_s = weights_s[weights_s >= 0.049].round(4) * 100
+                st.dataframe(pd.DataFrame({'Allocation (%)': weights_s.round(2)}).T)
+                
+        except Exception as e:
+            st.error(f"Erreur lors du calcul de la Frontière Efficiente : {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+            
     st.divider()
 
     # =========================================================
     # SECTION 3: SIGNAUX DE CONVICTION STRUCTURELLE (Intensité du Régime)
     # =========================================================
     st.subheader("Signaux de Conviction Structurelle")
+
+    col_ui1, col_ui2 = st.columns([2, 1])
+    with col_ui1:
+        selected_metric = st.selectbox(
+            "Choisissez la Métrique d'Évaluation :",
+            ["Sharpe Ratio", "Sortino Ratio", "Win Rate (% de jours positifs)"],
+            index=0,
+            help="Sharpe: Rendement vs Volatilité Globale | Sortino: Rendement vs Volatilité à la Baisse | Win Rate: % de Jours Positifs"
+        )
+    with col_ui2:
+        inverse_fx = st.toggle("Inverser paires Forex (ex: EUR/USD)", value=False)
+
     st.markdown(
         "Cette section affiche la performance uniquement lors des jours où le modèle a une **forte conviction** sur le régime macro-économique. "
         "Ce niveau de conviction traduit un **alignement fort des différents indicateurs** économiques en faveur d'un quadrant spécifique. "
@@ -470,52 +679,56 @@ def render(data):
             "Les quadrants sont définis par deux indicateurs clés (proxies) :\n\n"
             "- **Axe Croissance :** High Yield Bond Spread (le risque de crédit comme proxy de la croissance).\n"
             "- **Axe Inflation :** 10Y Breakeven Inflation Rate (les anticipations d'inflation du marché obligataire).\n\n"
-            "**Détail de la Répartition par Régime :**"
+            "**Détail de la Répartition par Régime (Issue du Modèle d'Optimisation Dynamique Z-Score) :**"
         )
+        
+        # Extract base weights for each quadrant from backtest output
+        q_weights = {}
+        if data.get('backtest') is not None:
+            df_b = data['backtest']
+            weight_cols = [c for c in df_b.columns if c.endswith('_base_weight') and '_hc_' not in c]
+            for q in [1, 2, 3, 4]:
+                df_q = df_b[df_b['smooth_quadrant'] == q]
+                if not df_q.empty:
+                    # Take the mean of base_weights (which are constant per quadrant) to get the exact optimizer output
+                    w_q = df_q[weight_cols].median()
+                    w_q = w_q[w_q > 0.005].sort_values(ascending=False) * 100
+                    q_weights[q] = w_q
 
         c1, c2, c3, c4 = st.columns(4)
 
         with c1:
-            st.markdown(
-                "**Q1 | Croissance Saine (Goldilocks)**\n\n"
-                "*C'est la phase d'expansion où le risque est récompensé.*\n"
-                "- 40% NASDAQ_100 (Moteur de performance technologique)\n"
-                "- 30% SmallCAP (Bêta élevé pour maximiser la hausse)\n"
-                "- 30% S&P 500 (Large caps pour la stabilité relative)"
-            )
+            st.markdown("**Q1 | Croissance Saine**\n*Expansion, risque récompensé.*")
+            if 1 in q_weights:
+                for idx, val in q_weights[1].items():
+                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                    st.markdown(f"- {val:.1f}% {asset_name}")
 
         with c2:
-            st.markdown(
-                "**Q2 | Inflation**\n\n"
-                "*Le régime où le pricing power et la cyclicité jouent à plein.*\n"
-                "- 40% S&P 500 (Dominance des grandes capitalisations)\n"
-                "- 30% NASDAQ_100 (Exposition Growth réagissant à l'inflation)\n"
-                "- 30% SmallCAP (Effet cyclique de rattrapage)"
-            )
+            st.markdown("**Q2 | Inflation**\n*Pricing power et matières premières.*")
+            if 2 in q_weights:
+                for idx, val in q_weights[2].items():
+                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                    st.markdown(f"- {val:.1f}% {asset_name}")
 
         with c3:
-            st.markdown(
-                "**Q3 | Stagflation (Défense Totale)**\n\n"
-                "*Protection du capital contre la baisse de croissance et la hausse des prix.*\n"
-                "- 40% Or (GOLD) (Valeur refuge ultime)\n"
-                "- 30% Matières Premières (COMMODITIES) (Hedge direct contre l'inflation)\n"
-                "- 30% Treasuries 10Y (Sécurité obligataire face aux actions)"
-            )
+            st.markdown("**Q3 | Stagflation**\n*Protection contre baisse et hausse des prix.*")
+            if 3 in q_weights:
+                for idx, val in q_weights[3].items():
+                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                    st.markdown(f"- {val:.1f}% {asset_name}")
 
         with c4:
-            st.markdown(
-                "**Q4 | Crash Déflationniste (Le Bunker)**\n\n"
-                "*Priorité absolue à la sécurité et à la décorrélation des actions.*\n"
-                "- 50% Treasuries 10Y (Profite de la baisse des taux directeurs)\n"
-                "- 30% Or (GOLD) (Refuge ultime en cas de crise majeure)\n"
-                "- 20% Obligations (IG) (Rendement sécurisé sur le crédit solide)"
-            )
+            st.markdown("**Q4 | Crash Déflationniste**\n*Priorité à la sécurité et décorrélation.*")
+            if 4 in q_weights:
+                for idx, val in q_weights[4].items():
+                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                    st.markdown(f"- {val:.1f}% {asset_name}")
 
         st.info(
             " **Overlay Risk-Off (Filtre de Tendance) :** "
             "En complément de cette allocation socle par régime macro, une protection systématique de suivi de tendance (**MA 200 jours**) est active. "
             "Si le S&P 500, le NASDAQ 100 ou l'Or clôturent sous leur moyenne mobile à 200 jours pendant 5 jours consécutifs, leur pondération est instantanément coupée à 0% et réallouée en bons du Trésor à 10 ans (Treasuries) jusqu'à ce que la tendance soit reprise."
         )
-
 
     st.divider()

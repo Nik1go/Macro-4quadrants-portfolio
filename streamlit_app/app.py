@@ -10,7 +10,12 @@ st.set_page_config(
     initial_sidebar_state="auto"
 )
 
-# Add current dir to path for imports
+# Add project root to path for core logic imports (bot, models, etc.)
+repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if repo_root not in sys.path:
+    sys.path.append(repo_root)
+
+# Existing path logic for local pages
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Initialize session state for routing
@@ -180,7 +185,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research","Portfolio Optimization"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research","Portfolio Optimization", "Polymarket Arbitrage"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -192,7 +197,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier"], 
+            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier","activity"], 
             #bootstrap icons (7 icons for 7 options)
             menu_icon="cast",
             default_index=default_idx,
@@ -378,6 +383,21 @@ def render_home():
         
     
     col7, col8, col9 = st.columns(3)
+
+    with col7:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+            <h3><i class="bi bi-activity"></i> Polymarket Arbitrage</h3>
+            <p>l'objectif est de décelé grace a black-scholes des opportunité d'arbitrage entre polymarket et Binance.
+            En partant du principe que polymarket propose des contrat forward binaire 
+            </p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_poly", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Polymarket Arbitrage"
+            st.rerun()
     
    
     st.markdown("---")
@@ -453,11 +473,23 @@ if __name__ == "__main__":
             app_optimizer.render()
         except Exception as e:
             st.error(f"Could not load the Portfolio Optimizer app: {str(e)}")
-   
+
+
+    elif st.session_state.current_page == "Polymarket Arbitrage":
+        _render_nav_sidebar("Polymarket Arbitrage")
+        try:
+            apply_home_css()
+            import polymarket_arbitrage_ui.app_poly_arb as app_polymarket
+            app_polymarket.render()
+        except Exception as e:
+            st.error(f"Could not load the Polymarket Arbitrage app: {str(e)}")
+            st.info("Check if polymarket_arbitrage_ui is correctly installed in streamlit_app/.")
+
     elif st.session_state.current_page == "Equity Research":
         _render_nav_sidebar("Equity Research")
         st.title("Equity Research")
         st.write("Page under construction...")
+    
 
     else:
         st.session_state.current_page = "Home"

@@ -81,6 +81,11 @@ def load_data():
         data['daily_forex'] = pd.read_parquet(f"{base_dir}/output_dag/Forex_daily.parquet")
     except:
         data['daily_forex'] = None
+        
+    try:
+        data['indicators'] = pd.read_csv(f"{base_dir}/output_dag/combined_indicators.csv", parse_dates=['date'])
+    except:
+        data['indicators'] = None
     
     # --- Load Raw Indicators (for true publication dates & filtering out daily noise) ---
     raw_indicators = []

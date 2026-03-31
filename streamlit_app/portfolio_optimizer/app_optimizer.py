@@ -22,15 +22,12 @@ def fetch_data(tickers):
         st.error(f"Error fetching data: {e}")
         return pd.DataFrame()
 
-# --- 1. FONCTIONS MATHÉMATIQUES ---
 def portfolio_performance(weights, returns, cov_matrix):
     # Le rendement du portefeuille = somme(poids * rendements moyens)
-    # * 252 car il y a 252 jours de bourse dans une année (annualisation)
     mean_returns = returns.mean()
     p_ret = np.sum(mean_returns * weights) * 252
     
-    # La volatilité = racine_carrée(Poids_Transposés * Matrice_Covariance * Poids)
-    # C'est la formule classique de Markowitz !
+    # La volatilité = racine_carrée(Poids_Transposés * Matrice_Covariance * Poids) Markowitz
     p_vol = np.sqrt(np.dot(weights.T, np.dot(cov_matrix * 252, weights)))
     return p_ret, p_vol
 
@@ -81,6 +78,8 @@ def optimize_portfolio(data):
 def render():
     st.title("Portfolio Optimizer (SciPy)")
     st.markdown("L'objectif est d'optimiser la pondération de chaque indice pour construire le portefeuille le plus robuste possible (**Max Sharpe**).")
+    
+    st.markdown("pour cela j'utilise donc scipy et markowitz")
     st.markdown("Actifs étudiés : **" + " / ".join(tickers) + "**")
     st.markdown(f"Période d'historique : du **{START_DATE}** au **{END_DATE}**")
     

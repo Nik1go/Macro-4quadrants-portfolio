@@ -4,7 +4,7 @@ import numpy as np
 
 def render():
     import dca_strat.dca_utils as du
-    st.title("💰 DCA Investment Strategy")
+    st.title("DCA Investment Strategy")
     st.markdown("illustration et optimisation d'une stratégie de DCA (Dollar Cost Averaging). "
                 "Ayant moi-même un petit capital, j'utilise le DCA pour une partie de mon portefeuille (40%) "
                 "et je cherchais un moyen de l'optimiser pour améliorer mes rendements "
