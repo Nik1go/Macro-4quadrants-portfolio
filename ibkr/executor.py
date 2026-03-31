@@ -18,66 +18,12 @@ from .config import (
     ETF_MAPPING, REBALANCE_THRESHOLD, HOST, CURRENT_PORT, CLIENT_ID
 )
 
-# Strategy allocations (same as backtest_strategy.py)
-ALLOCATIONS = {
-    # Q1 (Growth): Risk-on
-    1: {
-        'NASDAQ_100': 0.4,
-        'SmallCAP': 0.3,
-        'SP500': 0.3,
-        'US_REIT_VNQ': 0.0,
-        'GOLD_OZ_USD': 0.0,
-        'TREASURY_10Y': 0.0,
-        'OBLIGATION': 0.0,
-        'COMMODITIES': 0.0
-    },
-    # Q2 (Inflation): Quality & Real Assets
-    2: {
-        'SP500': 0.4,
-        'GOLD_OZ_USD': 0.3,
-        'COMMODITIES': 0.2,
-        'NASDAQ_100': 0.1,
-        'SmallCAP': 0.0,
-        'TREASURY_10Y': 0.0,
-        'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0
-    },
-    # Q3 (Stagflation): Full Defensive
-    3: {
-        'GOLD_OZ_USD': 0.6,
-        'COMMODITIES': 0.2,
-        'TREASURY_10Y': 0.2,
-        'NASDAQ_100': 0.0,
-        'SP500': 0.0,
-        'SmallCAP': 0.0,
-        'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0
-    },
-    # Q4 (Deflation/Crash): Bunker Mode
-    4: {
-        'TREASURY_10Y': 0.6,
-        'GOLD_OZ_USD': 0.4,
-        'SP500': 0.0,
-        'NASDAQ_100': 0.0,
-        'SmallCAP': 0.0,
-        'US_REIT_VNQ': 0.0,
-        'OBLIGATION': 0.0,
-        'COMMODITIES': 0.0
-    },
-}
-
 logger = logging.getLogger(__name__)
 
 
 def get_current_quadrant(backtest_output_dir: str) -> int:
     """
     Read the current (latest) quadrant from backtest results.
-    
-    Args:
-        backtest_output_dir: Path to backtest results directory
-        
-    Returns:
-        Current quadrant (1-4)
     """
     timeseries_path = os.path.join(backtest_output_dir, "backtest_timeseries.csv")
     
@@ -96,20 +42,38 @@ def get_current_quadrant(backtest_output_dir: str) -> int:
     return latest_quadrant
 
 
-def get_target_weights(quadrant: int) -> Dict[str, float]:
+def get_target_weights(backtest_output_dir: str) -> Dict[str, float]:
     """
-    Get target portfolio weights for a given quadrant.
-    
-    Args:
-        quadrant: Economic quadrant (1-4)
+    Read target portfolio weights from backtest results (dynamic optimization).
+    Returns a dict of {asset: weight}.
+    """
+    timeseries_path = os.path.join(backtest_output_dir, "backtest_timeseries.csv")
+    if not os.path.exists(timeseries_path):
+        raise FileNotFoundError(f"Backtest results not found: {timeseries_path}")
         
-    Returns:
-        Dict of asset weights
-    """
-    if quadrant not in ALLOCATIONS:
-        raise ValueError(f"Invalid quadrant: {quadrant}. Must be 1-4.")
+    df = pd.read_csv(timeseries_path)
+    if df.empty:
+        raise ValueError("Backtest timeseries is empty")
+        
+    # Take the last row (latest optimized state)
+    last_row = df.iloc[-1]
     
-    return ALLOCATIONS[quadrant]
+    # Extract columns ending with _base_weight
+    # These match our internal asset names: SP500_base_weight -> SP500
+    weight_cols = [c for c in df.columns if c.endswith('_base_weight')]
+    
+    target_weights = {}
+    for col in weight_cols:
+        asset_name = col.replace('_base_weight', '')
+        weight = float(last_row[col])
+        if weight >= 0.0:
+            target_weights[asset_name] = weight
+            
+    # Verification: total weight should be approx 1.0 (some assets might be 0)
+    total_w = sum(target_weights.values())
+    logger.info(f"Dynamically loaded weights (Total={total_w:.1%}): {target_weights}")
+    
+    return target_weights
 
 
 def execute_strategy(
@@ -159,14 +123,14 @@ def execute_strategy(
     os.makedirs(execution_log_dir, exist_ok=True)
     
     try:
-        # 1. Get current quadrant from backtest
+        # 1. Get current quadrant from backtest (for logging/metadata)
         quadrant = get_current_quadrant(backtest_output_dir)
         result['quadrant'] = quadrant
         
-        # 2. Get target weights for this quadrant
-        target_weights = get_target_weights(quadrant)
+        # 2. Get target weights dynamically from backtest results
+        target_weights = get_target_weights(backtest_output_dir)
         result['target_weights'] = target_weights
-        logger.info(f"Target weights for Q{quadrant}: {target_weights}")
+        logger.info(f"Target weights loaded from CSV (Quadrant Q{quadrant}): {target_weights}")
         
         # 3. Connect to IBKR and get current positions
         pm = PortfolioManager()
