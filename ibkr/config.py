@@ -84,3 +84,9 @@ EXECUTION_TIMING = "market_open"
 SKIP_WEEKENDS = True
 SKIP_US_HOLIDAYS = True
 
+# ===== DATA PATHS (Fallback) =====
+import os
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ASSETS_DATA_PATH = os.path.join(BASE_DIR, "data", "US", "output_dag", "Assets_daily.parquet")
+FOREX_DATA_PATH = os.path.join(BASE_DIR, "data", "US", "output_dag", "Forex_daily.parquet")
+

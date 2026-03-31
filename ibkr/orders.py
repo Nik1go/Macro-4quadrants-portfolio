@@ -9,12 +9,14 @@ from typing import Dict, List, Optional
 import logging
 
 from ib_insync import IB, Stock, MarketOrder, LimitOrder
+import pandas as pd
+import os
 
 from .connection import IBKRConnection
 from .config import (
     REBALANCE_THRESHOLD, MAX_ORDER_VALUE_USD, MIN_ORDER_SIZE_USD,
     ORDER_TYPE, CONTRACT_DETAILS, HOST, CURRENT_PORT, CLIENT_ID,
-    CONNECTION_TIMEOUT, ETF_MAPPING
+    CONNECTION_TIMEOUT, ETF_MAPPING, ASSETS_DATA_PATH, FOREX_DATA_PATH
 )
 
 logger = logging.getLogger(__name__)
@@ -142,11 +144,37 @@ class OrderManager:
                 logger.info(f"{asset_name} ({ibkr_symbol}): IBKR close = €{ticker.close:.2f}")
                 return ticker.close
                 
-            logger.warning(f"No price data for {asset_name} ({ibkr_symbol})")
-            return None
+            logger.warning(f"No price data for {asset_name} ({ibkr_symbol}) from IBKR")
+            return self._get_fallback_price(asset_name)
             
         except Exception as e:
             logger.error(f"IBKR price fetch failed for {ibkr_symbol}: {e}")
+            return self._get_fallback_price(asset_name)
+
+    def _get_fallback_price(self, asset_name: str) -> Optional[float]:
+        """Read last known price from local data files if IBKR API fails."""
+        try:
+            # Check if it's a forex pair
+            if asset_name in ['USD_JPY', 'USD_EUR']:
+                if not os.path.exists(FOREX_DATA_PATH):
+                    return None
+                df = pd.read_parquet(FOREX_DATA_PATH)
+                if asset_name in df.columns:
+                    price = float(df[asset_name].iloc[-1])
+                    logger.info(f"Fallback selected for {asset_name}: {price:.4f} (Local Data)")
+                    return price
+            else:
+                # Standard ETF/Asset
+                if not os.path.exists(ASSETS_DATA_PATH):
+                    return None
+                df = pd.read_parquet(ASSETS_DATA_PATH)
+                if asset_name in df.columns:
+                    price = float(df[asset_name].iloc[-1])
+                    logger.info(f"Fallback selected for {asset_name}: {price:.4f} (Local Data)")
+                    return price
+            return None
+        except Exception as e:
+            logger.error(f"Fallback price fetch failed for {asset_name}: {e}")
             return None
     
     def calculate_rebalance_orders(
@@ -313,11 +341,11 @@ class OrderManager:
                 
                 # Create order
                 if ORDER_TYPE == 'MKT':
-                    ib_order = MarketOrder(order.action, order.shares)
+                    ib_order = MarketOrder(order.action, order.shares, tif='DAY')
                 else:
                     # For limit orders, use current price
                     price = self.get_current_price(order.asset_name)
-                    ib_order = LimitOrder(order.action, order.shares, price)
+                    ib_order = LimitOrder(order.action, order.shares, price, tif='DAY')
                 
                 # Place order
                 trade = self.ib.placeOrder(contract, ib_order)
