@@ -35,10 +35,11 @@ ETF_MAPPING = {
 
 # Contract detail overrides (optional - if SMART routing fails or needs primaryExchange)
 CONTRACT_DETAILS = {
-    'SXRM': {'primaryExchange': 'IBIS', 'currency': 'EUR'}, # Xetra
+    'SXRM': {'primaryExchange': 'IBIS2', 'currency': 'EUR'}, # Xetra
+    'LQDE': {'primaryExchange': 'IBIS2', 'currency': 'EUR'}, # Xetra
     'DXS3': {'secIdType': 'ISIN', 'secId': 'LU0322251520', 'exchange': 'SMART', 'currency': 'EUR'},
     'USD_JPY': {'symbol': 'USD', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'JPY'},
-    'USD_EUR': {'symbol': 'USD', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'EUR'},
+    'USD_EUR': {'symbol': 'EUR', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'USD'},
 }
 
 # Yahoo Finance tickers (used for price lookup - need exchange suffix)
