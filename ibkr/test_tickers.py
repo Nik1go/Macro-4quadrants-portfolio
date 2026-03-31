@@ -1,12 +1,10 @@
 import sys
 import logging
 import asyncio
+import nest_asyncio
 
-# Create dummy event loop if not present
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
+# Initialize nest_asyncio to avoid loop conflicts
+nest_asyncio.apply()
 
 from ib_insync import IB, Contract
 from ibkr.config import ETF_MAPPING, CONTRACT_DETAILS, HOST, CURRENT_PORT, CLIENT_ID
