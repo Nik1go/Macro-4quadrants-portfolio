@@ -285,7 +285,7 @@ class OrderManager:
             orders.append(order)
             
             logger.info(
-                f"Order: {action} {shares} {symbol} "
+                f"Order: {action} {shares} {real_symbol} "
                 f"(~${order.estimated_value:.2f}) "
                 f"[{current_weight:.1%} → {target_weight:.1%}]"
             )
