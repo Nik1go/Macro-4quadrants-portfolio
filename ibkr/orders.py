@@ -129,12 +129,21 @@ class OrderManager:
             
             logger.info(f"Contract found: {ibkr_symbol} conId={contract.conId}")
             
+            # Skip IBKR market data request for Forex and go straight to fallback
+            # This prevents Error 10089 (Requires Subscription) and Error 300
+            if contract.secType == 'CASH':
+                logger.warning(f"No price data for {asset_name} ({ibkr_symbol}) from IBKR")
+                return self._get_fallback_price(asset_name)
+            
             # Request delayed market data
             ticker = self.ib.reqMktData(contract, '', False, False)
             self.ib.sleep(3)  # Wait for delayed data
             
             # Try market price first
             price = ticker.marketPrice()
+            
+            # Only cancel if we actually got a valid ticker ID to prevent Error 300
+            # though skipping CASH should resolve the main cause.
             self.ib.cancelMktData(contract)
             
             if price and price > 0 and not (price != price):  # Check for NaN

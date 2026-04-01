@@ -58,13 +58,13 @@ def get_target_weights(backtest_output_dir: str) -> Dict[str, float]:
     # Take the last row (latest optimized state)
     last_row = df.iloc[-1]
     
-    # Extract columns ending with _base_weight
-    # These match our internal asset names: SP500_base_weight -> SP500
-    weight_cols = [c for c in df.columns if c.endswith('_base_weight')]
+    # Extract columns ending with _weight but exclude _base_weight and _hc_weight
+    # This selects the final '_weight' columns which include the Trend Following overlay
+    weight_cols = [c for c in df.columns if c.endswith('_weight') and not c.endswith('_base_weight') and not c.endswith('_hc_weight')]
     
     target_weights = {}
     for col in weight_cols:
-        asset_name = col.replace('_base_weight', '')
+        asset_name = col.replace('_weight', '')
         weight = float(last_row[col])
         if weight >= 0.0:
             target_weights[asset_name] = weight

@@ -129,38 +129,23 @@ def main():
     # Combine assets + forex
     df_a_combined = pd.merge(df_a, df_f, left_index=True, right_index=True, how='outer').ffill()
 
-    # Dynamic PyPortfolioOpt per quadrant
-    print("Optimization des Poids en cours...")
+    # Option 1: Poids Bloqués par Régime (Locked Weights) au lieu d'optimisation Monte Carlo dynamique continuelle
+    # Ceci empêche l'overfitting (suroptimisation) et réduit les frictions inutiles pour l'exécuteur.
+    print("Application des Poids fixes (Locked Weights Option 1) en cours...")
+    
+    LOCKED_WEIGHTS = {
+        1: {'SP500': 0.40, 'NASDAQ_100': 0.40, 'US_REIT_VNQ': 0.20},
+        2: {'GOLD_OZ_USD': 0.40, 'NASDAQ_100': 0.40, 'COMMODITIES': 0.15, 'SP500': 0.05},
+        3: {'USD_JPY': 0.40, 'USD_EUR': 0.25, 'SHORT_SP500': 0.20, 'COMMODITIES': 0.15},
+        4: {'TREASURY_10Y': 0.40, 'GOLD_OZ_USD': 0.35, 'OBLIGATION': 0.25}
+    }
+    
     for q in [1, 2, 3, 4]:
-        q_dates = df_q[df_q['assigned_quadrant'] == q].index.intersection(df_returns_all.index)
-        if len(q_dates) < 50:
-            print(f"   [Alerte] Manque de données pour le quadrant {q}. Poids uniformes utilisés.")
-            WEIGHTS[q] = {a: 1.0/len(ASSETS) for a in ASSETS}
-            continue
-            
-        # We use TAUX_FED as RF Rate
-        rf = 0.02
-        shared_idx = q_dates.intersection(df_ind.index)
-        if len(shared_idx) > 0 and 'TAUX_FED' in df_ind.columns:
-            rf = df_ind.loc[shared_idx, 'TAUX_FED'].mean() / 100.0
-            
-        TARGET_ASSETS = {
-            1: ['NASDAQ_100', 'SmallCAP', 'SP500', 'US_REIT_VNQ'],
-            2: ['NASDAQ_100', 'SmallCAP', 'SP500', 'GOLD_OZ_USD', 'COMMODITIES'],
-            3: ['SHORT_SP500', 'COMMODITIES', 'USD_JPY', 'USD_EUR'],
-            4: ['TREASURY_10Y', 'OBLIGATION', 'GOLD_OZ_USD']
-        }
-        
-        allowed_assets = [c for c in TARGET_ASSETS.get(q, ASSETS) if c in df_returns_all.columns]
-        ret_q = df_returns_all.loc[q_dates, allowed_assets].fillna(0)
-            
-        opt_w = optimize_for_metric(ret_q, rf, metric="custom", max_weight=0.40)
-        # Ensure all ASSETS are present
+        WEIGHTS[q] = {}
+        # Ensure all ASSETS are present (fill missing with 0.0)
         for a in ASSETS:
-            if a not in opt_w:
-                opt_w[a] = 0.0
-        WEIGHTS[q] = opt_w
-        print(f"Optimal Portfolio for Q{q} Computed via Z-Score Custom Metric.")
+            WEIGHTS[q][a] = LOCKED_WEIGHTS[q].get(a, 0.0)
+        print(f"Poids fixes appliqués pour le Quadrant {q}: {WEIGHTS[q]}")
 
     # ========== 2. INNER JOIN ==========
     df = df_a_combined[ASSETS].join(df_q[['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW']], how='inner')
@@ -189,8 +174,8 @@ def main():
         df[f'{asset}_base_weight'] = df['smooth_quadrant'].map(lambda q: WEIGHTS.get(q, {}).get(asset, 0.0))
 
     # ========== 6. TREND FOLLOWING OVERLAY (MA150 + 5-Day Streak) ==========
-    # Applied to SP500, GOLD_OZ_USD, and NASDAQ_100 for downside protection
-    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100']:
+    # Applied to SP500, GOLD_OZ_USD, NASDAQ_100, and USD_JPY for downside protection
+    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100', 'USD_JPY']:
         df[f'{asset}_MA'] = df[asset].rolling(MA_WINDOW, min_periods=1).mean()
 
         # Below MA streak
@@ -203,7 +188,7 @@ def main():
 
     # ========== 7. RISK-OFF STATE MACHINE (Vectorized) ==========
     # For SP500, GOLD, and NASDAQ: track risk_off state using expanding logic
-    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100']:
+    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100', 'USD_JPY']:
         risk_off = pd.Series(False, index=df.index)
 
         # We need to iterate here due to the state machine nature
@@ -240,7 +225,7 @@ def main():
 
     # Apply risk-off: move weight to Treasury
     treasury_boost = pd.Series(0.0, index=df.index)
-    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100']:
+    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100', 'USD_JPY']:
         risk_off_mask = df[f'{asset}_risk_off']
         weight_to_move = df.loc[risk_off_mask, f'{asset}_weight'].copy()
         df.loc[risk_off_mask, f'{asset}_weight'] = 0.0
@@ -333,7 +318,7 @@ def main():
     stats['hc_total_return'] = (df['hc_wealth'].iloc[-1] / initial_capital) - 1
 
     # Count risk-off switches (including NASDAQ-100)
-    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100']:
+    for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100', 'USD_JPY']:
         stats[f'nb_switch_{asset.lower()}'] = df[f'{asset}_risk_off'].diff().fillna(0).abs().sum() / 2
 
     # ========== 14. EXPORT ==========
