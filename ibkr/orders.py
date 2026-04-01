@@ -244,17 +244,26 @@ class OrderManager:
             # Calculate shares
             if is_forex:
                 # For Forex (CASH), the quantity is in the BASE currency of the pair (the 'real_symbol')
-                # USD.JPY -> quantity is in USD (symbol=USD)
-                # EUR.USD -> quantity is in EUR (symbol=EUR)
+                # USD.JPY -> quantity is in USD (real_symbol=USD)
+                # EUR.USD -> quantity is in EUR (real_symbol=EUR)
                 
                 if real_symbol == base_currency:
-                    # Account base matches contract base (e.g., USD account, USD.JPY pair)
-                    # We want to buy/sell X USD. Quantity IS X.
+                    # Account base matches contract base (e.g., EUR account, EUR.USD pair)
                     shares = int(order_value)
                 else:
-                    # Account base is DIFFERENT from contract base (e.g., USD account, EUR.USD pair)
-                    # To get X USD exposure by trading EUR, we need X / price_of_EURUSD shares.
-                    shares = int(order_value / price)
+                    # Account base is DIFFERENT from contract base (e.g., EUR account, USD.JPY pair)
+                    # We need the cross-rate to convert PortfolioBase to ContractBase.
+                    # As a robust macro fallback for EUR/USD/JPY accounts:
+                    cross_rate = 1.0
+                    if base_currency == 'EUR' and real_symbol == 'USD':
+                        # Need EUR to USD conversion
+                        cross_rate = self._get_fallback_price('USD_EUR') or 1.10 # USD per EUR
+                    elif base_currency == 'USD' and real_symbol == 'EUR':
+                        # Need USD to EUR conversion
+                        cross_rate = 1.0 / (self._get_fallback_price('USD_EUR') or 1.10)
+                    
+                    # Correct shares: order_value (in base) * cross_rate
+                    shares = int(order_value * cross_rate)
             else:
                 # For Stocks/ETFs
                 shares = int(order_value / price)
