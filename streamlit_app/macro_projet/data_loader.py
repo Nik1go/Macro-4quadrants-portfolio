@@ -16,10 +16,10 @@ QUADRANT_NAMES = {1: "Growth", 2: "Inflation", 3: "Stagflation", 4: "Deflation"}
 QUADRANT_COLORS = {1: 'green', 2: 'orange', 3: 'red', 4: 'blue'}
 
 ALLOCATIONS = {
-    1: {"SP500": 40, "NASDAQ_100": 40, "US_REIT_VNQ": 20},
-    2: {"GOLD_OZ_USD": 40, "NASDAQ_100": 40, "COMMODITIES": 15, "SP500": 5},
-    3: {"USD_JPY": 40, "USD_EUR": 25, "SHORT_SP500": 20, "COMMODITIES": 15},
-    4: {"TREASURY_10Y": 40, "GOLD_OZ_USD": 35, "OBLIGATION": 25}
+    1: {"SP500": 0.40, "NASDAQ_100": 0.40, "US_REIT_VNQ": 0.20},
+    2: {"GOLD_OZ_USD": 0.40, "NASDAQ_100": 0.38, "COMMODITIES": 0.11, "SP500": 0.11},
+    3: {"USD_JPY": 0.40, "SHORT_SP500": 0.32, "USD_EUR": 0.18, "COMMODITIES": 0.10},
+    4: {"TREASURY_10Y": 0.40, "GOLD_OZ_USD": 0.38, "OBLIGATION": 0.22}
 }
 
 

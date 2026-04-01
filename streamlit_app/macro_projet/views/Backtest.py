@@ -421,7 +421,9 @@ def render(data):
     # SECTION 2.B: FRONTIERE EFFICIENTE PAR QUADRANT
     # =========================================================
     st.subheader("Optimisation et Frontiere Efficiente (Par Quadrant)")
-    st.markdown("Recherche de l'allocation optimale combinant l'ensemble de notre univers (Actions, Obligations, Or, Forex).")
+    st.markdown("""L'algorithme génère une simulation de Monte-Carlo (*via Numpy*) de **8 000 portefeuilles virtuels**, en testant aléatoirement différentes combinaisons de poids (*weights*) sur notre univers d'actifs. Cette méthode stochastique permet d'explorer la "frontière efficiente" afin de trouver l'allocation statistiquement optimale face au risque.
+    Le **Custom Z-Score Average** est la moyenne pondérée du Z-score de 3 ratios clés (Sharpe, Sortino et Calmar).
+    """)
     
     col_q, col_m = st.columns(2)
     with col_q:
@@ -599,6 +601,8 @@ def render(data):
                 )
                 
                 st.plotly_chart(fig_ef, use_container_width=True)
+                
+                st.markdown("*Note : Dans un souci de simplicité et afin d'éviter un biais de sur-optimisation (overfitting), l'allocation du modèle officiel est arrondie à des chiffres ronds, ce qui explique son léger décalage assumé avec le point optimal théorique Monte-Carlo.*")
                 
                 # Composition du Portefeuille Optimal
                 st.markdown(f"**Composition du Portefeuille Optimal ({selected_opt_metric.capitalize()}) :**")
