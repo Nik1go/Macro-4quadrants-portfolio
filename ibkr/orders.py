@@ -189,15 +189,6 @@ class OrderManager:
     ) -> List[RebalanceOrder]:
         """
         Calculate orders needed to rebalance portfolio.
-        
-        Args:
-            current_weights: Current portfolio weights by asset
-            target_weights: Target portfolio weights by asset
-            portfolio_value: Total portfolio value in USD
-            threshold: Minimum weight difference to trigger rebalance (default 2%)
-            
-        Returns:
-            List of RebalanceOrder objects (SELL orders first, then BUY)
         """
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
@@ -208,85 +199,77 @@ class OrderManager:
             current_weight = current_weights.get(asset_name, 0.0)
             weight_delta = target_weight - current_weight
             
-            # Skip if delta is below threshold
             if abs(weight_delta) < threshold:
-                logger.debug(f"{asset_name}: delta {weight_delta:.2%} < threshold {threshold:.2%}, skipping")
                 continue
             
-            # Calculate order value
-            order_value = abs(weight_delta) * portfolio_value
+            # Order value in account base (e.g., EUR)
+            order_value_in_base = abs(weight_delta) * portfolio_value
             
-            # Skip dust orders
-            if order_value < MIN_ORDER_SIZE_USD:
-                logger.debug(f"{asset_name}: order value ${order_value:.2f} < min ${MIN_ORDER_SIZE_USD}, skipping")
+            if order_value_in_base < MIN_ORDER_SIZE_USD:
                 continue
             
-            # Cap order value for safety
-            if order_value > MAX_ORDER_VALUE_USD:
-                logger.warning(f"{asset_name}: order value ${order_value:.2f} exceeds max ${MAX_ORDER_VALUE_USD}, capping")
-                order_value = MAX_ORDER_VALUE_USD
-            
-            # Get contract details to check type
             mapping_symbol = ETF_MAPPING.get(asset_name)
             if not mapping_symbol:
-                logger.error(f"No symbol mapping for asset: {asset_name}")
                 continue
                 
             details = CONTRACT_DETAILS.get(mapping_symbol, {})
             is_forex = details.get('secType') == 'CASH'
-            real_symbol = details.get('symbol', mapping_symbol) # e.g., 'EUR' for USD_EUR
+            real_symbol = details.get('symbol', mapping_symbol)
             
             price = self.get_current_price(asset_name)
             if not price:
-                logger.error(f"Could not get price for {asset_name}, skipping")
                 continue
             
             # Calculate shares
+            cross_rate_to_base = 1.0 # Price of real_symbol in base_currency
+            
             if is_forex:
-                # For Forex (CASH), the quantity is in the BASE currency of the pair (the 'real_symbol')
-                # USD.JPY -> quantity is in USD (real_symbol=USD)
-                # EUR.USD -> quantity is in EUR (real_symbol=EUR)
-                
                 if real_symbol == base_currency:
-                    # Account base matches contract base (e.g., EUR account, EUR.USD pair)
-                    shares = int(order_value)
+                    # e.g., EUR account trading EUR.USD
+                    shares = int(order_value_in_base)
+                    cross_rate_to_base = 1.0
                 else:
-                    # Account base is DIFFERENT from contract base (e.g., EUR account, USD.JPY pair)
-                    # We need the cross-rate to convert PortfolioBase to ContractBase.
-                    # As a robust macro fallback for EUR/USD/JPY accounts:
-                    cross_rate = 1.0
-                    if base_currency == 'EUR' and real_symbol == 'USD':
-                        # Need EUR to USD conversion
-                        cross_rate = self._get_fallback_price('USD_EUR') or 1.10 # USD per EUR
-                    elif base_currency == 'USD' and real_symbol == 'EUR':
-                        # Need USD to EUR conversion
-                        cross_rate = 1.0 / (self._get_fallback_price('USD_EUR') or 1.10)
+                    # e.g., EUR account trading USD.JPY
+                    # We need the price of USD in EUR (USD_EUR in local data)
+                    usd_eur_price = self._get_fallback_price('USD_EUR')
+                    if not usd_eur_price:
+                        logger.error("❌ Conversion impossible : USD_EUR manquant dans les données locales.")
+                        continue
                     
-                    # Correct shares: order_value (in base) * cross_rate
-                    shares = int(order_value * cross_rate)
+                    if base_currency == 'EUR' and real_symbol == 'USD':
+                        # rate is EUR per USD (e.g., 0.92)
+                        # To get X EUR of USD, we need X / 0.92 USD
+                        shares = int(order_value_in_base / usd_eur_price)
+                        cross_rate_to_base = usd_eur_price
+                    elif base_currency == 'USD' and real_symbol == 'EUR':
+                        # rate is EUR per USD, so USD per EUR is 1/rate
+                        shares = int(order_value_in_base * usd_eur_price)
+                        cross_rate_to_base = 1.0 / usd_eur_price
+                    else:
+                        shares = int(order_value_in_base / price)
+                        cross_rate_to_base = price # Fallback
             else:
-                # For Stocks/ETFs
-                shares = int(order_value / price)
-                
+                shares = int(order_value_in_base / price)
+                cross_rate_to_base = price
+
             if shares < 1:
-                logger.debug(f"{asset_name}: calculated shares < 1, skipping")
                 continue
             
-            # Directions for Forex inversion
+            # Direction
             action = 'BUY' if weight_delta > 0 else 'SELL'
-            
             if is_forex and asset_name.startswith('USD_') and not real_symbol.startswith('USD'):
-                # Inversion: Asset objective is USD, but contract base is NOT USD (e.g., EUR.USD)
-                # To get USD (BUY USD_EUR), we must SELL the base (EUR)
                 action = 'SELL' if weight_delta > 0 else 'BUY'
-                logger.info(f"Forex Action Inversion for {asset_name} ({real_symbol}): {weight_delta:+.2%} -> {action}")
+                logger.info(f"Forex Inversion for {asset_name}: {action}")
+
+            # Est value in EUR
+            est_val_in_base = shares * cross_rate_to_base
 
             order = RebalanceOrder(
                 asset_name=asset_name,
                 symbol=real_symbol,
                 action=action,
                 shares=shares,
-                estimated_value=shares * price if real_symbol != base_currency else shares,
+                estimated_value=est_val_in_base,
                 current_weight=current_weight,
                 target_weight=target_weight,
                 weight_delta=weight_delta
@@ -295,13 +278,11 @@ class OrderManager:
             
             logger.info(
                 f"Order: {action} {shares} {real_symbol} "
-                f"(~${order.estimated_value:.2f}) "
+                f"(~{est_val_in_base:.2f} {base_currency}) "
                 f"[{current_weight:.1%} → {target_weight:.1%}]"
             )
         
-        # Sort: SELL orders first (to free up cash), then BUY
         orders.sort(key=lambda x: (0 if x.action == 'SELL' else 1, -x.estimated_value))
-        
         return orders
     
     def execute_orders(
