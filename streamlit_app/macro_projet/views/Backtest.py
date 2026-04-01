@@ -371,7 +371,11 @@ def render(data):
             w = config['wealth']
             p = config['prefix']
             
-            if w is not None and not w.empty:
+            if w is not None and len(w) > 0:
+                # Ensure w is a pandas Series for .iloc support
+                if isinstance(w, np.ndarray):
+                    w = pd.Series(w)
+                    
                 # Calculated Metrics
                 tot_ret = (w.iloc[-1] / w.iloc[0]) - 1
                 cagr = (1 + tot_ret) ** (1 / years) - 1

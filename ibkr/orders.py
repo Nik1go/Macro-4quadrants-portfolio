@@ -223,25 +223,54 @@ class OrderManager:
                 logger.warning(f"{asset_name}: order value ${order_value:.2f} exceeds max ${MAX_ORDER_VALUE_USD}, capping")
                 order_value = MAX_ORDER_VALUE_USD
             
-            # Get symbol and current price
+            # Get contract details to check type
             symbol = ETF_MAPPING.get(asset_name)
             if not symbol:
-                logger.error(f"No symbol mapping for {asset_name}")
+                logger.error(f"No symbol mapping for asset: {asset_name}")
                 continue
+                
+            details = CONTRACT_DETAILS.get(symbol, {})
+            is_forex = details.get('secType') == 'CASH'
             
-            price = self.get_current_price(asset_name)  # Now uses asset_name
+            price = self.get_current_price(asset_name)
             if not price:
                 logger.error(f"Could not get price for {asset_name}, skipping")
                 continue
             
             # Calculate shares
-            shares = int(order_value / price)
+            if is_forex:
+                # For Forex (CASH), the quantity is in the BASE currency (the 'symbol')
+                # USD.JPY -> quantity is in USD
+                # EUR.USD -> quantity is in EUR
+                
+                if symbol.startswith('USD'):
+                    # Pair like USD.JPY or USD.CAD: quantity is in USD
+                    # order_value is already in USD (portfolio base)
+                    shares = int(order_value)
+                else:
+                    # Pair like EUR.USD: quantity is in EUR
+                    # We need to divide the USD order value by the price (USD/EUR)
+                    shares = int(order_value / price)
+            else:
+                # For Stocks/ETFs
+                shares = int(order_value / price)
+                
             if shares < 1:
                 logger.debug(f"{asset_name}: calculated shares < 1, skipping")
                 continue
             
+            # For CASH accounts and Forex, we must be careful with directions
+            # If asset is 'USD_EUR' and contract is 'EUR.USD' (Symbol=EUR, Currency=USD)
+            # Buying EUR.USD buys EUR and Sells USD.
+            # If the user wants 16% USD exposure (weight_delta > 0), they should SELL EUR.USD.
             action = 'BUY' if weight_delta > 0 else 'SELL'
             
+            if is_forex and asset_name.startswith('USD_') and not symbol.startswith('USD'):
+                # Inversion: Asset wants USD, but contract base is EUR (EUR.USD)
+                # To get USD (more asset), we must SELL the base (EUR)
+                action = 'SELL' if weight_delta > 0 else 'BUY'
+                logger.info(f"Forex Action Inversion for {asset_name} ({symbol}): {weight_delta:+.2%} -> {action}")
+
             order = RebalanceOrder(
                 asset_name=asset_name,
                 symbol=symbol,

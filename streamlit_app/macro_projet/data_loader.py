@@ -159,8 +159,8 @@ def load_data():
                 if p_val is not None:
                     nav_history.append({'date': ts, 'nav': p_val, 'quadrant': current_quadrant})
                 
-                # Orders
-                if log_data.get('success') and log_data.get('orders'):
+                # Orders (Always show even if failed, but don't update positions based on it)
+                if log_data.get('orders'):
                     reason = "Changement Quadrant" if prev_quadrant and prev_quadrant != current_quadrant else "Rebalancing"
                     for o in log_data['orders']:
                         orders_history.append({
@@ -170,13 +170,18 @@ def load_data():
                             'Asset': o.get('asset'),
                             'Shares': o.get('shares'),
                             'Estimated Value ($)': round(o.get('estimated_value', 0), 2),
-                            'Reason': reason
+                            'Reason': reason,
+                            'Status': o.get('status', 'Success' if log_data.get('success') else 'Failed'),
+                            'Error': o.get('error', '')
                         })
                 
                 # Last known positions/weights
-                if log_data.get('success') and log_data.get('current_weights'):
-                    last_positions = log_data.get('current_weights')
+                # We update this even on failure if we managed to get weights during that attempt
+                weights = log_data.get('current_weights')
+                if weights:
+                    last_positions = weights
                     last_portfolio_val = log_data.get('portfolio_value')
+                    last_update_ts = ts
                 
                 if current_quadrant:
                     prev_quadrant = current_quadrant

@@ -182,6 +182,25 @@ def execute_strategy(
                 # 5. Execute orders
                 execution_result = om.execute_orders(orders, dry_run=dry_run)
                 result['execution_result'] = execution_result
+                
+                # Merge status into orders list for better logging
+                for order_log in result['orders']:
+                    asset = order_log['asset']
+                    # Look for this asset in executed or failed
+                    status_info = next((o for o in execution_result.get('executed', []) if o['asset'] == asset), None)
+                    if not status_info:
+                        status_info = next((o for o in execution_result.get('failed', []) if o['asset'] == asset), None)
+                    
+                    if status_info:
+                        order_log['status'] = status_info.get('status', 'Unknown')
+                        order_log['filled'] = status_info.get('filled', 0)
+                        order_log['avgFillPrice'] = status_info.get('avgFillPrice', 0)
+                        order_log['error'] = status_info.get('error')
+                    elif dry_run:
+                        order_log['status'] = 'Dry Run'
+                    else:
+                        order_log['status'] = 'Submitted'
+                
                 result['success'] = len(execution_result.get('failed', [])) == 0
                 
         finally:

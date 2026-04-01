@@ -130,7 +130,21 @@ def render_ibkr_dashboard(data):
 
     st.subheader("Dernières Transactions (Logs)")
     if 'ibkr_orders' in data and not data['ibkr_orders'].empty:
-        st.dataframe(data['ibkr_orders'].sort_values('Date', ascending=False).head(20), use_container_width=True)
+        df = data['ibkr_orders'].sort_values('Date', ascending=False).head(40)
+        # Reorder columns for better readability
+        cols = ['Date', 'Action', 'Asset', 'Status', 'Shares', 'Estimated Value ($)', 'Error', 'Reason']
+        existing_cols = [c for c in cols if c in df.columns]
+        df = df[existing_cols]
+        
+        st.dataframe(
+            df, 
+            use_container_width=True,
+            column_config={
+                "Status": st.column_config.TextColumn("Status", help="Order execution status"),
+                "Error": st.column_config.TextColumn("Détails Erreur", help="Raison du rejet IBKR"),
+                "Estimated Value ($)": st.column_config.NumberColumn("Valeur ($)", format="$%.2f")
+            }
+        )
     else:
         st.info("Aucune transaction trouvée dans les logs.")
 

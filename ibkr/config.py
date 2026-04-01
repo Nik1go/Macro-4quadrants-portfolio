@@ -56,7 +56,7 @@ YFINANCE_MAPPING = {
 
 
 # ===== SAFETY LIMITS (Paper Trading) =====
-MAX_ORDER_VALUE_USD = 500000    # Maximum value per single order (for 1M portfolio)
+MAX_ORDER_VALUE_USD = 1000000    # Maximum value per single order (for 1M portfolio)
 MAX_TOTAL_POSITION_USD = 1500000  # Maximum total portfolio value
 MIN_ORDER_SIZE_USD = 50         # Minimum order to avoid dust
 
