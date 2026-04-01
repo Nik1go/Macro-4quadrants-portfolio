@@ -5,11 +5,13 @@ Configuration settings for Interactive Brokers API connection.
 """
 
 # ===== CONNECTION SETTINGS =====
+import os
 HOST = "127.0.0.1"          # Localhost (IB Gateway runs on the same VPS via Docker)
 PAPER_PORT = 4002           # Paper trading port (IB Gateway default)
 LIVE_PORT = 4001            # Live trading port (IB Gateway default)
 CLIENT_ID = 1               # Unique client ID for this application
 CONNECTION_TIMEOUT = 90     # Timeout in seconds for API connection
+ACCOUNT_ID = os.getenv("IBKR_ACCOUNT_ID", "")  # Specific account to manage (e.g., DUO809117)
 
 # Use paper trading by default for safety
 CURRENT_PORT = PAPER_PORT

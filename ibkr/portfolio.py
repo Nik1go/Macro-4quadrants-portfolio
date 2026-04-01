@@ -10,7 +10,7 @@ import logging
 from ib_insync import IB, Stock
 
 from .connection import IBKRConnection
-from .config import ETF_MAPPING, HOST, CURRENT_PORT, CLIENT_ID, CONNECTION_TIMEOUT
+from .config import ETF_MAPPING, HOST, CURRENT_PORT, CLIENT_ID, CONNECTION_TIMEOUT, ACCOUNT_ID
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +31,13 @@ class PortfolioManager:
     SYMBOL_TO_ASSET = {v: k for k, v in ETF_MAPPING.items()}
     
     def __init__(self, host: str = HOST, port: int = CURRENT_PORT, 
-                 client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT):
+                 client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT,
+                 account_id: str = ACCOUNT_ID):
         self.host = host
         self.port = port
         self.client_id = client_id
         self.timeout = timeout
+        self.account_id = account_id
         self.ib: Optional[IB] = None
         
     def connect(self) -> bool:
@@ -76,8 +78,10 @@ class PortfolioManager:
         # Wait for account synchronization
         self.ib.waitOnUpdate(timeout=1.0)
         
-        # Get portfolio items (includes market value)
+        # Get portfolio items for the specific account
         portfolio_items = self.ib.portfolio()
+        if self.account_id:
+            portfolio_items = [item for item in portfolio_items if item.account == self.account_id]
         
         for item in portfolio_items:
             symbol = item.contract.symbol
@@ -108,34 +112,47 @@ class PortfolioManager:
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
         
-        # Request account summary
-        account_values = self.ib.accountSummary()
+        # Request account summary (optionally filtered by account)
+        account_values = self.ib.accountSummary(account=self.account_id or '')
         
         # Try to find NetLiquidation in various currencies (EUR first, then USD, then BASE)
         for currency in ['EUR', 'USD', 'BASE']:
             for av in account_values:
+                if self.account_id and av.account != self.account_id:
+                    continue
                 if av.tag == 'NetLiquidation' and av.currency == currency:
                     value = float(av.value)
                     if value > 0:
                         logger.info(f"Portfolio value: {value:.2f} {currency}")
                         return value
         
-        # Fallback: sum positions + cash
-        positions = self.get_positions()
-        total_positions = sum(p['market_value'] for p in positions.values())
+        return 0.0
+
+    def get_base_currency(self) -> str:
+        """
+        Detect the account base currency.
         
-        # Get cash balance (try EUR first, then USD)
-        cash = 0.0
+        Returns:
+            Currency code (e.g., 'EUR', 'USD').
+        """
+        if not self.ib or not self.ib.isConnected():
+            raise ConnectionError("Not connected to IBKR")
+            
+        account_values = self.ib.accountSummary(account=self.account_id or '')
+        
+        # Try to find NetLiquidation or TotalCashValue currency
+        for av in account_values:
+            if self.account_id and av.account != self.account_id:
+                continue
+            if av.tag == 'NetLiquidation' and float(av.value) > 0:
+                return av.currency
+                
+        # Fallback to EUR or USD if found, else default to EUR
         for currency in ['EUR', 'USD']:
-            for av in account_values:
-                if av.tag == 'TotalCashValue' and av.currency == currency:
-                    cash = float(av.value)
-                    if cash > 0:
-                        break
-            if cash > 0:
-                break
-        
-        return total_positions + cash
+            if any(av.currency == currency for av in account_values):
+                return currency
+                
+        return 'EUR'
     
     def get_current_weights(self) -> Dict[str, float]:
         """

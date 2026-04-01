@@ -16,7 +16,7 @@ from .connection import IBKRConnection
 from .config import (
     REBALANCE_THRESHOLD, MAX_ORDER_VALUE_USD, MIN_ORDER_SIZE_USD,
     ORDER_TYPE, CONTRACT_DETAILS, HOST, CURRENT_PORT, CLIENT_ID,
-    CONNECTION_TIMEOUT, ETF_MAPPING, ASSETS_DATA_PATH, FOREX_DATA_PATH
+    CONNECTION_TIMEOUT, ETF_MAPPING, ASSETS_DATA_PATH, FOREX_DATA_PATH, ACCOUNT_ID
 )
 
 logger = logging.getLogger(__name__)
@@ -47,11 +47,13 @@ class OrderManager:
     """
     
     def __init__(self, host: str = HOST, port: int = CURRENT_PORT,
-                 client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT):
+                 client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT,
+                 account_id: str = ACCOUNT_ID):
         self.host = host
         self.port = port
         self.client_id = client_id
         self.timeout = timeout
+        self.account_id = account_id
         self.ib: Optional[IB] = None
     
     def connect(self) -> bool:
@@ -182,7 +184,8 @@ class OrderManager:
         current_weights: Dict[str, float],
         target_weights: Dict[str, float],
         portfolio_value: float,
-        threshold: float = REBALANCE_THRESHOLD
+        threshold: float = REBALANCE_THRESHOLD,
+        base_currency: str = 'EUR'
     ) -> List[RebalanceOrder]:
         """
         Calculate orders needed to rebalance portfolio.
@@ -239,17 +242,22 @@ class OrderManager:
             
             # Calculate shares
             if is_forex:
-                # For Forex (CASH), the quantity is in the BASE currency (the 'symbol')
+                # For Forex (CASH), the quantity is in the BASE currency of the pair (the 'symbol')
                 # USD.JPY -> quantity is in USD
                 # EUR.USD -> quantity is in EUR
+                # portfolio_value is in account 'base_currency' (e.g., EUR)
                 
-                if symbol.startswith('USD'):
-                    # Pair like USD.JPY or USD.CAD: quantity is in USD
-                    # order_value is already in USD (portfolio base)
+                if symbol == base_currency:
+                    # Account base is same as contract base (e.g., EUR account, EUR.USD pair)
+                    # We want to sell X EUR (order_value is in EUR)
                     shares = int(order_value)
                 else:
-                    # Pair like EUR.USD: quantity is in EUR
-                    # We need to divide the USD order value by the price (USD/EUR)
+                    # Account base is different from contract base (e.g., EUR account, USD.JPY pair)
+                    # Order value is in EUR, we need quantity in USD. 
+                    # We must divide by price (EUR per USD? No, JPY per USD).
+                    # Actually, if we want X EUR of USD exposure, we buy X EUR / price_of_EURUSD 
+                    # But the simplest is: shares = (order_value / price) works if price is Base/Quote.
+                    # Correct universal formula: shares = order_value / current_price_of_symbol_in_base
                     shares = int(order_value / price)
             else:
                 # For Stocks/ETFs
@@ -370,11 +378,11 @@ class OrderManager:
                 
                 # Create order
                 if ORDER_TYPE == 'MKT':
-                    ib_order = MarketOrder(order.action, order.shares, tif='DAY')
+                    ib_order = MarketOrder(order.action, order.shares, tif='DAY', account=self.account_id or '')
                 else:
                     # For limit orders, use current price
                     price = self.get_current_price(order.asset_name)
-                    ib_order = LimitOrder(order.action, order.shares, price, tif='DAY')
+                    ib_order = LimitOrder(order.action, order.shares, price, tif='DAY', account=self.account_id or '')
                 
                 # Place order
                 trade = self.ib.placeOrder(contract, ib_order)

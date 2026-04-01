@@ -142,10 +142,12 @@ def execute_strategy(
         try:
             current_weights = pm.get_current_weights()
             portfolio_value = pm.get_portfolio_value()
+            base_currency = pm.get_base_currency()
             result['current_weights'] = current_weights
             result['portfolio_value'] = portfolio_value
+            result['base_currency'] = base_currency
             
-            logger.info(f"Portfolio value: ${portfolio_value:,.2f}")
+            logger.info(f"Portfolio value: {portfolio_value:,.2f} {base_currency}")
             logger.info(f"Current weights: {current_weights}")
         finally:
             pm.disconnect()
@@ -159,7 +161,8 @@ def execute_strategy(
                 current_weights=current_weights,
                 target_weights=target_weights,
                 portfolio_value=portfolio_value,
-                threshold=rebalance_threshold
+                threshold=rebalance_threshold,
+                base_currency=base_currency
             )
             
             result['orders'] = [
