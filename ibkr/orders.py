@@ -227,13 +227,14 @@ class OrderManager:
                 order_value = MAX_ORDER_VALUE_USD
             
             # Get contract details to check type
-            symbol = ETF_MAPPING.get(asset_name)
-            if not symbol:
+            mapping_symbol = ETF_MAPPING.get(asset_name)
+            if not mapping_symbol:
                 logger.error(f"No symbol mapping for asset: {asset_name}")
                 continue
                 
-            details = CONTRACT_DETAILS.get(symbol, {})
+            details = CONTRACT_DETAILS.get(mapping_symbol, {})
             is_forex = details.get('secType') == 'CASH'
+            real_symbol = details.get('symbol', mapping_symbol) # e.g., 'EUR' for USD_EUR
             
             price = self.get_current_price(asset_name)
             if not price:
@@ -242,22 +243,17 @@ class OrderManager:
             
             # Calculate shares
             if is_forex:
-                # For Forex (CASH), the quantity is in the BASE currency of the pair (the 'symbol')
-                # USD.JPY -> quantity is in USD
-                # EUR.USD -> quantity is in EUR
-                # portfolio_value is in account 'base_currency' (e.g., EUR)
+                # For Forex (CASH), the quantity is in the BASE currency of the pair (the 'real_symbol')
+                # USD.JPY -> quantity is in USD (symbol=USD)
+                # EUR.USD -> quantity is in EUR (symbol=EUR)
                 
-                if symbol == base_currency:
-                    # Account base is same as contract base (e.g., EUR account, EUR.USD pair)
-                    # We want to sell X EUR (order_value is in EUR)
+                if real_symbol == base_currency:
+                    # Account base matches contract base (e.g., USD account, USD.JPY pair)
+                    # We want to buy/sell X USD. Quantity IS X.
                     shares = int(order_value)
                 else:
-                    # Account base is different from contract base (e.g., EUR account, USD.JPY pair)
-                    # Order value is in EUR, we need quantity in USD. 
-                    # We must divide by price (EUR per USD? No, JPY per USD).
-                    # Actually, if we want X EUR of USD exposure, we buy X EUR / price_of_EURUSD 
-                    # But the simplest is: shares = (order_value / price) works if price is Base/Quote.
-                    # Correct universal formula: shares = order_value / current_price_of_symbol_in_base
+                    # Account base is DIFFERENT from contract base (e.g., USD account, EUR.USD pair)
+                    # To get X USD exposure by trading EUR, we need X / price_of_EURUSD shares.
                     shares = int(order_value / price)
             else:
                 # For Stocks/ETFs
@@ -267,24 +263,21 @@ class OrderManager:
                 logger.debug(f"{asset_name}: calculated shares < 1, skipping")
                 continue
             
-            # For CASH accounts and Forex, we must be careful with directions
-            # If asset is 'USD_EUR' and contract is 'EUR.USD' (Symbol=EUR, Currency=USD)
-            # Buying EUR.USD buys EUR and Sells USD.
-            # If the user wants 16% USD exposure (weight_delta > 0), they should SELL EUR.USD.
+            # Directions for Forex inversion
             action = 'BUY' if weight_delta > 0 else 'SELL'
             
-            if is_forex and asset_name.startswith('USD_') and not symbol.startswith('USD'):
-                # Inversion: Asset wants USD, but contract base is EUR (EUR.USD)
-                # To get USD (more asset), we must SELL the base (EUR)
+            if is_forex and asset_name.startswith('USD_') and not real_symbol.startswith('USD'):
+                # Inversion: Asset objective is USD, but contract base is NOT USD (e.g., EUR.USD)
+                # To get USD (BUY USD_EUR), we must SELL the base (EUR)
                 action = 'SELL' if weight_delta > 0 else 'BUY'
-                logger.info(f"Forex Action Inversion for {asset_name} ({symbol}): {weight_delta:+.2%} -> {action}")
+                logger.info(f"Forex Action Inversion for {asset_name} ({real_symbol}): {weight_delta:+.2%} -> {action}")
 
             order = RebalanceOrder(
                 asset_name=asset_name,
-                symbol=symbol,
+                symbol=real_symbol,
                 action=action,
                 shares=shares,
-                estimated_value=shares * price,
+                estimated_value=shares * price if real_symbol != base_currency else shares,
                 current_weight=current_weight,
                 target_weight=target_weight,
                 weight_delta=weight_delta

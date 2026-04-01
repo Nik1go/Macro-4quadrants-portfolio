@@ -155,25 +155,30 @@ def fetch_and_save_data(**kwargs):
         else:
             start_date = datetime(2005, 1, 1)
 
-        new_data = fred.get_series(series_id, observation_start=start_date)
+        try:
+            new_data = fred.get_series(series_id, observation_start=start_date)
 
-        if not new_data.empty:
-            new_df = new_data.reset_index()
-            new_df.columns = ['date', 'value']
-            new_df['date'] = pd.to_datetime(new_df['date']).dt.date
+            if not new_data.empty:
+                new_df = new_data.reset_index()
+                new_df.columns = ['date', 'value']
+                new_df['date'] = pd.to_datetime(new_df['date']).dt.date
 
-            if not existing_data.empty:
-                existing_data['date'] = pd.to_datetime(
-                    existing_data['date']).dt.date
-                combined = pd.concat([existing_data, new_df])
-                combined = combined.drop_duplicates('date').sort_values('date')
+                if not existing_data.empty:
+                    existing_data['date'] = pd.to_datetime(
+                        existing_data['date']).dt.date
+                    combined = pd.concat([existing_data, new_df])
+                    combined = combined.drop_duplicates('date').sort_values('date')
+                else:
+                    combined = new_df
+
+                combined.to_csv(backup_path, index=False)
+                print(f'✅ Données mises à jour pour {name} ({series_id})')
             else:
-                combined = new_df
-
-            combined.to_csv(backup_path, index=False)
-            print(f'Données mises à jour pour {name} ({series_id})')
-        else:
-            print(f'Aucune nouvelle donnée pour {name} ({series_id})')
+                print(f'ℹ️ Aucune nouvelle donnée pour {name} ({series_id})')
+        except Exception as e:
+            print(f'❌ Erreur FRED pour {name} ({series_id}): {e}')
+            # On continue la boucle pour ne pas bloquer les autres indicateurs
+            continue
 
     # --- Données Yahoo Finance INDICATORS (not assets) ---
     for name, meta in YF_INDICATORS_MAPPING.items():
