@@ -344,7 +344,8 @@ class OrderManager:
                     continue
                 
                 from ib_insync import Contract
-                details = CONTRACT_DETAILS.get(order.symbol, {})
+                mapping_symbol = ETF_MAPPING.get(order.asset_name, order.symbol)
+                details = CONTRACT_DETAILS.get(mapping_symbol, {})
                 
                 contract_kwargs = {
                     'symbol': details.get('symbol', order.symbol),
