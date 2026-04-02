@@ -33,9 +33,10 @@ class PortfolioManager:
     def __init__(self, host: str = HOST, port: int = CURRENT_PORT, 
                  client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT,
                  account_id: str = ACCOUNT_ID):
+        import random
         self.host = host
         self.port = port
-        self.client_id = client_id
+        self.client_id = client_id if client_id != 1 else random.randint(1000, 9999)
         self.timeout = timeout
         self.account_id = account_id
         self.ib: Optional[IB] = None

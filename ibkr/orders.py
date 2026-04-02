@@ -49,9 +49,11 @@ class OrderManager:
     def __init__(self, host: str = HOST, port: int = CURRENT_PORT,
                  client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT,
                  account_id: str = ACCOUNT_ID):
+        import random
         self.host = host
         self.port = port
-        self.client_id = client_id
+        # Use random client ID if default is used to prevent connection blocking
+        self.client_id = client_id if client_id != 1 else random.randint(1000, 9999)
         self.timeout = timeout
         self.account_id = account_id
         self.ib: Optional[IB] = None
@@ -311,6 +313,16 @@ class OrderManager:
         """
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
+            
+        # CANCEL ALL PENDING ORDERS TO AVOID MULTIPLE EXECUTION / BACKLOG
+        if not dry_run:
+            open_trades = self.ib.openTrades()
+            if open_trades:
+                logger.info(f"Clearing {len(open_trades)} pending orders from previous runs...")
+                for trade in open_trades:
+                    logger.info(f"Cancelling pending order on {trade.contract.symbol}")
+                    self.ib.cancelOrder(trade.order)
+                self.ib.sleep(2)  # Give IBKR time to process cancellations
         
         results = {
             'executed': [],
