@@ -232,36 +232,33 @@ class OrderManager:
                 continue
             
             # Calculate shares
-            cross_rate_to_base = 1.0 # Price of real_symbol in base_currency
+            # For CFDs, 1 share = 1 unit of the asset's base currency (e.g., 1 USD for USD.JPY)
+            # We convert the target order value (in account base) to the asset's base currency
             
-            if is_forex:
-                if real_symbol == base_currency:
-                    # e.g., EUR account trading EUR.USD
+            asset_currency = details.get('symbol', mapping_symbol) # e.g., 'EUR' for USD_EUR CFD, 'USD' for USD_JPY CFD
+            if not is_forex:
+                # Standard ETF: shares = Value in Base / Price (Price is in Base)
+                shares = int(order_value_in_base / price)
+                cross_rate_to_base = price
+            else:
+                # Forex/CFD: shares = Value in Asset Base Currency
+                # We need to convert order_value_in_base (Account Base) -> asset_currency
+                if asset_currency == base_currency:
                     shares = int(order_value_in_base)
                     cross_rate_to_base = 1.0
                 else:
-                    # e.g., EUR account trading USD.JPY
-                    # We need the price of USD in EUR (USD_EUR in local data)
-                    usd_eur_price = self._get_fallback_price('USD_EUR')
-                    if not usd_eur_price:
-                        logger.error("❌ Conversion impossible : USD_EUR manquant dans les données locales.")
-                        continue
+                    # Convert Account Base (e.g. EUR) to Asset Base (e.g. USD)
+                    # We have a price for Asset Base in Account Base (e.g. USD_EUR price)
+                    from .portfolio import PortfolioManager
+                    pm = PortfolioManager()
+                    rate_to_base = pm.get_exchange_rate(asset_currency, base_currency)
                     
-                    if base_currency == 'EUR' and real_symbol == 'USD':
-                        # rate is EUR per USD (e.g., 0.92)
-                        # To get X EUR of USD, we need X / 0.92 USD
-                        shares = int(order_value_in_base / usd_eur_price)
-                        cross_rate_to_base = usd_eur_price
-                    elif base_currency == 'USD' and real_symbol == 'EUR':
-                        # rate is EUR per USD, so USD per EUR is 1/rate
-                        shares = int(order_value_in_base * usd_eur_price)
-                        cross_rate_to_base = 1.0 / usd_eur_price
+                    if rate_to_base > 0:
+                        shares = int(order_value_in_base / rate_to_base)
+                        cross_rate_to_base = rate_to_base
                     else:
-                        shares = int(order_value_in_base / price)
-                        cross_rate_to_base = price # Fallback
-            else:
-                shares = int(order_value_in_base / price)
-                cross_rate_to_base = price
+                        logger.error(f"❌ Could not determine exchange rate for {asset_currency} to {base_currency}")
+                        continue
 
             if shares < 1:
                 continue
@@ -317,12 +314,25 @@ class OrderManager:
         # CANCEL ALL PENDING ORDERS TO AVOID MULTIPLE EXECUTION / BACKLOG
         if not dry_run:
             open_trades = self.ib.openTrades()
+            # Filter by account if specified
+            if self.account_id:
+                open_trades = [t for t in open_trades if t.order.account == self.account_id]
+                
             if open_trades:
-                logger.info(f"Clearing {len(open_trades)} pending orders from previous runs...")
+                logger.info(f"Clearing {len(open_trades)} pending orders for account {self.account_id}...")
                 for trade in open_trades:
-                    logger.info(f"Cancelling pending order on {trade.contract.symbol}")
+                    logger.info(f"Cancelling pending {trade.order.status} order on {trade.contract.symbol}")
                     self.ib.cancelOrder(trade.order)
-                self.ib.sleep(2)  # Give IBKR time to process cancellations
+                
+                # Wait for cancellations to propagate (up to 5 seconds)
+                for i in range(10):
+                    self.ib.sleep(0.5)
+                    remaining = [t for t in self.ib.openTrades() if t.order.account == self.account_id]
+                    if not remaining:
+                        logger.info("All pending orders successfully cancelled.")
+                        break
+                    if i == 9:
+                        logger.warning(f"Some orders ({len(remaining)}) are still pending cancellation.")
         
         results = {
             'executed': [],

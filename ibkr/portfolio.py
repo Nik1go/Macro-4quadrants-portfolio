@@ -102,9 +102,10 @@ class PortfolioManager:
                     'shares': item.position,
                     'avg_cost': item.averageCost,
                     'market_value': item.marketValue,
-                    'unrealized_pnl': item.unrealizedPNL
+                    'unrealized_pnl': item.unrealizedPNL,
+                    'currency': item.contract.currency # Store currency for conversion
                 }
-                logger.debug(f"Position: {asset_name} ({symbol}): {item.position} shares, ${item.marketValue:.2f}")
+                logger.debug(f"Position: {asset_name} ({symbol}): {item.position} shares, {item.marketValue:.2f} {item.contract.currency}")
             else:
                 logger.info(f"Ignored symbol in portfolio (not in mapping): {symbol}")
         
@@ -161,6 +162,37 @@ class PortfolioManager:
                 return currency
                 
         return 'EUR'
+
+    def get_exchange_rate(self, from_currency: str, to_currency: str) -> float:
+        """Get exchange rate between two currencies."""
+        if from_currency == to_currency:
+            return 1.0
+            
+        try:
+            # Check local fallback data first (fast and reliable)
+            from .orders import OrderManager
+            om = OrderManager()
+            # If we want e.g. JPY to EUR, we might have USD_JPY and USD_EUR
+            # Rate = (1/USD_JPY) * USD_EUR
+            
+            usd_from = om._get_fallback_price(f'USD_{from_currency}')
+            usd_to = om._get_fallback_price(f'USD_{to_currency}')
+            
+            if from_currency == 'USD' and usd_to:
+                return usd_to # USD to EUR
+            if to_currency == 'USD' and usd_from:
+                return 1.0 / usd_from # EUR to USD
+            if usd_from and usd_to:
+                # e.g. JPY to EUR: (USD/JPY)^-1 * (USD/EUR) = (JPY/USD)^-1 * (EUR/USD) ? No.
+                # USD_JPY is JPY per USD. USD_EUR is EUR per USD.
+                # So 1 USD = X JPY and 1 USD = Y EUR.
+                # Thus X JPY = Y EUR => 1 JPY = Y/X EUR.
+                return usd_to / usd_from
+                
+            return 1.0
+        except Exception as e:
+            logger.warning(f"Could not get exchange rate {from_currency}->{to_currency}: {e}")
+            return 1.0
     
     def get_current_weights(self) -> Dict[str, float]:
         """
@@ -181,16 +213,27 @@ class PortfolioManager:
             return {asset: 0.0 for asset in ETF_MAPPING.keys()}
         
         weights = {}
+        base_currency = self.get_base_currency()
         
         # Calculate weight for each asset
         for asset_name in ETF_MAPPING.keys():
             if asset_name in positions:
-                market_value = positions[asset_name]['market_value']
+                pos = positions[asset_name]
+                market_value = pos['market_value']
+                currency = pos.get('currency', base_currency)
+                
+                # Convert to base currency if needed
+                if currency != base_currency:
+                    rate = self.get_exchange_rate(currency, base_currency)
+                    market_value_in_base = market_value * rate
+                    logger.debug(f"Converted {asset_name} value: {market_value:.2f} {currency} -> {market_value_in_base:.2f} {base_currency}")
+                    market_value = market_value_in_base
+                
                 weights[asset_name] = market_value / total_value
             else:
                 weights[asset_name] = 0.0
         
-        logger.info(f"Current weights: {weights}")
+        logger.info(f"Current weights (converted to {base_currency}): {weights}")
         return weights
     
     def get_cash_balance(self) -> float:
