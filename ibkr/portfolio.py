@@ -67,19 +67,16 @@ class PortfolioManager:
             logger.info("PortfolioManager disconnected")
         self.ib = None
     
-    def get_positions(self, include_pending: bool = False) -> Dict[str, Dict]:
+    def get_positions(self) -> Dict[str, Dict]:
         """
-        Get current positions from IBKR, optionally including pending orders.
+        Get actual positions from IBKR (real portfolio only).
         """
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
         
         positions = {}
-        
-        # Wait for account synchronization
         self.ib.waitOnUpdate(timeout=1.0)
         
-        # 1. Actual Portfolio Positions
         portfolio_items = self.ib.portfolio()
         if self.account_id:
             portfolio_items = [item for item in portfolio_items if item.account == self.account_id]
@@ -96,33 +93,6 @@ class PortfolioManager:
                     'unrealized_pnl': item.unrealizedPNL,
                     'currency': item.contract.currency
                 }
-        
-        # 2. Add Pending Orders to "Expected" positions if requested
-        if include_pending:
-            self.ib.reqAllOpenOrders()
-            trades = self.ib.openTrades()
-            if self.account_id:
-                trades = [t for t in trades if t.order.account == self.account_id]
-                
-            for t in trades:
-                symbol = t.contract.symbol
-                if symbol in self.symbol_to_asset:
-                    asset_name = self.symbol_to_asset[symbol]
-                    # Adjust shares by pending amount
-                    qty = t.order.totalQuantity if t.order.action == 'BUY' else -t.order.totalQuantity
-                    
-                    if asset_name in positions:
-                        positions[asset_name]['shares'] += qty
-                        # Update market value estimate
-                        price = t.orderStatus.avgFillPrice or t.order.lmtPrice or 1.0 # placeholder
-                        positions[asset_name]['market_value'] += (qty * price)
-                    else:
-                        positions[asset_name] = {
-                            'symbol': symbol,
-                            'shares': qty,
-                            'market_value': qty * 1.0, # estimate
-                            'currency': t.contract.currency
-                        }
         
         return positions
     
@@ -209,14 +179,14 @@ class PortfolioManager:
             logger.warning(f"Could not get exchange rate {from_currency}->{to_currency}: {e}")
             return 1.0
     
-    def get_current_weights(self, include_pending: bool = True) -> Dict[str, float]:
+    def get_current_weights(self) -> Dict[str, float]:
         """
-        Calculate current portfolio weights, including pending orders by default.
+        Calculate current portfolio weights (real positions only).
         """
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
         
-        positions = self.get_positions(include_pending=include_pending)
+        positions = self.get_positions()
         total_value = self.get_portfolio_value()
         
         if total_value <= 0:

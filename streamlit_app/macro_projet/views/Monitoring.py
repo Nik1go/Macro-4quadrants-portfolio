@@ -66,15 +66,26 @@ def render_ibkr_dashboard(data):
                     portfolio_val = pm.get_portfolio_value()
                     cash = pm.get_cash_balance()
                     if positions and portfolio_val:
+                        # Detect base currency
+                        base_curr = pm.get_base_currency()
+                        
                         pos_list = []
                         for asset, info in positions.items():
-                            val = info['market_value']
-                            weight = (val / portfolio_val) * 100 if portfolio_val > 0 else 0
+                            raw_val = info['market_value']
+                            currency = info.get('currency', base_curr)
+                            
+                            # Convert value to base currency for display and weight
+                            if currency != base_curr:
+                                rate = pm.get_exchange_rate(currency, base_curr)
+                                val_in_base = raw_val * rate
+                            else:
+                                val_in_base = raw_val
+                                
+                            weight = (val_in_base / portfolio_val) * 100 if portfolio_val > 0 else 0
                             
                             # Perspective Macro: On affiche l'exposition voulue (Long)
-                            # Même si techniquement on est Short EUR, pour le trade USD_EUR c'est une expo positive.
                             display_weight = abs(weight)
-                            display_val = abs(val)
+                            display_val = abs(val_in_base)
                             display_shares = abs(info['shares'])
 
                             pos_list.append({
@@ -85,7 +96,7 @@ def render_ibkr_dashboard(data):
                                 'Unrealized PNL ($)': round(info.get('unrealized_pnl', 0), 2)
                             })
                         positions_df = pd.DataFrame(pos_list)
-                        st.success(f"✅ Live Connection: {self.account_id}")
+                        st.success(f"✅ Live Connection: {self.account_id} ({base_curr})")
                     else:
                         # Only show warning if really nothing is found
                         if not data.get('ibkr_last_positions'):
@@ -111,7 +122,7 @@ def render_ibkr_dashboard(data):
         if positions_df is not None and not positions_df.empty:
             st.dataframe(positions_df, use_container_width=True)
         elif data.get('ibkr_last_positions'):
-            st.info("📊 Derniers Allocs (Logs)")
+            st.info(" Derniers Allocs (Logs)")
             last_pos = data['ibkr_last_positions']
             # Convert weights dict to DataFrame (inclure les v < 0 pour les Shorts)
             weights_df = pd.DataFrame([
