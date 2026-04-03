@@ -40,8 +40,8 @@ CONTRACT_DETAILS = {
     'SXRM': {'secIdType': 'ISIN', 'secId': 'IE00B1FZS798', 'exchange': 'SMART', 'currency': 'EUR'},
     'LQDE': {'secIdType': 'ISIN', 'secId': 'IE0032895942', 'exchange': 'SMART', 'currency': 'EUR'},
     'DXS3': {'secIdType': 'ISIN', 'secId': 'LU0322251520', 'exchange': 'SMART', 'currency': 'EUR'},
-    'USD_JPY': {'symbol': 'USD', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'JPY'},
-    'USD_EUR': {'symbol': 'EUR', 'secType': 'CASH', 'exchange': 'IDEALPRO', 'currency': 'USD'},
+    'USD_JPY': {'symbol': 'USD', 'secType': 'CFD', 'exchange': 'SMART', 'currency': 'JPY'},
+    'USD_EUR': {'symbol': 'EUR', 'secType': 'CFD', 'exchange': 'SMART', 'currency': 'USD'},
 }
 
 # Yahoo Finance tickers (used for price lookup - need exchange suffix)

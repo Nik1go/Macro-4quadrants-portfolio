@@ -224,7 +224,7 @@ class OrderManager:
                 continue
                 
             details = CONTRACT_DETAILS.get(mapping_symbol, {})
-            is_forex = details.get('secType') == 'CASH'
+            is_forex = asset_name.startswith('USD_')
             real_symbol = details.get('symbol', mapping_symbol)
             
             price = self.get_current_price(asset_name)
@@ -336,6 +336,7 @@ class OrderManager:
                 if dry_run:
                     logger.info(f"[DRY RUN] Would {order.action} {order.shares} {order.symbol}")
                     results['skipped'].append({
+                        'asset': order.asset_name,
                         'symbol': order.symbol,
                         'action': order.action,
                         'shares': order.shares,
@@ -372,6 +373,7 @@ class OrderManager:
                 if not qualified or not contract.conId:
                     logger.error(f"❌ Contract not found for {order.symbol} - skipping order")
                     results['failed'].append({
+                        'asset': order.asset_name,
                         'symbol': order.symbol,
                         'action': order.action,
                         'shares': order.shares,
@@ -399,6 +401,7 @@ class OrderManager:
                 )
                 
                 results['executed'].append({
+                    'asset': order.asset_name,
                     'symbol': order.symbol,
                     'action': order.action,
                     'shares': order.shares,
@@ -409,6 +412,7 @@ class OrderManager:
             except Exception as e:
                 logger.error(f"❌ Failed to execute {order.action} {order.shares} {order.symbol}: {e}")
                 results['failed'].append({
+                    'asset': order.asset_name,
                     'symbol': order.symbol,
                     'action': order.action,
                     'shares': order.shares,
