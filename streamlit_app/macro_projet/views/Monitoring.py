@@ -55,32 +55,43 @@ def render_ibkr_dashboard(data):
         
         if has_ibkr_module:
             try:
-                # Use a specific client ID for Streamlit to avoid conflicts
-                pm = PortfolioManager(client_id=123, timeout=3)
+                # Use a very random client ID to avoid conflicts with other bot instances
+                import random
+                pm = PortfolioManager(client_id=random.randint(10000, 99999), timeout=5)
                 if pm.connect():
                     positions = pm.get_positions()
                     portfolio_val = pm.get_portfolio_value()
                     cash = pm.get_cash_balance()
-                    pm.disconnect()
-                    
-                    if positions:
+                    if positions and portfolio_val:
                         pos_list = []
                         for asset, info in positions.items():
+                            val = info['market_value']
+                            weight = (val / portfolio_val) * 100 if portfolio_val > 0 else 0
+                            
+                            # Perspective Macro: On affiche l'exposition voulue (Long)
+                            # Même si techniquement on est Short EUR, pour le trade USD_EUR c'est une expo positive.
+                            display_weight = abs(weight)
+                            display_val = abs(val)
+                            display_shares = abs(info['shares'])
+
                             pos_list.append({
                                 'Asset': asset,
-                                'Ticker': info['symbol'],
-                                'Shares': info['shares'],
-                                'Market Value ($)': round(info['market_value'], 2),
+                                'Weight (%)': round(display_weight, 2), 
+                                'Value ($)': round(display_val, 2),      
+                                'Shares': int(display_shares),
                                 'Unrealized PNL ($)': round(info.get('unrealized_pnl', 0), 2)
                             })
                         positions_df = pd.DataFrame(pos_list)
-                        st.success("✅ Connecté à IB Gateway (Live Data)")
+                        st.success(f"✅ Live Connection: {self.account_id}")
                     else:
-                        st.warning("⚠️ Connecté à IB Gateway, mais aucune position correspondante trouvée (vérifier ETF_MAPPING).")
+                        # Only show warning if really nothing is found
+                        if not data.get('ibkr_last_positions'):
+                            st.warning("⚠️ Connecté à IB Gateway, mais aucune position correspondante trouvée.")
                 else:
-                    st.warning("⚠️ Impossible de se connecter à IB Gateway. Affichage des données du dernier log.")
+                    if not data.get('ibkr_last_positions'):
+                        st.warning("⚠️ Impossible de se connecter à IB Gateway (Live).")
             except Exception as e:
-                st.error(f"Erreur de connexion IBKR: {e}")
+                logger.error(f"Streamlit IBKR connection error: {e}")
                 
         # --- Fallback to logs if live fails or returns nothing ---
         # 1. Fallback for Portfolio Value
@@ -97,16 +108,23 @@ def render_ibkr_dashboard(data):
         if positions_df is not None and not positions_df.empty:
             st.dataframe(positions_df, use_container_width=True)
         elif data.get('ibkr_last_positions'):
-            st.info("Affichage des derniers poids connus (Logs)")
+            st.info("📊 Derniers Allocs (Logs)")
             last_pos = data['ibkr_last_positions']
-            # Convert weights dict to DataFrame
+            # Convert weights dict to DataFrame (inclure les v < 0 pour les Shorts)
             weights_df = pd.DataFrame([
-                {'Asset': k, 'Weight (%)': round(v * 100, 2)} 
-                for k, v in last_pos.items() if v > 0
+                {
+                    'Asset': k, 
+                    'Weight (%)': round(abs(v) * 100, 2),
+                    'Value ($)': round(abs(v * portfolio_val), 2) if portfolio_val else "-"
+                } 
+                for k, v in last_pos.items() if abs(v) > 0.001
             ])
-            st.dataframe(weights_df, use_container_width=True)
+            if not weights_df.empty:
+                st.dataframe(weights_df, use_container_width=True)
+            else:
+                st.info("Aucun poids significatif.")
         else:
-            st.info("Aucune position trouvée (Direct ou Logs).")
+            st.info("Recherche de positions...")
             
     with c2:
         st.subheader("Performance Historique")

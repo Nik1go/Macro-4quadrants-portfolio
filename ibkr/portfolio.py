@@ -67,16 +67,9 @@ class PortfolioManager:
             logger.info("PortfolioManager disconnected")
         self.ib = None
     
-    def get_positions(self) -> Dict[str, Dict]:
+    def get_positions(self, include_pending: bool = False) -> Dict[str, Dict]:
         """
-        Get current positions from IBKR.
-        
-        Returns:
-            Dict mapping internal asset names to position info:
-            {
-                'SP500': {'symbol': 'SPY', 'shares': 10, 'avg_cost': 450.0, 'market_value': 4600.0},
-                ...
-            }
+        Get current positions from IBKR, optionally including pending orders.
         """
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
@@ -86,15 +79,13 @@ class PortfolioManager:
         # Wait for account synchronization
         self.ib.waitOnUpdate(timeout=1.0)
         
-        # Get portfolio items for the specific account
+        # 1. Actual Portfolio Positions
         portfolio_items = self.ib.portfolio()
         if self.account_id:
             portfolio_items = [item for item in portfolio_items if item.account == self.account_id]
         
         for item in portfolio_items:
             symbol = item.contract.symbol
-            
-            # Check if this is one of our tracked assets
             if symbol in self.symbol_to_asset:
                 asset_name = self.symbol_to_asset[symbol]
                 positions[asset_name] = {
@@ -103,11 +94,35 @@ class PortfolioManager:
                     'avg_cost': item.averageCost,
                     'market_value': item.marketValue,
                     'unrealized_pnl': item.unrealizedPNL,
-                    'currency': item.contract.currency # Store currency for conversion
+                    'currency': item.contract.currency
                 }
-                logger.debug(f"Position: {asset_name} ({symbol}): {item.position} shares, {item.marketValue:.2f} {item.contract.currency}")
-            else:
-                logger.info(f"Ignored symbol in portfolio (not in mapping): {symbol}")
+        
+        # 2. Add Pending Orders to "Expected" positions if requested
+        if include_pending:
+            self.ib.reqAllOpenOrders()
+            trades = self.ib.openTrades()
+            if self.account_id:
+                trades = [t for t in trades if t.order.account == self.account_id]
+                
+            for t in trades:
+                symbol = t.contract.symbol
+                if symbol in self.symbol_to_asset:
+                    asset_name = self.symbol_to_asset[symbol]
+                    # Adjust shares by pending amount
+                    qty = t.order.totalQuantity if t.order.action == 'BUY' else -t.order.totalQuantity
+                    
+                    if asset_name in positions:
+                        positions[asset_name]['shares'] += qty
+                        # Update market value estimate
+                        price = t.orderStatus.avgFillPrice or t.order.lmtPrice or 1.0 # placeholder
+                        positions[asset_name]['market_value'] += (qty * price)
+                    else:
+                        positions[asset_name] = {
+                            'symbol': symbol,
+                            'shares': qty,
+                            'market_value': qty * 1.0, # estimate
+                            'currency': t.contract.currency
+                        }
         
         return positions
     
@@ -194,18 +209,14 @@ class PortfolioManager:
             logger.warning(f"Could not get exchange rate {from_currency}->{to_currency}: {e}")
             return 1.0
     
-    def get_current_weights(self) -> Dict[str, float]:
+    def get_current_weights(self, include_pending: bool = True) -> Dict[str, float]:
         """
-        Calculate current portfolio weights.
-        
-        Returns:
-            Dict mapping asset names to weights (0.0 to 1.0).
-            Assets not held have weight 0.0.
+        Calculate current portfolio weights, including pending orders by default.
         """
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
         
-        positions = self.get_positions()
+        positions = self.get_positions(include_pending=include_pending)
         total_value = self.get_portfolio_value()
         
         if total_value <= 0:

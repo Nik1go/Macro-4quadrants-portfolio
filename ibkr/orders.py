@@ -338,17 +338,23 @@ class OrderManager:
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
             
-        # CANCEL ALL PENDING ORDERS TO AVOID MULTIPLE EXECUTION / BACKLOG
+        # CANCEL ALL PENDING ORDERS FROM ANY CLIENT (PREV RUNS)
         if not dry_run:
-            open_trades = self.ib.openTrades()
+            # Request all open orders from all instances to ensure we can see previous bot runs
+            self.ib.reqAllOpenOrders()
+            self.ib.sleep(1) # Give IBKR time to return the orders
+            all_trades = self.ib.openTrades()
+            
             # Filter by account if specified
             if self.account_id:
-                open_trades = [t for t in open_trades if t.order.account == self.account_id]
+                active_trades = [t for t in all_trades if t.order.account == self.account_id]
+            else:
+                active_trades = all_trades
                 
-            if open_trades:
-                logger.info(f"Clearing {len(open_trades)} pending orders for account {self.account_id}...")
-                for trade in open_trades:
-                    logger.info(f"Cancelling pending {trade.order.status} order on {trade.contract.symbol}")
+            if active_trades:
+                logger.info(f"Clearing {len(active_trades)} pending orders for account {self.account_id}...")
+                for trade in active_trades:
+                    logger.info(f"Cancelling pending {trade.orderStatus.status} order on {trade.contract.symbol} (ID: {trade.order.orderId})")
                     self.ib.cancelOrder(trade.order)
                 
                 # Wait for cancellations to propagate (up to 5 seconds)
