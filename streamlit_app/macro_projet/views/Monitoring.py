@@ -7,7 +7,10 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+import logging
 from data_loader import QUADRANT_NAMES, QUADRANT_COLORS, ALLOCATIONS
+
+logger = logging.getLogger(__name__)
 
 # --- Friendly display names for indicator columns ---
 INDICATOR_LABELS = {
