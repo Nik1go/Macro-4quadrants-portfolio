@@ -248,13 +248,13 @@ class OrderManager:
             asset_currency = details.get('symbol', mapping_symbol) # e.g., 'EUR' for USD_EUR CFD, 'USD' for USD_JPY CFD
             if not is_forex:
                 # Standard ETF: shares = Value in Base / Price (Price is in Base)
-                shares = int(order_value_in_base / price)
+                shares_magnitude = int(order_value_in_base / price)
                 cross_rate_to_base = price
             else:
                 # Forex/CFD: shares = Value in Asset Base Currency
                 # We need to convert order_value_in_base (Account Base) -> asset_currency
                 if asset_currency == base_currency:
-                    shares = int(order_value_in_base)
+                    shares_magnitude = int(order_value_in_base)
                     cross_rate_to_base = 1.0
                 else:
                     # Convert Account Base (e.g. EUR) to Asset Base (e.g. USD)
@@ -264,7 +264,7 @@ class OrderManager:
                     rate_to_base = pm.get_exchange_rate(asset_currency, base_currency)
                     
                     if rate_to_base > 0:
-                        shares = int(order_value_in_base / rate_to_base)
+                        shares_magnitude = int(order_value_in_base / rate_to_base)
                         cross_rate_to_base = rate_to_base
                     else:
                         logger.error(f"❌ Could not determine exchange rate for {asset_currency} to {base_currency}")
