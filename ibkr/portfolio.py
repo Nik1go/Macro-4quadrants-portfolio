@@ -27,9 +27,6 @@ class PortfolioManager:
             pm.disconnect()
     """
     
-    # Reverse mapping: IBKR symbol -> internal name
-    SYMBOL_TO_ASSET = {v: k for k, v in ETF_MAPPING.items()}
-    
     def __init__(self, host: str = HOST, port: int = CURRENT_PORT, 
                  client_id: int = CLIENT_ID, timeout: int = CONNECTION_TIMEOUT,
                  account_id: str = ACCOUNT_ID):
@@ -40,6 +37,16 @@ class PortfolioManager:
         self.timeout = timeout
         self.account_id = account_id
         self.ib: Optional[IB] = None
+        
+        # Build symbol mapping: IBKR symbol -> internal name
+        from .config import CONTRACT_DETAILS
+        self.symbol_to_asset = {v: k for k, v in ETF_MAPPING.items()}
+        # Add overrides from CONTRACT_DETAILS (crucial for CFDs: real symbol 'EUR' -> asset 'USD_EUR')
+        for asset, ibkr_id in ETF_MAPPING.items():
+            if ibkr_id in CONTRACT_DETAILS and 'symbol' in CONTRACT_DETAILS[ibkr_id]:
+                real_symbol = CONTRACT_DETAILS[ibkr_id]['symbol']
+                self.symbol_to_asset[real_symbol] = asset
+                logger.debug(f"Mapping real symbol {real_symbol} to asset {asset}")
         
     def connect(self) -> bool:
         """Connect to IBKR."""
@@ -88,8 +95,8 @@ class PortfolioManager:
             symbol = item.contract.symbol
             
             # Check if this is one of our tracked assets
-            if symbol in self.SYMBOL_TO_ASSET:
-                asset_name = self.SYMBOL_TO_ASSET[symbol]
+            if symbol in self.symbol_to_asset:
+                asset_name = self.symbol_to_asset[symbol]
                 positions[asset_name] = {
                     'symbol': symbol,
                     'shares': item.position,
