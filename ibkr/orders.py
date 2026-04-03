@@ -204,6 +204,16 @@ class OrderManager:
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
         
+        from .portfolio import PortfolioManager
+        pm = PortfolioManager(account_id=self.account_id)
+        if not pm.connect():
+             raise ConnectionError("Could not connect PortfolioManager for rebalance calculation")
+        
+        try:
+            current_positions = pm.get_positions()
+        finally:
+            pm.disconnect()
+            
         orders = []
         
         for asset_name, target_weight in target_weights.items():
@@ -260,33 +270,50 @@ class OrderManager:
                         logger.error(f"❌ Could not determine exchange rate for {asset_currency} to {base_currency}")
                         continue
 
-            if shares < 1:
+            if shares_magnitude < 1:
                 continue
             
-            # Direction
-            action = 'BUY' if weight_delta > 0 else 'SELL'
+            # --- New Direction & Delta Logic ---
+            # We want to reach a target number of shares
             if is_forex and asset_name.startswith('USD_') and not real_symbol.startswith('USD'):
-                action = 'SELL' if weight_delta > 0 else 'BUY'
-                logger.info(f"Forex Inversion for {asset_name}: {action}")
+                # Inverted asset: weight +0.18 means position -18%
+                target_shares = -shares_magnitude
+            else:
+                target_shares = shares_magnitude
+                
+            # Current shares held
+            current_shares = current_positions.get(asset_name, {}).get('shares', 0.0)
+            
+            # Delta to trade
+            delta_shares = target_shares - current_shares
+            
+            # Only trade if delta is significant (based on threshold)
+            delta_weight = abs(delta_shares * cross_rate_to_base / portfolio_value)
+            if delta_weight < threshold:
+                logger.debug(f"Skipping {asset_name}: delta {delta_weight:.1%} < threshold {threshold:.1%}")
+                continue
 
-            # Est value in EUR
-            est_val_in_base = shares * cross_rate_to_base
+            action = 'BUY' if delta_shares > 0 else 'SELL'
+            final_shares = int(abs(delta_shares))
+
+            if final_shares < 1:
+                continue
 
             order = RebalanceOrder(
                 asset_name=asset_name,
                 symbol=real_symbol,
                 action=action,
-                shares=shares,
-                estimated_value=est_val_in_base,
+                shares=final_shares,
+                estimated_value=final_shares * cross_rate_to_base,
                 current_weight=current_weight,
                 target_weight=target_weight,
-                weight_delta=weight_delta
+                weight_delta=delta_shares * cross_rate_to_base / portfolio_value
             )
             orders.append(order)
             
             logger.info(
-                f"Order: {action} {shares} {real_symbol} "
-                f"(~{est_val_in_base:.2f} {base_currency}) "
+                f"Order: {action} {final_shares} {real_symbol} "
+                f"(~{(final_shares * cross_rate_to_base):.2f} {base_currency}) "
                 f"[{current_weight:.1%} → {target_weight:.1%}]"
             )
         
