@@ -185,7 +185,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research","Portfolio Optimization", "Polymarket Arbitrage"]
+        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Polymarket Arbitrage", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research","Portfolio Optimizer", "Monte Carlo Gambling"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -197,7 +197,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier","activity"], 
+            icons=["house-fill", "safe", "coin", "activity", "hourglass-split", "arrows-expand", "robot", "bezier","dice-5"], 
             #bootstrap icons (7 icons for 7 options)
             menu_icon="cast",
             default_index=default_idx,
@@ -314,7 +314,7 @@ def render_home():
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Crypto Momentum Trading"
             st.rerun()
-    
+
     with col3:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
@@ -339,8 +339,8 @@ def render_home():
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-hourglass-split"></i> DCA Investment Strategy</h3>
             <p><strong>Tech:</strong> Pandas, yFinance, NumPy</p>
-            <p>Trying to improve Dollar Cost Averaging backtesting framework for SP500, Gold, and Bitcoin. 
-            Implemented bi-weekly rebalancing with z-score optimisation.</p>
+            <p>Backtesting and optimization of Dollar Cost Averaging framework for SP500 and Gold. 
+            Implemented bi-weekly rebalancing with z-score optimization to improve entry points.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
@@ -348,21 +348,21 @@ def render_home():
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "DCA Investment Strategy"
             st.rerun()
-
+    
     
     with col5:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3><i class="bi bi-dice-5"></i> Martingale Gambling</h3>
-            <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
-            <p>Monte carlo simulation of roulette games using Martingale strategy. 
-            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
+            <h3><i class="bi bi-activity"></i> Polymarket Arbitrage</h3>
+            <p>l'objectif est de décelé grace a black-scholes des opportunité d'arbitrage entre polymarket et Binance.
+            En partant du principe que polymarket propose des contrat forward binaire 
+            </p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_poly", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Monte Carlo Gambling"
+            st.session_state.current_page = "Polymarket Arbitrage"
             st.rerun()
     
 
@@ -371,8 +371,8 @@ def render_home():
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-bezier"></i> Portfolio Optimizer</h3>
             <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
-            <p>Optimization of a portfolio of assets using Monte Carlo simulation and genetic algorithms. 
-            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
+            <p>Portfolio optimization using Markowitz theory and SciPy. Includes Monte Carlo 
+            simulations to visualize the Efficient Frontier and find the optimal Risk/Reward balance.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
@@ -387,16 +387,16 @@ def render_home():
     with col7:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3><i class="bi bi-activity"></i> Polymarket Arbitrage</h3>
-            <p>l'objectif est de décelé grace a black-scholes des opportunité d'arbitrage entre polymarket et Binance.
-            En partant du principe que polymarket propose des contrat forward binaire 
-            </p>
+            <h3><i class="bi bi-dice-5"></i> Martingale Gambling</h3>
+            <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
+            <p>Monte carlo simulation of roulette games using Martingale strategy. 
+            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_poly", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Polymarket Arbitrage"
+            st.session_state.current_page = "Monte Carlo Gambling"
             st.rerun()
     
    
@@ -447,14 +447,6 @@ if __name__ == "__main__":
         except Exception as e:
             st.error(f"Could not load the DCA Strategy app: {str(e)}")
 
-    elif st.session_state.current_page == "Crypto Momentum Trading":
-        _render_nav_sidebar("Crypto Momentum Trading")
-        try:
-            apply_home_css()
-            import momentum_BTC.app_momentum as app_momentum
-            app_momentum.render()
-        except Exception as e:
-            st.error(f"Could not load the Crypto Momentum Trading app: {str(e)}")
 
     elif st.session_state.current_page == "Arbitrage Or-Argent":
         _render_nav_sidebar("Arbitrage Or-Argent")
@@ -464,6 +456,15 @@ if __name__ == "__main__":
             app_arbitrage.render()
         except Exception as e:
             st.error(f"Could not load the Arbitrage app: {str(e)}")
+
+    elif st.session_state.current_page == "Crypto Momentum Trading":
+        _render_nav_sidebar("Crypto Momentum Trading")
+        try:
+            apply_home_css()
+            import momentum_BTC.app_momentum as app_momentum
+            app_momentum.render()
+        except Exception as e:
+            st.error(f"Could not load the Crypto Momentum Trading app: {str(e)}")
     
     elif st.session_state.current_page == "Portfolio Optimizer":
         _render_nav_sidebar("Portfolio Optimizer")

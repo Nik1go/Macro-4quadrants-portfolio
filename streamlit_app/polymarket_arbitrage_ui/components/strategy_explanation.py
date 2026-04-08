@@ -16,14 +16,19 @@ def render_strategy_explanation() -> None:
         st.markdown("""
         1. **Ingestion :** Collecte des prix Spot via Binance et des carnets d'ordres via Polymarket v2.
         2. **Modélisation :** Calcul des d1/d2 Black-Scholes pour options binaires afin d'obtenir une probabilité théorique.
-        3. **Détection :** Identification des écarts entre la probabilité théorique et le prix du carnet d'ordres, après déduction des frais.
+        3. **Détection :** Identification des écarts entre la probabilité théorique et le prix du carnet d'ordres (Edge).
+        4. **Nettoyage :** Déduction des frais (Matic + Binance + Poly) pour obtenir le **Spread Net**.
+        5. **Sizing (Kelly) :** Calcul de la fraction optimale du capital à investir :
+           $$f^* = \\frac{\\mu - r}{\\sigma^2}$$
+           *Où $\\mu$ est l'espérance de gain, $r$ le taux sans risque, et $\\sigma$ la volatilité de l'actif spécifique (XRP, BTC, etc.).*
         """)
         
         st.subheader("Gestion des Risques")
         st.markdown("""
-        - **Kelly Criterion :** Taille de position dynamique.
-        - **Kill Switch :** Arrêt auto si drawdown > 3%.
-        - **Maturité :** Filtrage des marchés trop proches de l'expiration (< 1 Jour).
+        - **Fraction de Kelly (1/4) :** On utilise une version "Fractionnaire" pour éviter la sur-exposition.
+        - **Volatilité par Actif :** La taille est inversement proportionnelle au carré de la volatilité de la crypto traitée.
+        - **Concentration Caps :** Limite max de 35% du capital par actif pour la diversification.
+        - **Circuit Breaker :** Arrêt auto si le drawdown global (Equity totale) dépasse 50%.
         """)
 
     with col2:

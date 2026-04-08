@@ -32,6 +32,8 @@ class Position:
     stop_loss_price: float
     opened_at: datetime
     target_delta: float = 0.0
+    ends_at: str = "?"
+    entry_exchange_px: float = 0.0
 
 
 class PositionSizer:
@@ -196,16 +198,26 @@ class RiskManager:
         self.drawdown_manager = DrawdownManager(initial_capital=initial_capital, max_drawdown_pct=max_drawdown_pct)
         self.stop_loss_manager = StopLossManager(stop_loss_pct=stop_loss_pct)
 
-    def estimate_total_fee_pct(self, position_size_usd: float, matic_price_usd: float = 1.0) -> float:
+    def estimate_total_fee_pct(self, position_size_usd: float, strategy_name: str = "delta_neutral", matic_price_usd: float = 1.0) -> float:
         """Estimate total fee percentage including gas, exchange fee and Polymarket fee."""
         size = max(float(position_size_usd), 1e-9)
         matic_price = max(float(matic_price_usd), 0.0)
         gas_cost_pct = (self.gas_fee_matic * matic_price) / size
-        return float(self.exchange_taker_fee + self.polymarket_fee + gas_cost_pct)
+        
+        # Only add exchange (Binance) fee for delta-neutral
+        venue_fees = self.polymarket_fee
+        if strategy_name == "delta_neutral":
+            venue_fees += self.exchange_taker_fee
+            
+        return float(venue_fees + gas_cost_pct)
 
-    def calculate_net_spread(self, raw_spread: float, position_size_usd: float, matic_price_usd: float = 1.0) -> float:
+    def calculate_net_spread(self, raw_spread: float, position_size_usd: float, strategy_name: str = "delta_neutral", matic_price_usd: float = 1.0) -> float:
         spread = float(raw_spread)
-        total_fees = self.estimate_total_fee_pct(position_size_usd=position_size_usd, matic_price_usd=matic_price_usd)
+        total_fees = self.estimate_total_fee_pct(
+            position_size_usd=position_size_usd, 
+            strategy_name=strategy_name,
+            matic_price_usd=matic_price_usd
+        )
         net_spread = spread - total_fees
         if np.isnan(net_spread) or np.isinf(net_spread):
             return 0.0
@@ -213,12 +225,17 @@ class RiskManager:
 
     def check_liquidity_and_slippage(
         self,
-        orderbook: Dict[str, List[List[float]]],
+        orderbook: Dict,
         target_size: float,
         side: str = "buy",
         max_slippage: float = 0.02,
     ) -> Tuple[float, bool]:
-        """Estimate weighted average fill price and enforce slippage cap."""
+        """Estimate weighted average fill price and enforce slippage cap.
+
+        Accepts two level formats:
+        - list-of-lists : [[price, size], ...]        (CLOB style)
+        - list-of-dicts : [{"price": p, "size": s}]  (Polymarket Gamma style)
+        """
         if not isinstance(orderbook, dict) or target_size <= 0:
             return 0.0, False
 
@@ -226,8 +243,16 @@ class RiskManager:
         if not levels:
             return 0.0, False
 
-        top = float(levels[0][0]) if levels and len(levels[0]) >= 2 else 0.0
-        if top <= 0:
+        def _extract(level) -> Tuple[float, float]:
+            """Return (price, size) regardless of level format."""
+            if isinstance(level, dict):
+                return float(level.get("price", 0.0)), float(level.get("size", 0.0))
+            if isinstance(level, (list, tuple)) and len(level) >= 2:
+                return float(level[0]), float(level[1])
+            return 0.0, 0.0
+
+        top_price, _ = _extract(levels[0])
+        if top_price <= 0:
             return 0.0, False
 
         remaining = float(target_size)
@@ -235,9 +260,7 @@ class RiskManager:
         total_available = 0.0
 
         for level in levels:
-            if not isinstance(level, (list, tuple)) or len(level) < 2:
-                continue
-            price, size = float(level[0]), float(level[1])
+            price, size = _extract(level)
             if price <= 0 or size <= 0 or np.isnan(price) or np.isnan(size):
                 continue
             total_available += size
@@ -254,7 +277,7 @@ class RiskManager:
             return 0.0, False
 
         avg_price = total_cost / max(target_size, 1e-9)
-        slippage = abs(avg_price - top) / max(top, 1e-9)
+        slippage = abs(avg_price - top_price) / max(top_price, 1e-9)
         return float(avg_price), bool(slippage <= max_slippage)
 
     def reject_trade_for_excess_slippage(self, expected_edge: float, estimated_slippage: float) -> bool:
@@ -328,6 +351,8 @@ class RiskManager:
         size_usd: float,
         entry_price: float,
         target_delta: float = 0.0,
+        ends_at: str = "?",
+        entry_exchange_px: float = 0.0,
     ) -> Position:
         """Create a position with computed stop-loss trigger."""
         stop_loss_price = self.stop_loss_manager.calculate_stop_loss_price(entry_price, direction)
@@ -341,6 +366,8 @@ class RiskManager:
             stop_loss_price=stop_loss_price,
             opened_at=datetime.now(timezone.utc),
             target_delta=float(target_delta),
+            ends_at=ends_at,
+            entry_exchange_px=entry_exchange_px,
         )
 
     def monitor_delta_neutrality(self, positions: Dict[str, Position]) -> float:

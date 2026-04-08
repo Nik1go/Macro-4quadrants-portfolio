@@ -90,21 +90,26 @@ class DeltaNeutralStrategy(BaseStrategy):
             return StrategySignal(False, self.name, "hold", "edge_below_threshold", 0.0, {"edge": edge})
 
         if edge > 0:
-            direction = "buy_yes_hedge_short_binance"
-            hedge_side = "sell"
+            # Theo > Market → YES sous-évalué → acheter YES sur Poly + shorter Binance perp
+            direction = "buy_yes short binance"
+            hedge_side = "sell"   # Short Binance perp pour neutraliser le delta
             target_delta = -1.0
         else:
-            direction = "buy_no_hedge_long_binance"
-            hedge_side = "buy"
+            # Market > Theo → NO sous-évalué → acheter NO sur Poly + longer Binance perp
+            direction = "buy_no long binance"
+            hedge_side = "buy"    # Long Binance perp
             target_delta = 1.0
 
+        # ── Log lisible ────────────────────────────────────────────────────────
+        binance_action = "Short Binance Perp" if hedge_side == "sell" else "Long Binance Perp"
         logger.info(
-            "%s signal slug=%s direction=%s edge=%.6f funding=%.6f",
-            self.name,
+            "[DN] SIGNAL  %s  |  %s  |  Poly: %s  |  Binance: %s  |  Edge: %+.2f%%  |  Funding: %.4f%%",
             context.slug,
-            direction,
-            edge,
-            values["funding_rate"],
+            direction.replace("_", " ").upper(),
+            binance_action,
+            f"{values['market_price']:.4f}",
+            edge * 100,
+            values["funding_rate"] * 100,
         )
 
         return StrategySignal(

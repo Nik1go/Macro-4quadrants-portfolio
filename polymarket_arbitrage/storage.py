@@ -62,10 +62,14 @@ class StorageManager:
                 net_spread REAL,
                 is_opportunity INTEGER,
                 strategy TEXT,
-                slug TEXT
+                slug TEXT,
+                signal_type TEXT
             )
             """
         )
+
+        # Forward-compatible migrations
+        self._ensure_column(conn, "spreads", "signal_type", "TEXT")
 
         cursor.execute(
             """
@@ -183,6 +187,29 @@ class StorageManager:
 
         conn = self._connect()
         pd.DataFrame([payload]).to_sql("trades", conn, if_exists="append", index=False)
+        conn.close()
+
+    def update_trade_settlement(self, slug: str, exit_price: float, realized_pnl: float) -> None:
+        """Update an open trade with its final settlement price and pnl."""
+        conn = self._connect()
+        cursor = conn.cursor()
+        now_ts = datetime.now(timezone.utc).isoformat()
+        
+        # On cherche le trade le plus récent pour ce slug qui n'est pas encore clôturé
+        cursor.execute(
+            """
+            UPDATE trades 
+            SET exit_price = ?, exit_timestamp = ?, realized_pnl = ?, status = 'SETTLED'
+            WHERE rowid = (
+                SELECT rowid FROM trades 
+                WHERE json_extract(metadata_json, '$.slug') = ? 
+                AND (exit_timestamp IS NULL OR exit_timestamp = '')
+                ORDER BY timestamp DESC LIMIT 1
+            )
+            """,
+            (exit_price, now_ts, realized_pnl, slug)
+        )
+        conn.commit()
         conn.close()
 
     def save_strategy_metric(

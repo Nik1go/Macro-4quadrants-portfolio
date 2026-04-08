@@ -1,8 +1,8 @@
 {
-  "sharpe_ratio": 0.0,
-  "total_pnl": 0.0,
-  "win_rate": 0.0,
+  "sharpe_ratio": 2.022814,
+  "total_pnl": 21.579388,
+  "win_rate": 1.0,
   "max_drawdown": 0.0,
-  "num_trades": 0,
-  "last_updated": "2026-03-29T17:14:16.209639+00:00"
+  "num_trades": 2,
+  "last_updated": "2026-04-05T09:02:08.021492+00:00"
 }

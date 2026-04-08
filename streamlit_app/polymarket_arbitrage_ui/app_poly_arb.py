@@ -9,8 +9,46 @@ from .components.strategy_explanation import render_strategy_explanation
 from .components.scan_activity import render_scan_activity
 from .data_loader import load_open_positions, load_trades_history
 
+# --- THEME CSS (FROM MACRO PROJECT) ---
+BLOOMBERG_CSS = """
+    <style>
+    /* Tab navigation styling - bigger + separated */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0px !important;
+        border-bottom: 2px solid #3d4263 !important;
+        padding-bottom: 0 !important;
+        width: 100% !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        flex: 1 !important;
+        justify-content: center !important;
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.5px !important;
+        padding: 14px 28px !important;
+        color: #8890b5 !important;
+        border-right: 2px solid #3d4263 !important;
+    }
+    .stTabs [data-baseweb="tab"]:last-child {
+        border-right: none !important;
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        color: #00d4ff !important;
+        background: rgba(0, 212, 255, 0.08) !important;
+        border-bottom: 3px solid #00d4ff !important;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        color: #00d4ff !important;
+        background: rgba(0, 212, 255, 0.05) !important;
+    }
+    </style>
+"""
+
 def render() -> None:
     """Render the Polymarket dashboard integrated into the main app."""
+    
+    st.markdown(BLOOMBERG_CSS, unsafe_allow_html=True)
     
     st.title("Polymarket Arbitrage")
     st.markdown("""
@@ -29,11 +67,9 @@ def render() -> None:
     # Map choice to DB path and metadata
     if account_choice == "Delta Neutral":
         db_path = "polymarket_arbitrage/data/dn/arbitrage.db"
-        port = 18080
         strategy_name = "Delta Neutral"
     else:
         db_path = "polymarket_arbitrage/data/dir/arbitrage.db"
-        port = 18081
         strategy_name = "Pure Polymarket"
 
     st.divider()
@@ -48,21 +84,26 @@ def render() -> None:
     total_pnl = trades_hist["realized_pnl"].sum() if not trades_hist.empty else 0.0
     active_count = len(open_pos)
 
-    c1.metric("Capital", "$10,000")
-    c2.metric("Profit Réalisé", f"${total_pnl:,.2f}", delta=f"{(total_pnl/10000):.2%}" if total_pnl != 0 else None)
+    # Calcul du cash restant : Capital Initial + PnL Réalisé - Capital immobilisé (positions ouvertes)
+    initial_cap = 10000.0
+    invested_cap = open_pos["size_usd"].sum() if not open_pos.empty else 0.0
+    remaining_cash = initial_cap + total_pnl - invested_cap
+
+    c1.metric("Capital Initial", f"${initial_cap:,.0f}")
+    c2.metric("Profit Réalisé", f"${total_pnl:,.2f}", delta=f"{(total_pnl/initial_cap):.2%}" if total_pnl != 0 else None)
     c3.metric("Positions Actives", str(active_count))
-    c4.metric("Stratégie", strategy_name)
-    c5.metric("Santé Flux", f"Port {port}", delta="Live", delta_color="normal")
+    c4.metric("Mode", strategy_name)
+    c5.metric("Cash Restant", f"${remaining_cash:,.2f}")
 
     st.divider()
 
-    # --- TAB NAVIGATION (Simple text, no emojis) ---
+    # --- TAB NAVIGATION (Macro Style: Uppercase & Blocks) ---
     tab_explanation, tab_scan, tab_monitoring, tab_backtest = st.tabs(
         [
-            "Mécanique Stratégique",
-            "Activité du Scanner",
+            "Methodologie",
+            "Scanner Activity",
             "Monitoring Positions",
-            "Backtesting",
+            "Backtest & Perf",
         ]
     )
 

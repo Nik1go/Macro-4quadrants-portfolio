@@ -216,18 +216,12 @@ class OrderManager:
             
         orders = []
         
-        for asset_name, target_weight in target_weights.items():
+        all_assets = set(target_weights.keys()).union(ETF_MAPPING.keys()).union(current_positions.keys())
+        
+        for asset_name in all_assets:
+            target_weight = target_weights.get(asset_name, 0.0)
             current_weight = current_weights.get(asset_name, 0.0)
-            weight_delta = target_weight - current_weight
-            
-            if abs(weight_delta) < threshold:
-                continue
-            
-            # Order value in account base (e.g., EUR)
-            order_value_in_base = abs(weight_delta) * portfolio_value
-            
-            if order_value_in_base < MIN_ORDER_SIZE_USD:
-                continue
+            target_value_in_base = target_weight * portfolio_value
             
             mapping_symbol = ETF_MAPPING.get(asset_name)
             if not mapping_symbol:
@@ -239,47 +233,37 @@ class OrderManager:
             
             price = self.get_current_price(asset_name)
             if not price:
+                if target_weight == 0 and current_weight == 0:
+                    continue
+                logger.warning(f"Could not get price for {asset_name}, skipping.")
                 continue
             
-            # Calculate shares
-            # For CFDs, 1 share = 1 unit of the asset's base currency (e.g., 1 USD for USD.JPY)
-            # We convert the target order value (in account base) to the asset's base currency
-            
-            asset_currency = details.get('symbol', mapping_symbol) # e.g., 'EUR' for USD_EUR CFD, 'USD' for USD_JPY CFD
+            # Calculate TARGET shares directly from TARGET weight
+            asset_currency = details.get('symbol', mapping_symbol)
             if not is_forex:
-                # Standard ETF: shares = Value in Base / Price (Price is in Base)
-                shares_magnitude = int(order_value_in_base / price)
+                target_shares_magnitude = int(target_value_in_base / price)
                 cross_rate_to_base = price
             else:
-                # Forex/CFD: shares = Value in Asset Base Currency
-                # We need to convert order_value_in_base (Account Base) -> asset_currency
                 if asset_currency == base_currency:
-                    shares_magnitude = int(order_value_in_base)
+                    target_shares_magnitude = int(target_value_in_base)
                     cross_rate_to_base = 1.0
                 else:
-                    # Convert Account Base (e.g. EUR) to Asset Base (e.g. USD)
-                    # We have a price for Asset Base in Account Base (e.g. USD_EUR price)
                     from .portfolio import PortfolioManager
                     pm = PortfolioManager()
                     rate_to_base = pm.get_exchange_rate(asset_currency, base_currency)
-                    
                     if rate_to_base > 0:
-                        shares_magnitude = int(order_value_in_base / rate_to_base)
+                        target_shares_magnitude = int(target_value_in_base / rate_to_base)
                         cross_rate_to_base = rate_to_base
                     else:
                         logger.error(f"❌ Could not determine exchange rate for {asset_currency} to {base_currency}")
                         continue
 
-            if shares_magnitude < 1:
-                continue
-            
-            # --- New Direction & Delta Logic ---
-            # We want to reach a target number of shares
+            # Apply inversion if needed
             if is_forex and asset_name.startswith('USD_') and not real_symbol.startswith('USD'):
                 # Inverted asset: weight +0.18 means position -18%
-                target_shares = -shares_magnitude
+                target_shares = -target_shares_magnitude
             else:
-                target_shares = shares_magnitude
+                target_shares = target_shares_magnitude
                 
             # Current shares held
             current_shares = current_positions.get(asset_name, {}).get('shares', 0.0)
@@ -287,9 +271,10 @@ class OrderManager:
             # Delta to trade
             delta_shares = target_shares - current_shares
             
-            # Only trade if delta is significant (based on threshold)
+            # Check threshold over the resulting weight diff
             delta_weight = abs(delta_shares * cross_rate_to_base / portfolio_value)
-            if delta_weight < threshold:
+            # Always close out completely if target is 0, ignoring the threshold
+            if delta_weight < threshold and target_weight != 0.0:
                 logger.debug(f"Skipping {asset_name}: delta {delta_weight:.1%} < threshold {threshold:.1%}")
                 continue
 
@@ -298,13 +283,18 @@ class OrderManager:
 
             if final_shares < 1:
                 continue
+                
+            order_value_in_base = final_shares * cross_rate_to_base
+            if order_value_in_base < MIN_ORDER_SIZE_USD:
+                logger.debug(f"Skipping {asset_name}: value {order_value_in_base:.2f} < MIN_ORDER_SIZE {MIN_ORDER_SIZE_USD}")
+                continue
 
             order = RebalanceOrder(
                 asset_name=asset_name,
                 symbol=real_symbol,
                 action=action,
                 shares=final_shares,
-                estimated_value=final_shares * cross_rate_to_base,
+                estimated_value=order_value_in_base,
                 current_weight=current_weight,
                 target_weight=target_weight,
                 weight_delta=delta_shares * cross_rate_to_base / portfolio_value
@@ -313,7 +303,7 @@ class OrderManager:
             
             logger.info(
                 f"Order: {action} {final_shares} {real_symbol} "
-                f"(~{(final_shares * cross_rate_to_base):.2f} {base_currency}) "
+                f"(~{order_value_in_base:.2f} {base_currency}) "
                 f"[{current_weight:.1%} → {target_weight:.1%}]"
             )
         

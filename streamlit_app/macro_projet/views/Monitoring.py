@@ -72,14 +72,17 @@ def render_ibkr_dashboard(data):
                         pos_list = []
                         for asset, info in positions.items():
                             raw_val = info['market_value']
+                            raw_pnl = info.get('unrealized_pnl', 0)
                             currency = info.get('currency', base_curr)
                             
                             # Convert value to base currency for display and weight
                             if currency != base_curr:
                                 rate = pm.get_exchange_rate(currency, base_curr)
                                 val_in_base = raw_val * rate
+                                pnl_in_base = raw_pnl * rate
                             else:
                                 val_in_base = raw_val
+                                pnl_in_base = raw_pnl
                                 
                             weight = (val_in_base / portfolio_val) * 100 if portfolio_val > 0 else 0
                             
@@ -93,10 +96,10 @@ def render_ibkr_dashboard(data):
                                 'Weight (%)': round(display_weight, 2), 
                                 'Value ($)': round(display_val, 2),      
                                 'Shares': int(display_shares),
-                                'Unrealized PNL ($)': round(info.get('unrealized_pnl', 0), 2)
+                                'Unrealized PNL ($)': round(pnl_in_base, 2)
                             })
                         positions_df = pd.DataFrame(pos_list)
-                        st.success(f"✅ Live Connection: {self.account_id} ({base_curr})")
+                        st.success(f"✅ Live Connection: {pm.account_id} ({base_curr})")
                     else:
                         # Only show warning if really nothing is found
                         if not data.get('ibkr_last_positions'):

@@ -44,21 +44,24 @@ class Config:
 
     TARGET_ASSETS: List[str] = [
         item.strip()
-        for item in os.getenv("TARGET_ASSETS", "Bitcoin,Ethereum,Solana,XRP").split(",")
+        for item in os.getenv("TARGET_ASSETS", "Bitcoin,Ethereum,XRP").split(",")
         if item.strip()
     ]
     ASSET_TO_SYMBOL: Dict[str, str] = {
         "Bitcoin": os.getenv("SYMBOL_BITCOIN", "BTC/USDT"),
         "Ethereum": os.getenv("SYMBOL_ETHEREUM", "ETH/USDT"),
-        "Solana": os.getenv("SYMBOL_SOLANA", "SOL/USDT"),
         "XRP": os.getenv("SYMBOL_XRP", "XRP/USDT"),
     }
 
     SCAN_YEAR: str = os.getenv("SCAN_YEAR", "2026")
     SCAN_INTERVAL: int = max(int(os.getenv("SCAN_INTERVAL", "60")), 5)
-    MAX_MARKETS_PER_ASSET: int = max(int(os.getenv("MAX_MARKETS_PER_ASSET", "12")), 1)
+    MAX_MARKETS_PER_ASSET: int = max(int(os.getenv("MAX_MARKETS_PER_ASSET", "100")), 1)
+    MAX_MARKETS_PER_DAY: int = max(int(os.getenv("MAX_MARKETS_PER_DAY", "15")), 1)
     MIN_TTM_DAYS: int = max(int(os.getenv("MIN_TTM_DAYS", "0")), 0)
     MAX_TTM_DAYS: int = max(int(os.getenv("MAX_TTM_DAYS", "7")), 1)
+
+    MIN_BATCH_EDGE: float = float(os.getenv("MIN_BATCH_EDGE", "0.04"))
+    MAX_TRADES_PER_ROUND: int = max(int(os.getenv("MAX_TRADES_PER_ROUND", "5")), 1)
 
     MIN_SPREAD_THRESHOLD: float = float(os.getenv("MIN_SPREAD_THRESHOLD", "0.02"))
     DELTA_NEUTRAL_MIN_EDGE: float = float(os.getenv("DELTA_NEUTRAL_MIN_EDGE", "0.015"))
@@ -71,7 +74,7 @@ class Config:
     MAX_POSITION_SIZE: float = max(float(os.getenv("MAX_POSITION_SIZE", "1000")), 1.0)
     MIN_POSITION_SIZE: float = max(float(os.getenv("MIN_POSITION_SIZE", "10")), 0.0)
     STOP_LOSS_PCT: float = float(os.getenv("STOP_LOSS_PCT", "0.5"))
-    MAX_DRAWDOWN_PCT: float = float(os.getenv("MAX_DRAWDOWN_PCT", "0.2"))
+    MAX_DRAWDOWN_PCT: float = float(os.getenv("MAX_DRAWDOWN_PCT", "0.5"))
     INITIAL_CAPITAL: float = max(float(os.getenv("INITIAL_CAPITAL", "10000")), 100.0)
     MAX_POSITION_PER_ASSET_PCT: float = float(os.getenv("MAX_POSITION_PER_ASSET_PCT", "0.35"))
 
@@ -159,6 +162,8 @@ class Config:
             "max_position_size": cls.MAX_POSITION_SIZE,
             "max_position_per_asset_pct": cls.MAX_POSITION_PER_ASSET_PCT,
             "db_path": cls.DB_PATH,
+            "min_batch_edge": cls.MIN_BATCH_EDGE,
+            "max_trades_per_round": cls.MAX_TRADES_PER_ROUND,
             "min_ttm_days": cls.MIN_TTM_DAYS,
             "max_ttm_days": cls.MAX_TTM_DAYS,
             "backtest_dir": str(cls.BACKTEST_DIR),

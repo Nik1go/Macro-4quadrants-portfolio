@@ -195,6 +195,8 @@ class ExecutionEngine:
         """Execute signal and persist trade logs on success."""
         result = await self._execute_with_retry(signal_data)
         if result.get("status") == "FILLED":
+            # Add metadata from signal to payload for storage
+            signal_data["ends_at"] = signal_data.get("ends_at", "?")
             self._persist_trade(signal_data=signal_data, execution_result=result)
             self.output_manager.update_metrics()
         return result
@@ -280,8 +282,10 @@ class ExecutionEngine:
                 timestamp=datetime.now(timezone.utc).isoformat(),
             ).to_dict()
 
-        if "hedge" in direction:
-            hedge_side = "sell" if "short_binance" in direction else "buy"
+        # Hedge Binance : détecté via signal_meta hedge_side (plus robuste que le nom de direction)
+        signal_meta = signal_data.get("signal_meta", {})
+        hedge_side = signal_meta.get("hedge_side")  # 'sell' ou 'buy'
+        if hedge_side:
             symbol = str(signal_data.get("symbol", "BTC/USDT"))
             approx_amount = max(size / max(float(signal_data.get("spot_price", 1.0)), 1e-9), 1e-6)
 
@@ -305,51 +309,88 @@ class ExecutionEngine:
 
         spread = float(signal_data.get("net_spread", signal_data.get("spread", 0.0)))
         expected_profit = float(signal_data.get("expected_profit", 0.0))
+        realized_pnl = float(signal_data.get("realized_pnl", expected_profit))
 
         return ExecutionResult(
             status="FILLED",
             mode="live",
             reason="live_multi_leg_filled",
             executed_spread=spread,
-            realized_pnl=expected_profit,
+            realized_pnl=realized_pnl,
             timestamp=datetime.now(timezone.utc).isoformat(),
         ).to_dict()
 
     def _persist_trade(self, signal_data: Dict[str, Any], execution_result: Dict[str, Any]) -> None:
-        """Persist normalized trade in CSV and SQLite."""
+        """Persist normalized trade in CSV and SQLite + log lisible."""
+        ts_raw = execution_result.get("timestamp", datetime.now(timezone.utc).isoformat())
+        asset_pair  = signal_data.get("symbol", "UNKNOWN")
+        direction   = signal_data.get("direction", "hold")
+        poly_price  = float(signal_data.get("polymarket_price", signal_data.get("entry_price", 0.5)))
+        binance_px  = float(signal_data.get("spot_price", 0.0))   # Prix spot/perp Binance
+        size        = float(signal_data.get("size", 0.0))
+        slug        = signal_data.get("slug", "")
+        ends_at     = signal_data.get("ends_at", "?")             # Date dénouement du marché
+        exp_profit  = float(signal_data.get("expected_profit", 0.0))
+        net_spread  = float(signal_data.get("net_spread", signal_data.get("spread", 0.0)))
+        strategy    = signal_data.get("strategy", "unknown")
+        signal_meta = signal_data.get("signal_meta", {})
+        hedge_side  = signal_meta.get("hedge_side", "")
+        mode        = "PAPER" if self.is_paper_trade else "LIVE"
+
+        # ── Log lisible ────────────────────────────────────────────────────────
+        binance_leg = f" + Binance {hedge_side.upper()}" if hedge_side else ""
+        action_str = "TRADE CLOS" if direction == "close" else "TRADE OUVERT"
+        logger.info(
+            "[%s] %s  %s | %s | Marché: %s | Expire: %s"
+            "\n          Poly: %.4f  Binance: %.2f  Taille: $%.2f  Spread: %+.2f%%  PnL REAL: $%.4f",
+            mode, action_str, asset_pair, direction.replace("_", " ").upper() + binance_leg,
+            slug, ends_at,
+            poly_price, binance_px, size, net_spread * 100, float(execution_result.get("realized_pnl", exp_profit)),
+        )
+
+        if direction == "close":
+            self.storage_manager.update_trade_settlement(
+                slug=slug,
+                exit_price=poly_price,
+                realized_pnl=float(execution_result.get("realized_pnl", 0.0))
+            )
+            return
+
         trade_payload = {
-            "timestamp": execution_result.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            "timestamp": ts_raw,
             "asset": signal_data.get("asset", "UNKNOWN"),
             "strike": signal_data.get("strike", 0.0),
-            "direction": signal_data.get("direction", "hold"),
-            "size": signal_data.get("size", 0.0),
-            "entry_price": signal_data.get("polymarket_price", signal_data.get("entry_price", 0.5)),
+            "direction": direction,
+            "size": size,
+            "entry_price": poly_price,
             "theoretical_prob": signal_data.get("theoretical_prob", 0.5),
-            "polymarket_price": signal_data.get("polymarket_price", 0.5),
-            "spread": signal_data.get("net_spread", signal_data.get("spread", 0.0)),
-            "pnl": execution_result.get("realized_pnl", 0.0),
+            "polymarket_price": poly_price,
+            "spread": net_spread,
+            "pnl": exp_profit,
         }
-
         self.output_manager.append_trade(trade_payload)
 
         self.storage_manager.save_trade(
             {
-                "timestamp": trade_payload["timestamp"],
-                "asset_pair": signal_data.get("symbol", "UNKNOWN"),
-                "side": trade_payload["direction"],
-                "size": trade_payload["size"],
-                "poly_price": trade_payload["polymarket_price"],
-                "exchange_price": signal_data.get("spot_price", 0.0),
-                "expected_profit": signal_data.get("expected_profit", 0.0),
+                "timestamp": ts_raw,
+                "asset_pair": asset_pair,
+                "side": direction,
+                "size": size,
+                "poly_price": poly_price,
+                "exchange_price": binance_px,   # Prix Binance perp au moment de l'entrée
+                "expected_profit": exp_profit,
                 "status": execution_result.get("status", "UNKNOWN"),
-                "trade_type": "PAPER" if self.is_paper_trade else "LIVE",
-                "strategy": signal_data.get("strategy", "unknown"),
-                "realized_pnl": execution_result.get("realized_pnl", 0.0),
+                "trade_type": mode,
+                "strategy": strategy,
+                # realized_pnl est NULL à l'ouverture — mis à jour à la clôture
+                "realized_pnl": None,
                 "fees_paid": signal_data.get("fees_paid", 0.0),
                 "metadata": {
-                    "slug": signal_data.get("slug", ""),
+                    "slug": slug,
+                    "ends_at": ends_at,
+                    "hedge_side": hedge_side,
                     "signal_reason": signal_data.get("signal_reason", ""),
-                    "signal_meta": signal_data.get("signal_meta", {}),
+                    "signal_meta": signal_meta,
                 },
             }
         )

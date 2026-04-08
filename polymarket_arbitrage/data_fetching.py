@@ -249,79 +249,132 @@ class PolymarketFetcher:
         self.base_url = "https://gamma-api.polymarket.com"
         self.breaker = CircuitBreaker(Config.CIRCUIT_BREAKER_THRESHOLD, Config.CIRCUIT_BREAKER_COOLDOWN)
 
+    # Mapping asset name → slug prefix used by Polymarket events API
+    _ASSET_SLUG_PREFIX: Dict[str, str] = {
+        "bitcoin":  "bitcoin",
+        "ethereum": "ethereum",
+        "xrp":      "xrp",
+    }
+
+    @staticmethod
+    def _format_event_slug_date(dt: datetime) -> str:
+        """Format a datetime as the Polymarket event slug date component.
+
+        Examples:
+            datetime(2026, 4, 5) → 'april-5'   (no leading zero on day)
+            datetime(2026, 4, 12) → 'april-12'
+        """
+        month = dt.strftime("%B").lower()
+        day   = str(dt.day)              # '5', not '05'
+        return f"{month}-{day}"
+
     async def discover_price_markets(self, asset_name: str) -> List[Dict[str, Any]]:
-        """Discover active markets using targeted date-based queries (J to J+7)."""
+        """Discover active crypto price markets via the /events endpoint (J+1 to J+7).
+
+        Strategy change: instead of the noisy /markets?query=... full-text search,
+        we call /events?slug={prefix}-above-on-{date} — one request per (asset, day).
+        Each event already contains ALL strikes for that asset/date, cleanly grouped
+        by Polymarket with no external noise.
+        """
         if not self.breaker.allow():
             return []
 
-        # Target the next 7 days specifically to avoid search noise (e.g., "Bitcoin above on March 30")
-        base_date = datetime.now()
-        queries = []
-        for i in range(8):
-            target = base_date + timedelta(days=i)
-            # Format: "March 30" (Polymarket standard)
-            date_str = target.strftime("%B %d").replace(" 0", " ")
-            queries.append(f"{asset_name} above on {date_str}")
+        asset_key = asset_name.lower().strip()
+        slug_prefix = self._ASSET_SLUG_PREFIX.get(asset_key)
+        if slug_prefix is None:
+            logger.warning("No slug prefix configured for asset '%s'. Skipping.", asset_name)
+            return []
 
-        raw_markets: List[Dict[str, Any]] = []
-        
-        async def _fetch_query(q: str) -> List[Dict[str, Any]]:
-            params = {"active": "true", "closed": "false", "query": q, "limit": 15}
+        base_date = datetime.now()
+        discovered: List[Dict[str, Any]] = []
+        seen_slugs: set = set()
+
+        async def _fetch_event(date_slug: str) -> Optional[Dict[str, Any]]:
+            """Fetch the event object for a given asset/date slug."""
+            event_slug = f"{slug_prefix}-above-on-{date_slug}"
+            params = {"slug": event_slug}
             async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(f"{self.base_url}/markets", params=params)
+                response = await client.get(f"{self.base_url}/events", params=params)
                 response.raise_for_status()
-                return response.json()
+                payload = response.json()
+                if isinstance(payload, list) and payload:
+                    return payload[0]
+                return None
 
         try:
-            # We fetch all queries. 
-            # Note: For production with many assets, we might want to parallelize this.
-            for query in queries:
+            for day_offset in range(Config.MIN_TTM_DAYS, Config.MAX_TTM_DAYS + 1):
+                target_date = base_date + timedelta(days=day_offset)
+                date_slug   = self._format_event_slug_date(target_date)
+                label       = f"events:{slug_prefix}-above-on-{date_slug}"
+
                 try:
-                    batch = await _with_retry(lambda: _fetch_query(query), f"query:{query}")
-                    raw_markets.extend(batch)
+                    event = await _with_retry(
+                        lambda ds=date_slug: _fetch_event(ds), label
+                    )
                 except Exception as exc:
-                    logger.warning("Query failed for %s: %s", query, exc)
-            
-            self.breaker.success()
-            
-            # Deduplicate by slug
-            seen_slugs = set()
-            discovered: List[Dict[str, Any]] = []
-            
-            for market in raw_markets:
-                slug = market.get("slug")
-                if not slug or slug in seen_slugs:
-                    continue
-                seen_slugs.add(slug)
-                
-                try:
-                    raw_ids = market.get("clobTokenIds")
-                    clob_ids = json.loads(raw_ids) if isinstance(raw_ids, str) else (raw_ids or [])
-                except Exception:
-                    clob_ids = []
-
-                if len(clob_ids) < 2:
+                    logger.warning("Event fetch failed for %s: %s", label, exc)
                     continue
 
-                discovered.append(
-                    {
-                        "asset": asset_name,
-                        "slug": str(slug),
-                        "title": str(market.get("question") or market.get("title") or ""),
-                        "token_id_yes": clob_ids[0],
-                        "token_id_no": clob_ids[1],
-                        "ends_at": market.get("endDate") or market.get("end_date") or "",
-                    }
+                if event is None:
+                    logger.debug("No event found for %s", label)
+                    continue
+
+                raw_markets: List[Dict[str, Any]] = event.get("markets", [])
+                logger.debug(
+                    "Event %s → %d sub-markets (liq=$%s, vol24h=$%s)",
+                    label, len(raw_markets),
+                    event.get("liquidity", "?"), event.get("volume24hr", "?"),
                 )
 
-            return discovered[: Config.MAX_MARKETS_PER_ASSET * 2]  # Allow more since we have multiple dates
+                day_count = 0
+                for market in raw_markets:
+                    # Only active, non-closed markets
+                    if not market.get("active", False) or market.get("closed", False):
+                        continue
+
+                    slug = str(market.get("slug") or "")
+                    if not slug or slug in seen_slugs:
+                        continue
+
+                    # Parse clobTokenIds
+                    try:
+                        raw_ids  = market.get("clobTokenIds")
+                        clob_ids = json.loads(raw_ids) if isinstance(raw_ids, str) else (raw_ids or [])
+                    except Exception:
+                        clob_ids = []
+
+                    if len(clob_ids) < 2:
+                        continue
+
+                    seen_slugs.add(slug)
+                    discovered.append({
+                        "asset":        asset_name,
+                        "slug":         slug,
+                        "title":        str(market.get("question") or market.get("title") or ""),
+                        "token_id_yes": clob_ids[0],
+                        "token_id_no":  clob_ids[1],
+                        "ends_at":      market.get("endDate") or market.get("end_date") or "",
+                        # Pre-extracted from groupItemTitle (more reliable than regex on title)
+                        "group_strike": market.get("groupItemTitle"),
+                    })
+
+                    day_count += 1
+                    # Cap per-day to avoid spending too long on a single date
+                    if day_count >= Config.MAX_MARKETS_PER_DAY:
+                        break
+
+
+            self.breaker.success()
+            logger.info(
+                "Discovery [%s]: %d clean markets found (J+%d → J+%d)",
+                asset_name, len(discovered),
+                Config.MIN_TTM_DAYS, Config.MAX_TTM_DAYS,
+            )
+            return discovered
+
         except Exception as exc:
             self.breaker.failure()
-            logger.error("Targeted market discovery failed for %s: %s", asset_name, exc)
-            return []
-        except Exception as exc:
-            self.breaker.failure()
-            logger.error("Market discovery failed for %s: %s", asset_name, exc)
+            logger.error("Event-based discovery failed for %s: %s", asset_name, exc)
             return []
 
     async def fetch_orderbook_by_slug(self, slug: str) -> Optional[Dict[str, Any]]:

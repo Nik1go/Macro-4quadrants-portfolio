@@ -39,8 +39,7 @@ def render():
         st.markdown("### Paramètres")
         ticker_options = {
             "S&P 500 (^GSPC)": "^GSPC",
-            "Or (GC=F)": "GC=F",
-            "Bitcoin (BTC-USD)": "BTC-USD"
+            "Or (GC=F)": "GC=F"
         }
         asset_choice = st.selectbox("Actif à tester", list(ticker_options.keys()), key="dca_asset")
         selected_ticker = ticker_options[asset_choice]

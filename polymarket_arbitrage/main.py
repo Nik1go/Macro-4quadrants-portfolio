@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Dict, Optional
 
 import numpy as np
+import pytz
 
 from data_fetching import CryptoFetcher, PolymarketFetcher, RiskFreeRateFetcher
 from execution_engine import ExecutionEngine
@@ -55,17 +56,33 @@ class FileLock:
 
 
 def is_crypto_price_market(title: str, slug: str = "") -> bool:
-    """Filter out noise (GTA, movies, etc.) using title and slug to keep only pure price action."""
-    if not isinstance(title, str):
+    """Strictly filter for crypto price markets: [Asset] above [Strike] on [Date]."""
+    if not isinstance(title, str) or not isinstance(slug, str):
         return False
-    t = (title + " " + slug).lower()
-    # Forbidden keywords for pure price arbitrage
-    noise = ["gta", "movie", "trailer", "release", "released", "announced", "game", "official", "rockstar"]
-    if any(n in t for n in noise):
+        
+    t = title.lower()
+    s = slug.lower()
+    
+    # 1. Asset check (exact whitelist)
+    allowed_assets = ["bitcoin", "ethereum", "xrp", "btc", "eth"]
+    if not any(a in t for a in allowed_assets) and not any(a in s for a in allowed_assets):
         return False
-    # Must contain price-related keywords
-    must_have = ["price", "above", "below", "hit", "reach", "level", "value", "$"]
-    return any(m in t for m in must_have)
+
+    # 2. Pattern check
+    # We want markets like "Bitcoin above 70000 on April 05" or slug "bitcoin-above-70000-on-april-05"
+    has_keywords = "above" in s or "above" in t
+    has_date_indicator = "on" in s or "on" in t
+    
+    # Noise rejection (Hard exclusion)
+    noise = ["gta", "movie", "album", "ceasefire", "trump", "election", "war", "announced", "trailer"]
+    if any(n in s for n in noise) or any(n in t for n in noise):
+        return False
+
+    # 3. Final validation: must look like a price bet
+    # Slug usually: bitcoin-above-70000-on-april-05-2024
+    # Title usually: Will Bitcoin be above $70,000 on April 05?
+    match_regex = re.search(r"above|below|hit|reach", s + " " + t)
+    return bool(match_regex and has_date_indicator)
 
 def extract_strike_from_title(title: str) -> Optional[float]:
     """Extract strike from market title strings."""
@@ -83,17 +100,41 @@ def extract_strike_from_title(title: str) -> Optional[float]:
     return None
 
 
-def compute_binary_pnl(direction: str, entry_price: float, current_price: float, size: float) -> float:
-    """Mark-to-market pnl for binary yes/no position."""
+def compute_binary_pnl(
+    direction: str, 
+    entry_price: float, 
+    current_price: float, 
+    size: float,
+    entry_exchange_px: float = 0.0,
+    exit_exchange_px: float = 0.0
+) -> float:
+    """Compute combined realized pnl (Polymarket + Binance leg)."""
     entry = float(np.clip(entry_price, 1e-4, 1 - 1e-4))
     current = float(np.clip(current_price, 1e-4, 1 - 1e-4))
     notional = max(float(size), 0.0)
     side = direction.lower().strip()
 
+    # Leg A: Polymarket (Binary Outcome)
+    poly_pnl = 0.0
     if "buy_yes" in side or side in {"yes", "long_yes"}:
-        return (current - entry) * notional
-    if "buy_no" in side or side in {"no", "long_no"}:
-        return (entry - current) * notional
+        poly_pnl = (current - entry) * notional
+    elif "buy_no" in side or side in {"no", "long_no"}:
+        poly_pnl = (entry - current) * notional
+    
+    # Leg B: Binance (Hedge)
+    # Si on a des prix Binance, on calcule Gain = (Entry - Exit) pour un Short (buy_yes)
+    # ou Gain = (Exit - Entry) pour un Long (buy_no)
+    binance_pnl = 0.0
+    if entry_exchange_px > 0 and exit_exchange_px > 0:
+        qty_crypto = notional / max(entry_exchange_px, 1e-9)
+        if "buy_yes" in side or side in {"yes", "long_yes"}:
+            # On a Shorté sur Binance pour protéger un Long Yes Poly
+            binance_pnl = (entry_exchange_px - exit_exchange_px) * qty_crypto
+        else:
+            # On a Longé sur Binance pour protéger un Long No Poly
+            binance_pnl = (exit_exchange_px - entry_exchange_px) * qty_crypto
+            
+    return poly_pnl + binance_pnl
     return 0.0
 
 
@@ -115,6 +156,8 @@ def load_bot_state(storage: StorageManager) -> Dict[str, OpenTrade]:
                 stop_loss_price=float(payload["stop_loss_price"]),
                 opened_at=np.datetime64(payload["opened_at"]).astype("datetime64[ms]").astype(object),
                 target_delta=float(payload.get("target_delta", 0.0)),
+                ends_at=str(payload.get("ends_at", "?")),
+                entry_exchange_px=float(payload.get("entry_exchange_px", 0.0)),
             )
             open_positions[str(slug)] = OpenTrade(
                 slug=str(slug),
@@ -145,6 +188,8 @@ def persist_bot_state(storage: StorageManager, capital: float, open_positions: D
                 "target_delta": item.position.target_delta,
                 "strike": item.strike,
                 "theoretical_prob": item.theoretical_prob,
+                "ends_at": item.position.ends_at,
+                "entry_exchange_px": item.position.entry_exchange_px,
             }
             for slug, item in open_positions.items()
         },
@@ -158,13 +203,24 @@ async def close_position(
     current_price: float,
     execution: ExecutionEngine,
     reason: str,
+    final_settlement: bool = False,
+    exit_exchange_px: float = 0.0,
 ) -> float:
     """Close existing position and return realized pnl."""
+    # En cas de maturité, le prix de sortie Poly est forcé à 1.0 ou 0.0
+    exit_price = current_price
+    if final_settlement:
+        # Heuristique : si le prix est > 0.5 à l'échéance, c'est gagné ($1), sinon perdu ($0)
+        exit_price = 1.0 if current_price > 0.5 else 0.0
+        logger.info("[SETTLEMENT] Slug %s settled at %.2f (Final Poly Value: $%.2f)", slug, current_price, exit_price)
+
     pnl = compute_binary_pnl(
         direction=open_trade.position.direction,
         entry_price=open_trade.position.entry_price,
-        current_price=current_price,
+        current_price=exit_price,
         size=open_trade.position.size_usd,
+        entry_exchange_px=open_trade.position.entry_exchange_px,
+        exit_exchange_px=exit_exchange_px,
     )
 
     signal = {
@@ -173,18 +229,85 @@ async def close_position(
         "strategy": open_trade.position.strategy,
         "direction": "close",
         "size": open_trade.position.size_usd,
-        "entry_price": current_price,
-        "polymarket_price": current_price,
+        "entry_price": exit_price,
+        "polymarket_price": exit_price,
         "theoretical_prob": open_trade.theoretical_prob,
         "spread": 0.0,
         "net_spread": 0.0,
         "expected_profit": pnl,
         "realized_pnl": pnl,
+        "signal_meta": {
+            "hedge_side": "buy" if "buy_yes" in open_trade.position.direction else "sell",
+            "close_reason": reason,
+        }
     }
     result = await execution.execute_arbitrage(signal)
     if result.get("status") == "FILLED":
         logger.info("Closed position %s reason=%s pnl=%.4f", slug, reason, pnl)
     return pnl
+
+async def check_open_maturities(
+    open_positions: Dict[str, OpenTrade], 
+    available_capital: float, 
+    execution_engine: ExecutionEngine,
+    polymarket_fetcher: PolymarketFetcher,
+    crypto_fetcher: CryptoFetcher
+) -> float:
+    """Triple-Check for maturity at 12 PM NY time."""
+    ny_tz = pytz.timezone("America/New_York")
+    now_ny = datetime.now(ny_tz)
+    realized_this_cycle = 0.0
+    
+    to_close = []
+    for slug, trade in open_positions.items():
+        # Utilisation du nouvel attribut ends_at de la classe Position
+        ends_at_str = str(trade.position.ends_at)
+        
+        if not ends_at_str or ends_at_str == "?":
+            continue
+            
+        try:
+            # Parse ISO date
+            expiry_dt = datetime.fromisoformat(ends_at_str.replace("Z", "+00:00")).astimezone(ny_tz)
+            
+            # Condition 1 & 2 : Date correspondante et >= 12h00 NY
+            is_expiry_time = (now_ny >= expiry_dt) or (now_ny.date() == expiry_dt.date() and now_ny.hour >= 12)
+            
+            if is_expiry_time:
+                # Condition 3 : Vérification du prix settle sur Polymarket
+                book = await polymarket_fetcher.fetch_orderbook_by_slug(slug)
+                poly_price = book["yes"] if book else 0.5
+                
+                # Fetch current Binance price for final PnL
+                symbol = Config.ASSET_TO_SYMBOL.get(trade.position.asset, "BTC/USDT")
+                exit_px = await crypto_fetcher.fetch_spot_price(symbol) or 0.0
+                
+                # On ferme si le prix est quasi settled (1 ou 0) OU si on a passé midi de 5 min
+                is_settled = poly_price > 0.95 or poly_price < 0.05
+                time_buffer_ok = (now_ny - expiry_dt).total_seconds() > 300 # 5 min de sécu
+                
+                if is_settled or time_buffer_ok:
+                    logger.info("[MATURITY] Triple-check OK for %s. Closing now.", slug)
+                    to_close.append((slug, trade, poly_price))
+                    
+        except Exception as e:
+            logger.error("Error checking maturity for %s: %s", slug, e)
+            continue
+            
+    for slug, trade, poly_price, exit_px in to_close:
+        pnl = await close_position(
+            slug=slug,
+            open_trade=trade,
+            current_price=poly_price,
+            execution=execution_engine,
+            reason="maturity_triple_check",
+            final_settlement=True,
+            exit_exchange_px=exit_px
+        )
+        realized_this_cycle += pnl
+        del open_positions[slug]
+        
+    return realized_this_cycle
 
 
 async def main_loop() -> None:
@@ -237,19 +360,35 @@ async def main_loop() -> None:
             health_state.mark_alive()
             risk_free_rate = RiskFreeRateFetcher.get_risk_free_rate()
 
-            drawdown_state = risk_manager.update_drawdown(available_capital)
+            # [TRIPLE CHECK] Gestion des maturités (Midi NY)
+            capital_recovered = await check_open_maturities(
+                open_positions=open_positions,
+                available_capital=available_capital,
+                execution_engine=execution_engine,
+                polymarket_fetcher=polymarket_fetcher,
+                crypto_fetcher=crypto_fetcher
+            )
+            available_capital += capital_recovered
+            persist_bot_state(storage, available_capital, open_positions)
+
+            # [CORRECTION] Calcul sur l'Equity Totale (Cash + Investi) et non juste le Cash
+            invested_value = sum(p.position.size_usd for p in open_positions.values())
+            total_equity = available_capital + invested_value
+            
+            drawdown_state = risk_manager.update_drawdown(total_equity)
             if drawdown_state["breached"]:
                 health_state.ready = False
-                await notifier.send("⚠️ Drawdown breached. Trading paused.")
+                logger.warning("Bot in safety pause: Drawdown exceeded (Equity: $%.2f)", total_equity)
                 await asyncio.sleep(Config.SCAN_INTERVAL)
                 continue
 
             health_state.ready = True
             
-            # Reset counters for this cycle
+            # Reset counters and candidates for this cycle
             total_scanned = 0
             eligible_markets = 0
             max_spread = 0.0
+            candidates = []
 
             for asset in Config.TARGET_ASSETS:
                 symbol = Config.ASSET_TO_SYMBOL.get(asset)
@@ -275,23 +414,30 @@ async def main_loop() -> None:
 
                 for market in all_markets:
                     title = str(market.get("question", market.get("title", "")))
-                    slug = str(market.get("slug", ""))
-                    if not is_crypto_price_market(title, slug):
-                        logger.debug("Skipping %s: NOT a crypto price market", slug or title[:30])
-                        continue
+                    slug  = str(market.get("slug", ""))
+
                     if not slug:
                         continue
 
-                    strike = extract_strike_from_title(str(market.get("title", "")))
+                    group_strike_raw = market.get("group_strike")
+                    if group_strike_raw is None and not is_crypto_price_market(title, slug):
+                        continue
+
+                    # Strike extraction
+                    if group_strike_raw is not None:
+                        try:
+                            strike = float(str(group_strike_raw).replace(",", "").replace(" ", ""))
+                        except (ValueError, TypeError):
+                            strike = None
+                    else:
+                        strike = extract_strike_from_title(title)
+
                     if strike is None or strike <= 0:
-                        logger.debug("Skipping %s: could not extract strike from title: %s", slug, title)
                         continue
 
                     ttm = pricing_model.calculate_time_to_maturity(market.get("ends_at"))
                     ttm_days = ttm * 365.25
                     if ttm_days < Config.MIN_TTM_DAYS or ttm_days > Config.MAX_TTM_DAYS:
-                        logger.debug("Skipping %s: TTM range failed (%.2f days vs config [%d, %d])", 
-                                     slug, ttm_days, Config.MIN_TTM_DAYS, Config.MAX_TTM_DAYS)
                         continue
 
                     book = await polymarket_fetcher.fetch_orderbook_by_slug(slug)
@@ -319,6 +465,7 @@ async def main_loop() -> None:
                     net_spread = risk_manager.calculate_net_spread(
                         raw_spread=raw_spread,
                         position_size_usd=max(Config.MIN_POSITION_SIZE, 1.0),
+                        strategy_name=strategy.name,
                     )
 
                     context = StrategyContext(
@@ -339,6 +486,7 @@ async def main_loop() -> None:
 
                     signal = strategy.generate_signal(context)
 
+                    # Persistence massive pour historique UI
                     storage.save_spread(
                         {
                             "timestamp": np.datetime_as_string(np.datetime64("now"), unit="s"),
@@ -349,15 +497,17 @@ async def main_loop() -> None:
                             "theoretical_prob": theo,
                             "rfr": risk_free_rate,
                             "net_spread": net_spread,
-                            "is_opportunity": int(signal.should_trade),
+                            "is_opportunity": int(signal.should_trade and abs(net_spread) >= Config.MIN_BATCH_EDGE),
                             "strategy": strategy.name,
                             "slug": slug,
+                            "signal_type": str(signal.direction).replace("_", " ").upper(),
                         }
                     )
                     
                     eligible_markets += 1
-                    max_spread = max(max_spread, float(net_spread))
+                    max_spread = max(max_spread, abs(float(net_spread)))
 
+                    # Closing check (happens inside the round scan)
                     if slug in open_positions:
                         tracked = open_positions[slug]
                         if risk_manager.check_stop_loss(tracked.position, poly_price):
@@ -372,82 +522,113 @@ async def main_loop() -> None:
                             del open_positions[slug]
                         continue
 
-                    if not signal.should_trade:
+                    # Potential entry candidate
+                    if signal.should_trade and abs(net_spread) >= Config.MIN_BATCH_EDGE:
+                        # Extra risk checks before adding to candidates
+                        current_delta = risk_manager.monitor_delta_neutrality(
+                            {k: v.position for k, v in open_positions.items()}
+                        )
+                        is_risk_ok, risk_reason = risk_manager.validate_strategy_risk(
+                            strategy_name=strategy.name,
+                            net_spread=net_spread,
+                            funding_rate=funding,
+                            current_delta_exposure=current_delta,
+                            liquidity_ok=liquid,
+                        )
+                        if not is_risk_ok:
+                            logger.info("%s candidate rejected slug=%s reason=%s", strategy.name, slug, risk_reason)
+                            continue
+
+                        size = risk_manager.compute_strategy_position_size(
+                            strategy_name=strategy.name,
+                            capital_usd=available_capital,
+                            theoretical_prob=theo,
+                            market_price=poly_price,
+                            volatility=vol,
+                            net_spread=net_spread,
+                        )
+                        if size <= 0:
+                            logger.info("%s candidate rejected slug=%s reason=zero_position_size (cap=%.2f, edge=%.4f)", 
+                                        strategy.name, slug, available_capital, net_spread)
+                            continue
+
+                        candidates.append({
+                            "payload": {
+                                "slug": slug,
+                                "asset": asset,
+                                "symbol": symbol,
+                                "spot_price": spot,
+                                "strike": strike,
+                                "strategy": strategy.name,
+                                "direction": signal.direction,
+                                "size": size,
+                                "entry_price": poly_price,
+                                "polymarket_price": poly_price,
+                                "theoretical_prob": theo,
+                                "spread": raw_spread,
+                                "net_spread": net_spread,
+                                "expected_profit": size * net_spread,
+                                "signal_reason": signal.reason,
+                                "signal_meta": signal.metadata,
+                                "risk_reason": risk_reason,
+                                "ends_at": market.get("ends_at"),
+                            },
+                            "signal": signal,
+                        })
+
+            # ── Fin du tour complet : Tri et Exécution ──────────────────────────
+            if candidates:
+                # Sort by net_spread DESC
+                candidates.sort(key=lambda x: x["payload"]["net_spread"], reverse=True)
+                
+                # Take top N
+                top_targets = candidates[:Config.MAX_TRADES_PER_ROUND]
+                logger.info("Round completed: Found %d potential trades. Selecting top %d.", 
+                            len(candidates), len(top_targets))
+
+                for item in top_targets:
+                    trade_payload = item["payload"]
+                    trade_signal = item["signal"]
+                    slug = trade_payload["slug"]
+
+                    # Safety: re-check if already in open_positions (paranoia)
+                    if slug in open_positions:
                         continue
 
-                    current_delta = risk_manager.monitor_delta_neutrality(
-                        {k: v.position for k, v in open_positions.items()}
-                    )
-                    is_risk_ok, risk_reason = risk_manager.validate_strategy_risk(
-                        strategy_name=strategy.name,
-                        net_spread=net_spread,
-                        funding_rate=funding,
-                        current_delta_exposure=current_delta,
-                        liquidity_ok=liquid,
-                    )
-                    if not is_risk_ok:
+                    # Re-check available capital (it might have decreased during this batch execution)
+                    if available_capital < trade_payload["size"]:
+                        logger.warning("Skipping %s: insufficient capital ($%.2f vs target $%.2f)", 
+                                       slug, available_capital, trade_payload["size"])
                         continue
 
-                    size = risk_manager.compute_strategy_position_size(
-                        strategy_name=strategy.name,
-                        capital_usd=available_capital,
-                        theoretical_prob=theo,
-                        market_price=poly_price,
-                        volatility=vol,
-                        net_spread=net_spread,
-                    )
-                    if size <= 0:
-                        continue
-
-                    expected_profit = size * net_spread
-                    payload = {
-                        "slug": slug,
-                        "asset": asset,
-                        "symbol": symbol,
-                        "spot_price": spot,
-                        "strike": strike,
-                        "strategy": strategy.name,
-                        "direction": signal.direction,
-                        "size": size,
-                        "entry_price": poly_price,
-                        "polymarket_price": poly_price,
-                        "theoretical_prob": theo,
-                        "spread": raw_spread,
-                        "net_spread": net_spread,
-                        "expected_profit": expected_profit,
-                        "signal_reason": signal.reason,
-                        "signal_meta": signal.metadata,
-                        "risk_reason": risk_reason,
-                    }
-
-                    result = await execution_engine.execute_arbitrage(payload)
-                    if result.get("status") != "FILLED":
-                        continue
-
-                    available_capital -= size
-                    pos = risk_manager.generate_position(
-                        position_id=slug,
-                        asset=asset,
-                        direction=signal.direction,
-                        strategy=strategy.name,
-                        size_usd=size,
-                        entry_price=poly_price,
-                        target_delta=signal.target_delta,
-                    )
-                    open_positions[slug] = OpenTrade(
-                        slug=slug,
-                        position=pos,
-                        strike=strike,
-                        theoretical_prob=theo,
-                    )
-
-                    storage.save_strategy_metric(strategy.name, "executed_net_spread", net_spread)
+                    result = await execution_engine.execute_arbitrage(trade_payload)
+                    if result.get("status") == "FILLED":
+                        available_capital -= trade_payload["size"]
+                        pos = risk_manager.generate_position(
+                            position_id=slug,
+                            asset=trade_payload["asset"],
+                            direction=trade_signal.direction,
+                            strategy=strategy.name,
+                            size_usd=trade_payload["size"],
+                            entry_price=trade_payload["entry_price"],
+                            target_delta=trade_signal.target_delta,
+                            ends_at=trade_payload.get("ends_at", "?"),
+                            entry_exchange_px=trade_payload.get("spot_price", 0.0),
+                        )
+                        open_positions[slug] = OpenTrade(
+                            slug=slug,
+                            position=pos,
+                            strike=trade_payload["strike"],
+                            theoretical_prob=trade_payload["theoretical_prob"],
+                        )
+                        storage.save_strategy_metric(strategy.name, "executed_net_spread", trade_payload["net_spread"])
 
             persist_bot_state(storage, available_capital, open_positions)
             logger.info(
-                "Cycle completed: %d markets scanned, %d eligible, Max Net Spread: %.2f%%",
+                "Cycle completed: %d scanned, %d eligible, %d candidates, Round Max Net Spread: %.2f%%",
                 total_scanned,
                 eligible_markets,
+                len(candidates),
                 max_spread * 100.0,
             )
             await asyncio.sleep(Config.SCAN_INTERVAL)

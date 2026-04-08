@@ -30,3 +30,9 @@ polymarket_arbitrage/data/arbitrage.db
 polymarket_arbitrage/data/arbitrage.db-journal
 polymarket_arbitrage/data/arbitrage.db-shm
 polymarket_arbitrage/data/arbitrage.db-wal
+
+IA_venv/*
+agents/*
+diff_backtest.txt
+tests/*
+setup_vps.sh

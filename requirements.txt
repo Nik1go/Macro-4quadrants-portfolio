@@ -91,6 +91,7 @@ multidict==6.7.0
 multitasking==0.0.12
 narwhals==2.15.0
 natsort==8.4.0
+nest-asyncio==1.6.0
 numpy==2.4.1
 opentelemetry-api==1.39.1
 opentelemetry-exporter-otlp==1.39.1
