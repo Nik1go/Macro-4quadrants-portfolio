@@ -8,15 +8,42 @@ import os
 from pathlib import Path
 
 # Configuration locale pour éviter d'importer le module 'utils' du bot
+# Base path and configuration
 BASE_DIR = Path(__file__).resolve().parents[2]
-DEFAULT_DB = str(BASE_DIR / "polymarket_arbitrage" / "data" / "dn" / "arbitrage.db")
-DB_PATH = os.getenv("SQLITE_DB_PATH", DEFAULT_DB)
+
+def _get_db_path() -> str:
+    """Find the best candidate for the SQLite database path."""
+    # 1. Respect explicit env var if set
+    env_path = os.getenv("SQLITE_DB_PATH")
+    if env_path and Path(env_path).exists():
+        return str(Path(env_path).resolve())
+    
+    # 2. Try common Docker mount points
+    docker_paths = ["/app/data/arbitrage.db", "/app/polymarket_arbitrage/data/dn/arbitrage.db"]
+    for p in docker_paths:
+        if Path(p).exists():
+            return str(Path(p).resolve())
+            
+    # 3. Default relative path based on project structure
+    local_path = BASE_DIR / "polymarket_arbitrage" / "data" / "dn" / "arbitrage.db"
+    if local_path.exists():
+        return str(local_path.resolve())
+
+    # Fallback to the requested env path even if not found, to let SQLite try to handle it (and probably fail)
+    return env_path or str(local_path)
+
+DB_PATH = _get_db_path()
 STREAMLIT_MAX_ROWS = int(os.getenv("STREAMLIT_MAX_ROWS", "1000"))
 
 @st.cache_data(ttl=30)
 def _run_query(query: str, params: tuple | None = None, db_path: str | None = None) -> pd.DataFrame:
     """Execute a read-only SQL query and return a DataFrame."""
-    target_db = db_path or DB_PATH
+    target_db = db_path or _get_db_path()
+    
+    if not Path(target_db).exists():
+        st.warning(f"Fichier base de données introuvable : `{target_db}`")
+        return pd.DataFrame()
+
     try:
         # Force Read-Only using proper URI format
         db_uri = f"{Path(target_db).resolve().as_uri()}?mode=ro"
@@ -25,7 +52,8 @@ def _run_query(query: str, params: tuple | None = None, db_path: str | None = No
         conn.close()
         return df
     except Exception as exc:
-        st.error(f"Base de données indisponible ou requête invalide: {exc}")
+        st.error(f"Erreur d'accès à la base de données : {exc}")
+        st.info(f"Chemin tenté : `{target_db}`")
         return pd.DataFrame()
 
 def load_open_positions(db_path: str | None = None) -> pd.DataFrame:
