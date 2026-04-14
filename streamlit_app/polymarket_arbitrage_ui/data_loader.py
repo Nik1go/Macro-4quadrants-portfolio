@@ -18,7 +18,8 @@ def _run_query(query: str, params: tuple | None = None, db_path: str | None = No
     """Execute a read-only SQL query and return a DataFrame."""
     target_db = db_path or DB_PATH
     try:
-        conn = sqlite3.connect(target_db)
+        # Force Read-Only to avoid permission or lock issues from Docker
+        conn = sqlite3.connect(f"file:{target_db}?mode=ro", uri=True)
         df = pd.read_sql_query(query, conn, params=params or tuple())
         conn.close()
         return df

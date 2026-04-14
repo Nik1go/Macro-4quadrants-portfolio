@@ -33,12 +33,12 @@ def render_strategy_explanation() -> None:
 
     with col2:
         repo_root = Path(__file__).resolve().parents[3]
-        architecture_image = repo_root / "polymarket_arbitrage" / "streamlit" / "assets" / "architecture_diagram.png"
+        architecture_image = repo_root  / "streamlit_app" / "images" / "architecture_diagram.png"
 
         if architecture_image.exists():
             st.image(str(architecture_image), caption="Architecture du bot d'arbitrage", use_container_width=True)
         else:
-            st.info("Diagramme d'architecture non trouvé (polymarket_arbitrage/streamlit/assets/architecture_diagram.png).")
+            st.info("Diagramme d'architecture non trouvé (streamlit_app/images/architecture_diagram.png).")
 
     st.divider()
     
