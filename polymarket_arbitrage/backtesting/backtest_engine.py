@@ -14,12 +14,16 @@ import pandas as pd
 try:
     from ..risk_management import RiskManager
     from ..storage import StorageManager
-    from ..strategies import DeltaNeutralStrategy, PurePolymarketStrategy, StrategyContext
+    from ..strategies.base_strategy import StrategyContext
+    from ..strategies.delta_neutral import DeltaNeutralStrategy
+    from ..strategies.pure_polymarket import PurePolymarketStrategy
     from ..utils.config import Config
 except ImportError:  # pragma: no cover
     from risk_management import RiskManager
     from storage import StorageManager
-    from strategies import DeltaNeutralStrategy, PurePolymarketStrategy, StrategyContext
+    from strategies.base_strategy import StrategyContext
+    from strategies.delta_neutral import DeltaNeutralStrategy
+    from strategies.pure_polymarket import PurePolymarketStrategy
     from utils.config import Config
 
 

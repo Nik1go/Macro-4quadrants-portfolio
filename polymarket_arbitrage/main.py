@@ -19,7 +19,9 @@ from execution_engine import ExecutionEngine
 from pricing_model import PricingModel
 from risk_management import Position, RiskManager
 from storage import StorageManager
-from strategies import DeltaNeutralStrategy, PurePolymarketStrategy, StrategyContext
+from strategies.base_strategy import StrategyContext
+from strategies.delta_neutral import DeltaNeutralStrategy
+from strategies.pure_polymarket import PurePolymarketStrategy
 from utils.config import Config
 from utils.health_check import BotHealthState, start_health_server
 from utils.logger import Logger
