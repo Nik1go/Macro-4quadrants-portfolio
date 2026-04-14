@@ -39,9 +39,20 @@ STREAMLIT_MAX_ROWS = int(os.getenv("STREAMLIT_MAX_ROWS", "1000"))
 def _run_query(query: str, params: tuple | None = None, db_path: str | None = None) -> pd.DataFrame:
     """Execute a read-only SQL query and return a DataFrame."""
     target_db = db_path or _get_db_path()
-    
+
+    # Debug: list current directory to help identify where we are
+    try:
+        if not Path(target_db).exists():
+            cwd = os.getcwd()
+            files_in_cwd = os.listdir(".")
+            st.warning(f"Fichier base de données introuvable : `{target_db}`")
+            st.info(f"Contexte : PWD=`{cwd}`, Fichiers ici=`{files_in_cwd}`")
+            if Path("/app").exists():
+                st.info(f"Dossier /app trouvé. Contenu: {os.listdir('/app')}")
+    except Exception:
+        pass
+
     if not Path(target_db).exists():
-        st.warning(f"Fichier base de données introuvable : `{target_db}`")
         return pd.DataFrame()
 
     try:
