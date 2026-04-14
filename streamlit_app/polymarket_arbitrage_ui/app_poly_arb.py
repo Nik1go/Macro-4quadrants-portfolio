@@ -7,7 +7,7 @@ from .components.backtest_view import render_backtest_view
 from .components.position_monitoring import render_position_monitoring
 from .components.strategy_explanation import render_strategy_explanation
 from .components.scan_activity import render_scan_activity
-from .data_loader import load_open_positions, load_trades_history
+from .data_loader import load_open_positions, load_trades_history, _get_db_path
 
 # --- THEME CSS (FROM MACRO PROJECT) ---
 BLOOMBERG_CSS = """
@@ -65,11 +65,19 @@ def render() -> None:
     )
 
     # Map choice to DB path and metadata
+    # NOTE: Use _get_db_path() as base and derive the dir/dn variant from it.
+    # This avoids hardcoded relative paths that break when CWD != repo root.
+    _base_db = _get_db_path()  # resolves to the DN db by default (SQLITE_DB_PATH env var)
     if account_choice == "Delta Neutral":
-        db_path = "polymarket_arbitrage/data/dn/arbitrage.db"
+        db_path = _base_db
         strategy_name = "Delta Neutral"
     else:
-        db_path = "polymarket_arbitrage/data/dir/arbitrage.db"
+        # Derive the DIR path from the DN path (same structure, different subfolder)
+        import os
+        db_path = os.getenv(
+            "SQLITE_DB_PATH_DIR",
+            _base_db.replace("/data/dn/", "/data/dir/")
+        )
         strategy_name = "Pure Polymarket"
 
     st.divider()
