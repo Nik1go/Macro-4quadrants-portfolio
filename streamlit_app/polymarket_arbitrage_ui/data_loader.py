@@ -15,22 +15,42 @@ def _get_db_path() -> str:
     """Find the best candidate for the SQLite database path."""
     # 1. Respect explicit env var if set
     env_path = os.getenv("SQLITE_DB_PATH")
-    if env_path and Path(env_path).exists():
-        return str(Path(env_path).resolve())
+    if env_path:
+        # Try absolute
+        if Path(env_path).is_absolute() and Path(env_path).exists():
+            return str(Path(env_path).resolve())
+        # Try relative to PWD
+        if Path(env_path).exists():
+            return str(Path(env_path).resolve())
+        # Try relative to project root (one level up from streamlit_app)
+        root_rel = BASE_DIR / env_path
+        if root_rel.exists():
+            return str(root_rel.resolve())
     
-    # 2. Try common Docker mount points
-    docker_paths = ["/app/data/arbitrage.db", "/app/polymarket_arbitrage/data/dn/arbitrage.db"]
+    # 2. Try common absolute paths (Hardcoded fallback for this VPS)
+    vps_path = Path("/home/jean/Macro-4quadrants-portfolio/polymarket_arbitrage/data/dn/arbitrage.db")
+    if vps_path.exists():
+        return str(vps_path)
+
+    # 3. Try common Docker mount points
+    docker_paths = ["/app/data/arbitrage.db", "/app/polymarket_arbitrage/data/dn/arbitrage.db", "/data/arbitrage.db"]
     for p in docker_paths:
         if Path(p).exists():
             return str(Path(p).resolve())
             
-    # 3. Default relative path based on project structure
-    local_path = BASE_DIR / "polymarket_arbitrage" / "data" / "dn" / "arbitrage.db"
-    if local_path.exists():
-        return str(local_path.resolve())
+    # 4. Default relative path based on project structure
+    # Check both current directory and one level up
+    candidates = [
+        BASE_DIR / "polymarket_arbitrage" / "data" / "dn" / "arbitrage.db",
+        Path("..") / "polymarket_arbitrage" / "data" / "dn" / "arbitrage.db",
+        Path("polymarket_arbitrage") / "data" / "dn" / "arbitrage.db"
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c.resolve())
 
-    # Fallback to the requested env path even if not found, to let SQLite try to handle it (and probably fail)
-    return env_path or str(local_path)
+    # Fallback to the most likely relative path
+    return str(BASE_DIR / "polymarket_arbitrage" / "data" / "dn" / "arbitrage.db")
 
 DB_PATH = _get_db_path()
 STREAMLIT_MAX_ROWS = int(os.getenv("STREAMLIT_MAX_ROWS", "1000"))
