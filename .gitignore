@@ -36,3 +36,5 @@ agents/*
 diff_backtest.txt
 tests/*
 setup_vps.sh
+
+polymarket_arbitrage/data/*

@@ -6,11 +6,30 @@ import yfinance as yf
 import plotly.graph_objects as go
 
 # --- CONFIGURATION ---
-START_DATE = "2020-01-01"
+START_DATE = "2018-01-01"
 END_DATE = "2026-01-01"
 INTERVAL = "1d"
 CAPITAL_INITIAL = 10000
-tickers = ['SPY', 'QQQ', 'GC=F', '^FCHI', ]
+tickers = [
+    'VWRL.AS', # Global Dividend Benchmark (Vanguard All-World)
+    'CEM.PA',  # Indep. Mid Cap Benchmark (Amundi MSCI Europe Small Cap)
+    'AEEM.PA', # Carmignac Emergent Benchmark (Amundi MSCI EM)
+    'INR.PA',  # EdR India Benchmark (Amundi MSCI India)
+    'PHPM.MI', # Métaux Benchmark (WisdomTree Physical Precious Metals)
+    'IQQH.DE', # Clean Energy Benchmark (iShares Global Clean Energy)
+    'VGEA.DE'  # Bonds d'Etat Benchmark (Vanguard Gov Bond)
+]
+
+TICKER_NAMES = {
+    'VWRL.AS': 'Global Dividend (All-World)',
+    'CEM.PA': 'Mid Cap Europe (MSCI)',
+    'AEEM.PA': 'EM (Amundi MSCI)',
+    'INR.PA': 'India (Amundi MSCI)',
+    'PHPM.MI': 'Métaux (WisdomTree)',
+    'IQQH.DE': 'Clean Energy (iShares)',
+    'VGEA.DE': 'Bonds d’Etat (Vanguard)'
+}
+
 
 # --- DATA FETCHING ---
 @st.cache_data
@@ -87,9 +106,10 @@ def optimize_portfolio(data):
 
     # 2.1 : Poids de départ (guess). On donne le même poids à tout le monde
     initial_weights = np.array(num_assets * [1. / num_assets])
-    
-    # 2.2 : Les Limites (Bounds). Aucun actif ne peut dépasser 60% (0 à 0.6)
-    bounds = tuple((0, 0.6) for _ in range(num_assets))
+
+    # 2.2 : Les Limites (Bounds). L'utilisateur demande 5% min et 30% max par fonds
+    bounds = tuple((0.05, 0.30) for _ in range(num_assets))
+
     
     # 2.3 : Les Contraintes. La somme totale des poids doit faire 100% (1.0).
     # 'type': 'eq' signifie que l'équation suivante devra être ÉGALE à 0.
@@ -128,7 +148,9 @@ def generate_random_portfolios(returns, cov_matrix, num_portfolios=5000):
 def find_min_vol_portfolio(returns, cov_matrix):
     num_assets = len(returns.columns)
     initial_weights = np.array(num_assets * [1. / num_assets])
-    bounds = tuple((0, 0.6) for _ in range(num_assets))
+    # On applique les mêmes limites (5% - 30%)
+    bounds = tuple((0.05, 0.30) for _ in range(num_assets))
+
     constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
     
     result = sco.minimize(
@@ -149,8 +171,10 @@ def render():
     st.markdown("J'ai pris ici des etf diversifié pour l'exemple. L'intérêt est de repliquer par la suite cette méthode dans mon projet macro 4 saisons.")
 
     st.markdown("Pour cela j'utilise donc scipy et markowitz")
-    st.markdown("Actifs étudiés : **" + " / ".join(tickers) + "**")
-    st.markdown(f"Période d'historique : du **{START_DATE}** au **{END_DATE}**")
+    st.markdown("Actifs étudiés :")
+    st.write(", ".join([f"{TICKER_NAMES.get(t, t)} ({t})" for t in tickers]))
+    st.markdown(f"Période configurée : du **{START_DATE}** au **{END_DATE}**")
+
     
     st.divider()
 
@@ -165,9 +189,37 @@ def render():
     if len(active_tickers) < len(tickers):
         missing = set(tickers) - set(active_tickers)
         st.warning(f"Certains actifs n'ont pas pu être récupérés : {', '.join(missing)}")
-        
+
+    # Analyse de la disponibilité des données
+    data_info = []
+    for t in active_tickers:
+        first_date = data[t].dropna().index.min()
+        last_date = data[t].dropna().index.max()
+        data_info.append({
+            "Fonds": TICKER_NAMES.get(t, t),
+            "Début": first_date.date() if pd.notnull(first_date) else "N/A",
+            "Fin": last_date.date() if pd.notnull(last_date) else "N/A",
+            "Jours": len(data[t].dropna())
+        })
+    
+    df_info = pd.DataFrame(data_info)
+    
+    # On restreint les données à la période commune
+    common_data = data.dropna()
+    if common_data.empty:
+        st.error("L'intersection des données pour tous les fonds est vide. Impossible d'optimiser car certains fonds sont trop récents ou n'ont pas de données communes.")
+        st.dataframe(df_info)
+        return
+
+    common_start = common_data.index.min().date()
+    st.info(f"Optimisation basée sur la période commune : du **{common_start}** au **{common_data.index.max().date()}**")
+    
+    with st.expander("Détails de disponibilité des données par fonds"):
+        st.dataframe(df_info, use_container_width=True)
+
     # Lancement des calculs en backend
-    opt_result, returns, cov_matrix = optimize_portfolio(data)
+    opt_result, returns, cov_matrix = optimize_portfolio(common_data)
+
     
     # Calcul de la variance minimale pour comparaison
     min_vol_result = find_min_vol_portfolio(returns, cov_matrix)
@@ -200,13 +252,18 @@ def render():
     with col_chart:
         st.markdown("### L'Allocation Idéale")
         # Un beau camembert avec Plotly
-        fig = go.Figure(data=[go.Pie(labels=active_tickers, values=optimal_weights, hole=.4)])
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=False, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
+        fig = go.Figure(data=[go.Pie(
+            labels=[TICKER_NAMES.get(t, t) for t in active_tickers], 
+            values=optimal_weights, 
+            hole=.4
+        )])
+        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
         st.plotly_chart(fig, use_container_width=True)
         
         # Petit tableau montrant les pondérations exactes
-        df_w = pd.DataFrame(optimal_weights * 100, index=active_tickers, columns=['Poids (%)']).round(2)
+        df_w = pd.DataFrame(optimal_weights * 100, index=[TICKER_NAMES.get(t, t) for t in active_tickers], columns=['Poids (%)']).round(2)
         st.dataframe(df_w)
+
 
     st.divider()
     

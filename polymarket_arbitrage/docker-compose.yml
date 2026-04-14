@@ -1,31 +1,62 @@
 version: "3.9"
 
 services:
-  poly_bot:
+  poly_bot_dn:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: polymarket_arbitrage_bot
+    container_name: polymarket_bot_dn
     restart: unless-stopped
     env_file:
-      - .env
+      - .env.dn
     environment:
-      PAPER_TRADE: ${PAPER_TRADE:-true}
-      STRATEGY_NAME: ${STRATEGY_NAME:-delta_neutral}
-      EXCHANGE_ID: ${EXCHANGE_ID:-binance}
-      SQLITE_DB_PATH: ${SQLITE_DB_PATH:-/app/data/arbitrage.db}
       DATA_DIR: /app/data
       LOG_DIR: /app/logs
-      BACKTEST_DIR: /app/backtests
+      SQLITE_DB_PATH: /app/data/arbitrage.db
       HEALTH_HOST: 0.0.0.0
       HEALTH_PORT: 8080
     volumes:
-      - ./data:/app/data
-      - ./logs:/app/logs
+      - ./data/dn:/app/data
+      - ./logs/dn:/app/logs
       - ./backtests:/app/backtests
       - ../data:/app/macro_data:ro
     ports:
       - "18080:8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    command: ["python", "main.py"]
+
+  poly_bot_dir:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: polymarket_bot_dir
+    restart: unless-stopped
+    env_file:
+      - .env.dir
+    environment:
+      DATA_DIR: /app/data
+      LOG_DIR: /app/logs
+      SQLITE_DB_PATH: /app/data/arbitrage.db
+      HEALTH_HOST: 0.0.0.0
+      HEALTH_PORT: 8080
+    volumes:
+      - ./data/dir:/app/data
+      - ./logs/dir:/app/logs
+      - ./backtests:/app/backtests
+      - ../data:/app/macro_data:ro
+    ports:
+      - "18081:8080"
     healthcheck:
       test:
         [
