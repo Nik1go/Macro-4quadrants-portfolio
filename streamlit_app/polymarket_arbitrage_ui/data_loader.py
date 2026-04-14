@@ -18,8 +18,9 @@ def _run_query(query: str, params: tuple | None = None, db_path: str | None = No
     """Execute a read-only SQL query and return a DataFrame."""
     target_db = db_path or DB_PATH
     try:
-        # Force Read-Only to avoid permission or lock issues from Docker
-        conn = sqlite3.connect(f"file:{target_db}?mode=ro", uri=True)
+        # Force Read-Only using proper URI format
+        db_uri = f"{Path(target_db).as_uri()}?mode=ro"
+        conn = sqlite3.connect(db_uri, uri=True)
         df = pd.read_sql_query(query, conn, params=params or tuple())
         conn.close()
         return df
@@ -246,7 +247,8 @@ def load_spread_history(limit: int = 2000, db_path: str | None = None, order: st
     # [NOUVEAU] Vérification de la présence de la colonne signal_type pour éviter les erreurs de migration
     has_signal_type = False
     try:
-        tmp_conn = sqlite3.connect(target_db)
+        db_uri = f"{Path(target_db).as_uri()}?mode=ro"
+        tmp_conn = sqlite3.connect(db_uri, uri=True)
         cols = [row[1] for row in tmp_conn.execute("PRAGMA table_info(spreads)").fetchall()]
         has_signal_type = "signal_type" in cols
         tmp_conn.close()
