@@ -254,6 +254,7 @@ def render(data):
 
     # === Last 5 Fetched Indicators ===
     st.subheader("Derniers Indicateurs Fetchés")
+    st.caption("ℹ *Les dates affichées correspondent aux dates de publication récupérées par l'api. Les delais de publication de Fred(~24H après sortie officielle) peuvent amené des **données obsoletes ici et dans le reste de l'algorithme**.")
     _render_last_indicators(data)
 
     st.divider()
@@ -276,7 +277,6 @@ def render(data):
                 cur_growth = latest['MACRO_GROWTH_SCORE']
                 x_title = "Weighted Inflation Score "
                 y_title = "Weighted Growth Score "
-                st.caption("Affichage base sur la nouvelle logique **2-Axes (Moyenne Ponderee)**")
             else:
                 inflation_hist = df_q['score_Q2'] - df_q['score_Q4']
                 growth_hist = df_q['score_Q1'] - df_q['score_Q3']
@@ -287,7 +287,8 @@ def render(data):
                 y_title = "Score de Croissance ->"
 
             max_val = max(abs(inflation_hist.min()), abs(inflation_hist.max()), abs(growth_hist.min()), abs(growth_hist.max()))
-            limit = max(5.0, max_val * 1.2)
+            # Réduction de la limite hardcodée de 5.0 à 2.2 pour faire un "zoom" automatique et améliorer la lisibilité
+            limit = max(2.2, max_val * 1.1)
 
             # Quadrant backgrounds
             fig.add_shape(type="rect", x0=-limit, y0=0, x1=0, y1=limit, fillcolor="rgba(0,255,0,0.1)", line_width=0)
@@ -295,10 +296,20 @@ def render(data):
             fig.add_shape(type="rect", x0=0, y0=-limit, x1=limit, y1=0, fillcolor="rgba(255,0,0,0.1)", line_width=0)
             fig.add_shape(type="rect", x0=-limit, y0=-limit, x1=0, y1=0, fillcolor="rgba(0,0,255,0.1)", line_width=0)
 
+            # Légende des Quadrants
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=12, color='green', symbol='square'), name='Q1: Croissance'))
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=12, color='orange', symbol='square'), name='Q2: Inflation'))
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=12, color='red', symbol='square'), name='Q3: Stagflation'))
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=12, color='blue', symbol='square'), name='Q4: Deflation'))
+
+            # Légende propre pour l'Historique (point bleu)
+            fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=8, color='#6baed6'), name='Historique complet'))
+
             fig.add_trace(go.Scatter(
                 x=inflation_hist, y=growth_hist, mode='markers',
                 marker=dict(size=4, color=list(range(len(df_q))), colorscale='Blues', opacity=0.4, showscale=False),
-                name='Historique complet',
+                name='Historique data',
+                showlegend=False,
                 hovertext=df_q['date'].dt.strftime('%Y-%m-%d') if 'date' in df_q.columns else None
             ))
 
@@ -349,11 +360,6 @@ def render(data):
                 yaxis=dict(range=[-limit, limit], zeroline=True, zerolinecolor='rgba(255,255,255,0.2)'),
                 margin=dict(l=0, r=0, t=30, b=0)
             )
-
-            fig.add_annotation(x=-limit*0.5, y=limit*0.5, text="Q1: Croissance", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
-            fig.add_annotation(x=limit*0.5, y=limit*0.5, text="Q2: Inflation", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
-            fig.add_annotation(x=limit*0.5, y=-limit*0.5, text="Q3: Stagflation", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
-            fig.add_annotation(x=-limit*0.5, y=-limit*0.5, text="Q4: Deflation", showarrow=False, font=dict(size=14, color="rgba(255,255,255,0.6)"))
 
             st.plotly_chart(fig, use_container_width=True)
         else:

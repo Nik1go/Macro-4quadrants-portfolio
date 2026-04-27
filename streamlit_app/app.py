@@ -166,6 +166,24 @@ def apply_home_css():
         [data-testid="stMetricLabel"] {
             color: #b0b0b0 !important;
         }
+
+        /* Fix Expander Background */
+        [data-testid="stExpander"] {
+            background-color: #1e2139 !important;
+            border: 1px solid #3d4263 !important;
+            border-radius: 12px !important;
+            padding: 0px 10px 5px 10px !important;
+        }
+        [data-testid="stExpander"] summary {
+            background-color: transparent !important;
+            color: #00d4ff !important;
+            font-weight: 600 !important;
+        }
+        /* Ensure content stays dark when expanded */
+        [data-testid="stExpander"] [data-testid="stMarkdownContainer"], 
+        [data-testid="stExpander"] div[role="region"] {
+            background-color: transparent !important;
+        }
         </style>
     """, unsafe_allow_html=True)
 

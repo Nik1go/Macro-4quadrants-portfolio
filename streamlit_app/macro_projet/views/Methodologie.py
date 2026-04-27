@@ -47,19 +47,24 @@ def render(data):
         **L'Axe Croissance mesure la probabilité d'un régime Risk-On / Risk-Off**.
         On utilise comme target le **High Yield Bond Spread** (différence entre les taux d'obligations d'entreprises risquées et les taux sans risque de référence).
         Il représente, selon moi, un excellent proxy de marché de la croissance et notamment de l'appétit des investisseurs pour les actifs risqués (risk-on / risk-off).
-        
-        **Pour entraîner le modèle**, j'ai décidé d'utiliser plusieurs types de *features* (indicateurs) complémentaires :
-        
-        **Les indicateurs de marché (réactif au marché) :**
-        - Matières premières : **Copper** (Croissance industrielle), **WTI Crude Oil** (Coût de l'énergie).
-        - Taux et Conditions Financières : **Spread 10-2Y Yield Curve** (Pente de la courbe), **10Y Breakeven Inflation Rate** (Anticipations d'inflation du marché), **VIX** (Volatilité), **NFCI** (Indice des conditions financières de Chicago).
-        - Devises : **DXY** (Indice Dollar US).
 
-        **Les indicateurs macroéconomiques (plus structurels) :**
+        **L'Axe Inflation mesure la dynamique des prix et le risque de surchauffe économique**.
+        On utilise comme target le **10Y Breakeven Inflation Rate** (la différence de rendement entre les Bons du Trésor classiques à 10 ans et les TIPS indexés sur l'inflation).
+        Contrairement à l'Indice des Prix à la Consommation (CPI) qui est publié mensuellement avec du retard (lag) et souvent révisé, le Breakeven reflète les anticipations d'inflation "pricées" en temps réel par les investisseurs obligataires. C'est un excellent proxy car c'est le signal de marché le plus pur et réactif pour capter une tendance inflationniste (Reflation) ou déflationniste avant même les statistiques officielles.
+        
+        **Pour entraîner le modèle**, j'ai décidé d'utiliser un ensemble de features (indicateurs) complémentaires, soigneusement sélectionnés pour éviter le "bruit" et la malédiction de la dimensionnalité :
+        
+        **Les indicateurs de marché (réactifs) :**
+        - Matières premières : **Copper** (Momentum 3M - Demande industrielle globale), **WTI Crude Oil** (Niveau et Momentum 3M - Choc énergétique).
+        - Taux et Conditions Financières : **Yield Curve 10-2Y** (Pente de la courbe), **VIX** (Stress du marché), **NFCI** (Conditions financières et bancaires de Chicago).
+        - Devises : **DXY** (Momentum 3M - Tendance de la liquidité globale).
+        *(Note : Le High Yield Spread et le 10Y Breakeven agissent comme cibles principales, mais ils sont aussi utilisés de manière croisée ("cross-confirmation") comme features : le Spread aide à prédire l'Inflation, et le Breakeven aide à prédire le Risque. Ils ne sont jamais utilisés pour se prédire eux-mêmes afin d'éviter toute fuite de données).*
+
+        **Les indicateurs macroéconomiques (structurels) :**
         Ils sont intégrés pour que le modèle trouve des corrélations de fond et détecte avec moins de bruit les véritables changements de régime économique :
-        - Économie et Emploi : **Initial Claims** (Demandes chômage hebdomadaires), **Industrial Production** (Production industrielle).
+        - Économie et Emploi : **Initial Claims** (Demandes de chômage en temps réel), **Industrial Production** (Production industrielle brute).
         - Consommation et Immobilier : **Consumer Sentiment** (Confiance des consommateurs), **Housing Permits** (Demandes de permis de construire).
-        - Monétaire et Inflation : **CPI** (Inflation), **Net Liquidity** (Liquidité Nette des banques centrales), **Real Rates** (Taux Fed ajusté à l'inflation).
+        - Monétaire et Inflation : **Inflation YoY** (Tendance structurelle), **Net Liquidity** (Soutien en liquidité des Banques Centrales), **Real Rates** (Véritable coût du capital).
 
         **Détermination du Régime (Lissage des Probabilités sur 5 jours) :**
         Pour éviter des allers-retours incessants dans le portefeuille à chaque bruit statistique du marché, le quadrant final n'est pas choisi sur une seule journée isolée. 
@@ -107,14 +112,22 @@ def render(data):
 
         **1. Allocation de base par Régime Macro :**
 
-        | Quadrant | Logique Fondamentale | SP500 | NASDAQ | SmallCAP | GOLD | COMMODITIES | TREASURY | OBLIGATION (IG) |
-        |----------|-----------------------|-------|--------|----------|------|-------------|----------|-----------------|
-        | **Q1: Growth** | Croissance Saine (Goldilocks). Maximal Risk-On sur les actions. | 30% | 40% | 30% | 0% | 0% | 0% | 0% |
-        | **Q2: Inflation** | **Reflation (Régime dominant).** Phase d'expansion la plus courante de l'économie moderne. Maintien de l'exposition globale au risque. | 40% | 30% | 30% | 0% | 0% | 0% | 0% |
-        | **Q3: Stagflation** | Défense Totale. Phase de transition vers le risk-OFF du Q4. Baisse de la croissance et hausse des prix. Refuges tangibles privilégiés (Or, Matières premières) et Treasuries. | 0% | 0% | 0% | 40% | 30% | 30% | 0% |
-        | **Q4: Deflation** | Le Bunker (Crash Déflationniste). Risk-OFF, protection via les obligations d'État, et l'Or comme refuge. | 0% | 0% | 0% | 30% | 0% | 50% | 20% |
+        L'allocation a été optimisée pour maximiser le rendement et la protection selon la dynamique de chaque régime :
+
+        *   **Q1: Growth (Croissance Saine / Goldilocks)** : Maximal Risk-On sur les actions et l'immobilier.
+            *   **S&P 500** : 40% | **NASDAQ 100** : 40% | **US REIT (VNQ)** : 20%
+        *   **Q2: Inflation (Reflation)** : Phase d'expansion où les prix augmentent. Protection contre l'inflation avec maintien d'une exposition actions forte (Tech/Croissance).
+            *   **Or (GOLD)** : 40% | **NASDAQ 100** : 38% | **Matières Premières** : 11% | **S&P 500** : 11%
+        *   **Q3: Stagflation** : Défense. Baisse de la croissance et hausse des prix. Rotation vers les refuges monétaires et pari à la baisse sur les actions.
+            *   **USD/JPY** : 40% | **Short S&P 500** : 32% | **USD/EUR** : 18% | **Matières Premières** : 10%
+        *   **Q4: Deflation** : Le Bunker (Crash Déflationniste). Risk-OFF total, protection massive via la dette d'État.
+            *   **Treasury 10Y** : 40% | **Or (GOLD)** : 38% | **Obligations (IG)** : 22%
+            
+        **2. Stratégie "High Conviction" (Levier 2x) :**
         
-        **2. Filtre de Tendance et Mécanisme Risk-Off (Trend Following Overlay) :**
+        Une variante algorithmique "High Conviction" (HC) est disponible dans le backtest. Cette stratégie applique un **effet de levier 2x** sur le portefeuille. Un coût d'emprunt (borrowing cost) de 5% annualisé est appliqué dynamiquement, uniquement sur les jours de trading actifs, pour refléter la réalité d'un compte sur marge.
+
+        **3. Filtre de Tendance et Mécanisme Risk-Off (Trend Following Overlay) :**
         
         Afin de limiter les drawdowns extrêmes lors de krachs boursiers subits, un filtre de suivi de tendance (**MA200**) est superposé en temps réel aux allocations ci-dessus :
         - Les actifs majeurs (**S&P 500, NASDAQ 100 et Or**) sont constamment surveillés par rapport à leur Moyenne Mobile à 200 jours.
