@@ -185,7 +185,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Pipeline Macro-Quantitative", "Crypto Momentum Trading", "Polymarket Arbitrage", "DCA Investment Strategy", "Arbitrage Or-Argent", "Equity Research","Portfolio Optimizer", "Monte Carlo Gambling"]
+        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Pairs trading", "Equity Research","Portfolio Optimizer", "Polymarket Arbitrage"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -197,7 +197,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "activity", "hourglass-split", "arrows-expand", "robot", "bezier","dice-5"], 
+            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier","activity"], 
             #bootstrap icons (7 icons for 7 options)
             menu_icon="cast",
             default_index=default_idx,
@@ -296,7 +296,7 @@ def render_home():
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_macro", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Pipeline Macro-Quantitative"
+            st.session_state.current_page = "Macro 4 seasons strategy"
             st.rerun()
     
     with col2:
@@ -318,17 +318,17 @@ def render_home():
     with col3:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3><i class="bi bi-arrows-expand"></i> Statistical Arbitrage</h3>
+            <h3><i class="bi bi-arrows-expand"></i> Pairs trading Statistical Arbitrage</h3>
             <p><strong>Tech:</strong> Statsmodels, Scikit-learn, Scipy</p>
             <p>Developed pairs trading strategy for Gold-Silver correlation. Applied cointegration tests 
             (Augmented Dickey-Fuller) and linear regression for spread modeling.</p>
-            <p><strong>Key Result:</strong> Statistical arbitrage based on mean reversion principles.</p>
-            <hr>
+            <p><strong>Key Result:</strong> Pairs trading strategy based on mean reversion principles.</p>
+            <hr>   
         </div>
         """, unsafe_allow_html=True)
         if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Arbitrage Or-Argent"
+            st.session_state.current_page = "Pairs trading"
             st.rerun()
     
     
@@ -353,16 +353,16 @@ def render_home():
     with col5:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3><i class="bi bi-activity"></i> Polymarket Arbitrage</h3>
-            <p>l'objectif est de décelé grace a black-scholes des opportunité d'arbitrage entre polymarket et Binance.
-            En partant du principe que polymarket propose des contrat forward binaire 
-            </p>
+            <h3><i class="bi bi-dice-5"></i> Martingale Gambling</h3>
+            <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
+            <p>Monte carlo simulation of roulette games using Martingale strategy. 
+            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_poly", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Polymarket Arbitrage"
+            st.session_state.current_page = "Monte Carlo Gambling"
             st.rerun()
     
 
@@ -387,16 +387,16 @@ def render_home():
     with col7:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3><i class="bi bi-dice-5"></i> Martingale Gambling</h3>
-            <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
-            <p>Monte carlo simulation of roulette games using Martingale strategy. 
-            Achieved statistical analysis showing high win rate doesn't mean positive expected value.</p>
+            <h3><i class="bi bi-activity"></i> Polymarket Arbitrage</h3>
+            <p><strong>Tech:</strong> Python, Black-Scholes, WebSockets</p>
+            <p>The objective is to detect arbitrage opportunities between Polymarket and Binance using the Black-Scholes model, assuming Polymarket offers binary forward contracts.</p>
+            <p><em>(Building in progress)</em></p>
             <hr>
         </div>
         """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
+        if st.button("Voir le Projet", key="btn_poly", use_container_width=True):
             st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Monte Carlo Gambling"
+            st.session_state.current_page = "Polymarket Arbitrage"
             st.rerun()
     
    
@@ -425,7 +425,7 @@ if __name__ == "__main__":
         _render_nav_sidebar("Home")
         render_home()
 
-    elif st.session_state.current_page == "Pipeline Macro-Quantitative":
+    elif st.session_state.current_page == "Macro 4 seasons strategy":
         import macro_projet.app_macro as app_macro
         app_macro.render()
 
@@ -448,8 +448,8 @@ if __name__ == "__main__":
             st.error(f"Could not load the DCA Strategy app: {str(e)}")
 
 
-    elif st.session_state.current_page == "Arbitrage Or-Argent":
-        _render_nav_sidebar("Arbitrage Or-Argent")
+    elif st.session_state.current_page == "Pairs trading":
+        _render_nav_sidebar("Pairs trading")
         try:
             apply_home_css()
             import arbitrage.app_arbitrage as app_arbitrage

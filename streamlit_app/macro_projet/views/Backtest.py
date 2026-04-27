@@ -264,10 +264,72 @@ def _render_heatmap(scores_matrix, conf_matrix, fallback_perf_data, title, capti
 def render(data):
     st.header("Performance Historique")
 
-    # === Smooth Quadrant Distribution (Historique Complet) ===
-    st.subheader("Repartition Totale des Quadrants (Historique Complet)")
-    if data['backtest'] is not None and 'smooth_quadrant' in data['backtest'].columns:
-        smooth_q_counts = data['backtest']['smooth_quadrant'].value_counts().reindex([1, 2, 3, 4], fill_value=0)
+    # =========================================================
+    # DATE RANGE FILTER (Rolling Window)
+    # =========================================================
+    df_bt_raw = data.get('backtest')
+    df_oos_raw = data.get('backtest_oos')
+
+    # Determine available date range
+    if df_bt_raw is not None and 'date' in df_bt_raw.columns:
+        _min_date = df_bt_raw['date'].min().date()
+        _max_date = df_bt_raw['date'].max().date()
+    else:
+        _min_date = pd.Timestamp('2009-01-01').date()
+        _max_date = pd.Timestamp.today().date()
+
+    with st.container():
+        rc1, rc2, rc3 = st.columns([2, 2, 1])
+        with rc1:
+            filter_start = st.date_input(
+                "Date début Backtest",
+                value=_min_date,
+                min_value=_min_date,
+                max_value=_max_date,
+                key="bt_filter_start"
+            )
+        with rc2:
+            filter_end = st.date_input(
+                "Date fin Backtest",
+                value=_max_date,
+                min_value=_min_date,
+                max_value=_max_date,
+                key="bt_filter_end"
+            )
+        with rc3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("↺ Réinitialiser", key="bt_reset", use_container_width=True):
+                filter_start = _min_date
+                filter_end = _max_date
+
+    # Apply filter
+    _ts = pd.Timestamp
+    if df_bt_raw is not None:
+        df_bt = df_bt_raw[
+            (df_bt_raw['date'] >= _ts(filter_start)) &
+            (df_bt_raw['date'] <= _ts(filter_end))
+        ].copy()
+    else:
+        df_bt = None
+
+    if df_oos_raw is not None and 'date' in df_oos_raw.columns:
+        df_oos_bt = df_oos_raw[
+            (df_oos_raw['date'] >= _ts(filter_start)) &
+            (df_oos_raw['date'] <= _ts(filter_end))
+        ].copy()
+    else:
+        df_oos_bt = None
+
+    _date_filtered = (filter_start != _min_date or filter_end != _max_date)
+    if _date_filtered:
+        st.caption(f"Fenêtre Backtest : **{filter_start}** → **{filter_end}** — toutes les métriques sont recalculées sur cette période.")
+
+    st.divider()
+
+    # === Smooth Quadrant Distribution ===
+    st.subheader("Répartition des Quadrants sur la Période Sélectionnée")
+    if df_bt is not None and 'smooth_quadrant' in df_bt.columns:
+        smooth_q_counts = df_bt['smooth_quadrant'].value_counts().reindex([1, 2, 3, 4], fill_value=0)
         total_days = smooth_q_counts.sum()
 
         fig_smooth = go.Figure(data=[go.Bar(
@@ -279,7 +341,7 @@ def render(data):
         )])
 
         fig_smooth.update_layout(
-            title=f"Repartition des Quadrants Lisses — {total_days} jours de trading",
+            title=f"Répartition des Quadrants — {total_days} jours de trading",
             yaxis_title="Nombre de Jours",
             height=250,
             margin=dict(l=20, r=20, t=40, b=20)
@@ -287,126 +349,160 @@ def render(data):
         st.plotly_chart(fig_smooth, use_container_width=True)
 
         dominant_smooth_q = smooth_q_counts.idxmax()
-        start_date = data['backtest']['date'].min().strftime('%Y-%m-%d') if 'date' in data['backtest'].columns else 'N/A'
-        end_date = data['backtest']['date'].max().strftime('%Y-%m-%d') if 'date' in data['backtest'].columns else 'N/A'
+        start_label = df_bt['date'].min().strftime('%Y-%m-%d') if 'date' in df_bt.columns else 'N/A'
+        end_label   = df_bt['date'].max().strftime('%Y-%m-%d') if 'date' in df_bt.columns else 'N/A'
         st.info(
-            f"Periode: **{start_date}** → **{end_date}** | "
-            f"Regime dominant (lisse): **Q{dominant_smooth_q} — {QUADRANT_NAMES.get(dominant_smooth_q)}** "
+            f"Période: **{start_label}** → **{end_label}** | "
+            f"Régime dominant: **Q{dominant_smooth_q} — {QUADRANT_NAMES.get(dominant_smooth_q)}** "
             f"({smooth_q_counts.max() / total_days * 100:.1f}%)"
         )
     else:
-        st.warning("Donnees smooth_quadrant non disponibles. Lancez le backtest pour generer ces donnees.")
+        st.warning("Données smooth_quadrant non disponibles. Lancez le backtest pour générer ces données.")
 
     st.divider()
 
     # === Strategy vs Benchmark ===
-    st.subheader("Strategie vs Benchmark & Impact Devise (EUR)")
-    if data['backtest'] is not None:
-        df_bt = data['backtest']
+    st.subheader("Stratégie vs Benchmark & Impact Devise (EUR)")
+    if df_bt is not None:
+
+        # Normalize all series to $1000 at the start of the filtered window
+        def _norm(series, base=1000.0):
+            """Rebases a wealth series so the first value = base."""
+            s = series.dropna()
+            if len(s) == 0: return series
+            return s / s.iloc[0] * base
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['wealth'], name='Strategy (USD)', line=dict(color='cyan')))
-        
-        # Check if EUR/USD conversion is possible
+        fig.add_trace(go.Scatter(
+            x=df_bt['date'], y=_norm(df_bt['wealth']),
+            name='Stratégie Modèle Complet', line=dict(color='cyan')
+        ))
+
+        # OOS Walk-Forward curve
+        if df_oos_bt is not None and 'oos_wealth' in df_oos_bt.columns:
+            fig.add_trace(go.Scatter(
+                x=df_oos_bt['date'], y=_norm(df_oos_bt['oos_wealth']),
+                name='Walk-Forward OOS',
+                line=dict(color='#bf5fff', width=2, dash='dashdot'),
+            ))
+
+        # HC 1x
+        if 'hc_wealth' in df_bt.columns:
+            fig.add_trace(go.Scatter(
+                x=df_bt['date'], y=_norm(df_bt['hc_wealth']),
+                name='HC Haute Conviction', line=dict(color='#39FF14', dash='dot')
+            ))
+
+        # HC 2x Leveraged
+        if 'hc2x_wealth' in df_bt.columns:
+            fig.add_trace(go.Scatter(
+                x=df_bt['date'], y=_norm(df_bt['hc2x_wealth']),
+                name='HC 2x Levier',
+                line=dict(color='#ff4444', width=2, dash='dot')
+            ))
+
+        # EUR conversion
         df_f = data.get('daily_forex')
-        df_ind = data.get('indicators')
-        
+        wealth_eur = None
         if df_f is not None and not df_f.empty and 'USD_EUR' in df_f.columns:
-            # Reconstruct Returns in EUR
             df_ret_f = df_f.copy()
             df_ret_f['date'] = pd.to_datetime(df_ret_f['date'])
             df_ret_f = df_ret_f.set_index('date').sort_index()
             eur_usd_ret = df_ret_f['USD_EUR'].pct_change().fillna(0)
-            
-            # Align with backtest dates
             idx = df_bt['date'].dt.tz_localize(None)
             eur_usd_ret = eur_usd_ret.reindex(idx).fillna(0)
-            
-            # (1 + strat_ret_usd) * (1 + eur_usd_ret) - 1
             strat_ret = df_bt['portfolio_return'].values
             eur_ret = (1 + strat_ret) * (1 + eur_usd_ret.values) - 1
-            wealth_eur = 1000 * (1 + eur_ret).cumprod()
-            
-            fig.add_trace(go.Scatter(x=df_bt['date'], y=wealth_eur, name='Strategy (EUR)', line=dict(color='#00ff88', dash='dash')))
+            wealth_eur_raw = pd.Series(1000 * (1 + eur_ret).cumprod(), index=df_bt.index)
+            wealth_eur = _norm(wealth_eur_raw)
+            fig.add_trace(go.Scatter(
+                x=df_bt['date'], y=wealth_eur,
+                name='Stratégie (EUR)', line=dict(color='#00ff88', dash='dash')
+            ))
 
-        if 'hc_wealth' in df_bt.columns:
-            fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['hc_wealth'], name='Strategy Haute Conviction', line=dict(color='#39FF14', dash='dot')))
-        fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['SP500_wealth'], name='SP500', line=dict(color='orange')))
-        fig.add_trace(go.Scatter(x=df_bt['date'], y=df_bt['GOLD_wealth'], name='Gold', line=dict(color='gold')))
-        fig.update_layout(height=450, yaxis_title="Wealth", xaxis_title="Date", legend=dict(orientation="h", y=1.05))
+        fig.add_trace(go.Scatter(
+            x=df_bt['date'], y=_norm(df_bt['SP500_wealth']),
+            name='SP500', line=dict(color='orange')
+        ))
+        fig.add_trace(go.Scatter(
+            x=df_bt['date'], y=_norm(df_bt['GOLD_wealth']),
+            name='Gold', line=dict(color='gold')
+        ))
+
+        fig.update_layout(
+            height=490, yaxis_title="Wealth indicée ($, base 1 000)", xaxis_title="Date",
+            legend=dict(orientation="h", y=1.08),
+        )
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning("Donnees backtest non disponibles")
+        st.warning("Données backtest non disponibles")
+
 
     # =========================================================
     # SECTION 1.B: COMPARAISON DE PERFORMANCE
     # =========================================================
     st.divider()
-    if data['stats'] is not None and data['backtest'] is not None:
-        stats_dict = data['stats'].iloc[0].to_dict() if len(data['stats']) > 0 else {}
-        df_bt = data['backtest']
-        
-        # Calculate years for CAGR
+    if data['stats'] is not None and df_bt is not None:
+
+        # Calculate years for CAGR from the FILTERED window
         days = (df_bt['date'].max() - df_bt['date'].min()).days
         years = days / 365.25 if days > 0 else 1.0
 
-        # Build a map of available strategies
+        # Helper: recalculate all metrics from a wealth series (always from filtered data)
+        def _calc_metrics(w_series):
+            """Returns (tot_ret, cagr, sharpe, vol, max_dd) from a wealth series."""
+            if w_series is None or len(w_series) < 5:
+                return 0.0, 0.0, 0.0, 0.0, 0.0
+            if isinstance(w_series, np.ndarray):
+                w_series = pd.Series(w_series)
+            w = w_series.reset_index(drop=True)
+            tot_ret = (w.iloc[-1] / w.iloc[0]) - 1
+            cagr = (1 + tot_ret) ** (1 / years) - 1 if years > 0 else 0.0
+            rets = w.pct_change().dropna()
+            vol = rets.std() * np.sqrt(252)
+            sharpe = (rets.mean() * 252) / vol if vol > 0 else 0.0
+            peak = w.expanding(min_periods=1).max()
+            max_dd = ((w - peak) / peak).min()
+            return tot_ret, cagr, sharpe, vol, max_dd
+
+        # Build wealth map from FILTERED df_bt
         wealth_map = {
-            "Stratégie (USD)": {"wealth": df_bt['wealth'], "prefix": "strategy"},
-            "S&P 500 (Benchmark)": {"wealth": df_bt['SP500_wealth'], "prefix": "SP500"},
-            "Or (Gold)": {"wealth": df_bt['GOLD_wealth'], "prefix": "GOLD"},
+            "Stratégie Modèle Complet (USD)": df_bt['wealth'],
+            "S&P 500 (Benchmark)": df_bt['SP500_wealth'],
+            "Or (Gold)": df_bt['GOLD_wealth'],
         }
-        
-        # Optional strategies
+
+        if df_oos_bt is not None and 'oos_wealth' in df_oos_bt.columns:
+            wealth_map["Walk-Forward OOS"] = df_oos_bt['oos_wealth']
+
         if 'hc_wealth' in df_bt.columns:
-            wealth_map["Stratégie (Haute Conviction)"] = {"wealth": df_bt['hc_wealth'], "prefix": "strategy_hc"}
-        
-        # Strategy EUR is calculated above as wealth_eur if forex is available
-        if 'wealth_eur' in locals():
-            wealth_map["Stratégie (EUR)"] = {"wealth": wealth_eur, "prefix": "strategy_eur"}
+            wealth_map["HC Haute Conviction"] = df_bt['hc_wealth']
+
+        if 'hc2x_wealth' in df_bt.columns:
+            wealth_map["HC 2x Levier"] = df_bt['hc2x_wealth']
+
+        if wealth_eur is not None:
+            wealth_map["Stratégie (EUR)"] = wealth_eur
 
         def display_compare_panel(key_id, default_selection_idx):
-            choice = st.selectbox(f"Sélecteur {key_id} :", options=list(wealth_map.keys()), index=default_selection_idx, key=f"sel_{key_id}")
-            config = wealth_map[choice]
-            w = config['wealth']
-            p = config['prefix']
-            
-            if w is not None and len(w) > 0:
-                # Ensure w is a pandas Series for .iloc support
-                if isinstance(w, np.ndarray):
-                    w = pd.Series(w)
-                    
-                # Calculated Metrics
-                tot_ret = (w.iloc[-1] / w.iloc[0]) - 1
-                cagr = (1 + tot_ret) ** (1 / years) - 1
-                
-                # Fetch or calculate other stats
-                m_dd = stats_dict.get(f"{p}_max_drawdown", 0)
-                m_sharpe = stats_dict.get(f"{p}_sharpe_annual", 0)
-                m_vol = stats_dict.get(f"{p}_vol_annual", 0)
-                
-                # Re-calculate if prefix is new/missing (like EUR)
-                if f"{p}_max_drawdown" not in stats_dict or np.isnan(m_sharpe):
-                    peak = w.expanding(min_periods=1).max()
-                    m_dd = ((w - peak) / peak).min()
-                    rets = w.pct_change().dropna()
-                    m_vol = rets.std() * np.sqrt(252)
-                    m_sharpe = (rets.mean() * 252) / m_vol if m_vol > 0 else 0
+            choice = st.selectbox(
+                f"Sélecteur {key_id} :",
+                options=list(wealth_map.keys()),
+                index=min(default_selection_idx, len(wealth_map) - 1),
+                key=f"sel_{key_id}"
+            )
+            w_series = wealth_map[choice]
+            tot_ret, cagr, sharpe, vol, max_dd = _calc_metrics(w_series)
 
-                # Display metrics in a clean vertical grid
-                st.write(f"### {choice}")
-                m_c1, m_c2 = st.columns(2)
-                m_c1.metric("Total Return", f"{tot_ret * 100:.1f}%")
-                m_c1.metric("Annual Return", f"{cagr * 100:.1f}%")
-                m_c1.metric("Max Drawdown", f"{abs(m_dd) * 100:.1f}%")
-                
-                m_c2.metric("Sharpe Ratio", f"{m_sharpe:.2f}")
-                m_c2.metric("Annual Vol", f"{m_vol * 100:.1f}%")
-            else:
-                st.info("Données non disponibles.")
+            st.write(f"### {choice}")
+            m_c1, m_c2 = st.columns(2)
+            m_c1.metric("Total Return", f"{tot_ret * 100:.1f}%")
+            m_c1.metric("Annual Return", f"{cagr * 100:.1f}%")
+            m_c1.metric("Max Drawdown", f"{abs(max_dd) * 100:.1f}%")
+            m_c2.metric("Sharpe Ratio", f"{sharpe:.2f}")
+            m_c2.metric("Annual Vol", f"{vol * 100:.1f}%")
 
         st.write("### Comparaison de Performance")
-        # Side-by-side comparison
         comp_col1, comp_col2 = st.columns(2)
         with comp_col1:
             display_compare_panel("A", 0)

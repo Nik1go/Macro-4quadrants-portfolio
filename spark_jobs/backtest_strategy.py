@@ -87,11 +87,11 @@ def main():
     quadrants_csv, assets_parquet, forex_parquet, indicators_csv, initial_capital, output_dir = sys.argv[1:7]
     initial_capital = float(initial_capital)
     
-    # Start date (default: 2005-01-01)
+    # Start date (default: 2009-01-01 = first OOS year from walk-forward with min_train_years=4)
     if len(sys.argv) >= 8:
         start_date = pd.to_datetime(sys.argv[7])
     else:
-        start_date = pd.to_datetime('2005-01-01')
+        start_date = pd.to_datetime('2009-01-01')
     print(f" Backtest starting from: {start_date.strftime('%Y-%m-%d')}")
 
     if os.path.isdir(output_dir):
@@ -110,7 +110,33 @@ def main():
     df_q[cols_to_shift] = df_q[cols_to_shift].shift(1)
     
     df_q = df_q.set_index('date').sort_index()
-    df_q = df_q.dropna(thresh=1) # Drop rows that became NaN due to shift
+    df_q = df_q.dropna(thresh=1)  # Drop rows that became NaN due to shift
+
+    # ── Load OOS (Walk-Forward) quadrants ────────────────────────────────────
+    # quadrants_oos.csv is exported by train_model.py from the walk-forward OOS
+    # predictions. At each date T, the quadrant was assigned by a model trained
+    # only on data strictly before T. This gives an unbiased view of live perf.
+    oos_csv_path = os.path.join(os.path.dirname(quadrants_csv), 'quadrants_oos.csv')
+    df_q_oos = None
+    if os.path.exists(oos_csv_path):
+        df_q_oos = pd.read_csv(oos_csv_path, parse_dates=['date'])
+        df_q_oos = df_q_oos.drop_duplicates(subset=['date']).sort_values('date')
+
+        # Shift T+1 (same anti-look-ahead as main signals)
+        cols_to_shift_oos = [c for c in df_q_oos.columns if c != 'date']
+        df_q_oos[cols_to_shift_oos] = df_q_oos[cols_to_shift_oos].shift(1)
+        df_q_oos = df_q_oos.set_index('date').sort_index()
+
+        # OOS is weekly (W-FRI from walk-forward resample) → ffill to business days
+        full_daily_idx = pd.date_range(df_q_oos.index.min(), df_q_oos.index.max(), freq='B')
+        df_q_oos = df_q_oos.reindex(full_daily_idx).ffill()
+        df_q_oos.index.name = 'date'
+        df_q_oos = df_q_oos.dropna(thresh=1)
+
+        print(f"   ✅ OOS quadrants loaded: {len(df_q_oos)} business days")
+        print(f"      Range: {df_q_oos.index.min().date()} → {df_q_oos.index.max().date()}")
+    else:
+        print(f"   ⚠️ quadrants_oos.csv not found at {oos_csv_path} — OOS curve skipped")
 
     df_a = pd.read_parquet(assets_parquet)
     df_a['date'] = pd.to_datetime(df_a['date'])
@@ -257,6 +283,60 @@ def main():
     df['SP500_wealth'] = initial_capital * (1 + df['SP500_ret']).cumprod()
     df['GOLD_wealth'] = initial_capital * (1 + df['GOLD_OZ_USD_ret']).cumprod()
 
+    # ========== 12.A OOS STRATEGY (Walk-Forward — honest unbiased curve) ==========
+    # Uses quadrants_oos.csv: for each date T, the model only knew data < T.
+    # No future information leaks in. This is the "real" live performance estimate.
+    df_oos_wealth = None
+    df_oos = None          # will hold OOS DataFrame if successfully computed
+    oos_computed = False   # flag: True when OOS wealth is ready
+    if df_q_oos is not None:
+        oos_required_cols = ['assigned_quadrant', 'PROB_GROWTH_RAW', 'PROB_INFLATION_RAW']
+        available_oos_cols = [c for c in oos_required_cols if c in df_q_oos.columns]
+
+        df_oos = df_a_combined[ASSETS].join(
+            df_q_oos[available_oos_cols], how='inner'
+        ).dropna(subset=['assigned_quadrant'])
+        df_oos['assigned_quadrant'] = df_oos['assigned_quadrant'].astype(int)
+        df_oos = df_oos[df_oos.index >= start_date]
+
+        if len(df_oos) > 10:
+            # Returns (carry-adjusted where available)
+            for asset in ASSETS:
+                if asset in df_returns_all.columns:
+                    df_oos[f'{asset}_ret'] = df_returns_all[asset].reindex(df_oos.index)
+                else:
+                    df_oos[f'{asset}_ret'] = df_oos[asset].pct_change().fillna(0.0)
+
+            # Weights from same LOCKED_WEIGHTS (no leakage: weights are fixed rules)
+            df_oos['smooth_quadrant'] = df_oos['assigned_quadrant']
+            for asset in ASSETS:
+                df_oos[f'{asset}_weight'] = df_oos['smooth_quadrant'].map(
+                    lambda q: WEIGHTS.get(q, {}).get(asset, 0.0)
+                )
+
+            # Transaction costs
+            oos_w_cols = [f'{a}_weight' for a in ASSETS]
+            df_oos['transaction_cost'] = df_oos[oos_w_cols].diff().abs().sum(axis=1).fillna(0.0) * TRANSACTION_COST
+
+            # TER costs
+            oos_ter = pd.Series(0.0, index=df_oos.index)
+            for asset in ASSETS:
+                oos_ter += df_oos[f'{asset}_weight'] * (TER.get(asset, 0.0) / TRADING_DAYS)
+            df_oos['ter_cost'] = oos_ter
+
+            # Portfolio return & wealth
+            df_oos['oos_return'] = sum(
+                df_oos[f'{a}_weight'] * df_oos[f'{a}_ret'].fillna(0.0) for a in ASSETS
+            ) - df_oos['ter_cost'] - df_oos['transaction_cost']
+            df_oos['oos_wealth'] = initial_capital * (1 + df_oos['oos_return']).cumprod()
+
+            df_oos_wealth = df_oos[['oos_wealth', 'oos_return', 'smooth_quadrant']].copy()
+            df_oos_wealth.index.name = 'date'
+            df_oos_wealth.to_csv(f"{output_dir}/backtest_oos_timeseries.csv")
+            oos_computed = True   # stats will be added after stats={} in step 13
+        else:
+            print("   ⚠️ Not enough OOS rows after date filter — OOS wealth skipped")
+
     # ========== 12.B HIGH CONVICTION STRATEGY ==========
     # Initialize weights
     for asset in ASSETS:
@@ -301,25 +381,53 @@ def main():
     df['hc_return'] = df['hc_return'] - df['hc_ter_cost'] - df['hc_transaction_cost']
     df['hc_wealth'] = initial_capital * (1 + df['hc_return']).cumprod()
 
+    # ========== 12.C HC 2X LEVERAGED ==========
+    # Gross leverage x2 on every HC trade.
+    # Borrowing cost: 5% annual on the leveraged notional, charged on active days only.
+    HC_LEVERAGE       = 2.0
+    HC_BORROW_ANNUAL  = 0.05   # 5% p.a. financing cost (SOFR-like)
+    HC_BORROW_DAILY   = HC_BORROW_ANNUAL / TRADING_DAYS
 
-    # ========== 13. STATS ==========
+    hc_active = (df[[f'{a}_hc_weight' for a in ASSETS]].sum(axis=1) > 0.01).astype(float)
+
+    # Gross leveraged return = leverage * base_return − financing cost (when active)
+    df['hc2x_return'] = (
+        df['hc_return'] * HC_LEVERAGE
+        - hc_active * HC_BORROW_DAILY * (HC_LEVERAGE - 1)   # only on borrowed fraction
+    )
+    df['hc2x_wealth'] = initial_capital * (1 + df['hc2x_return']).cumprod()
+    print(f"HC 2x Leveraged: Final Wealth={df['hc2x_wealth'].iloc[-1]:.2f} | "
+          f"Total Return={(df['hc2x_wealth'].iloc[-1]/initial_capital - 1)*100:.1f}%")
+
     stats = {}
     stats.update(calculate_stats(df['portfolio_return'], df['wealth'], 'strategy'))
     stats.update(calculate_stats(df['hc_return'], df['hc_wealth'], 'strategy_hc'))
     stats.update(calculate_stats(df['SP500_ret'], df['SP500_wealth'], 'SP500'))
     stats.update(calculate_stats(df['GOLD_OZ_USD_ret'], df['GOLD_wealth'], 'GOLD'))
 
+    stats.update(calculate_stats(df['hc2x_return'], df['hc2x_wealth'], 'strategy_hc2x'))
     stats['cum_transaction_cost'] = df['transaction_cost'].sum()
     stats['cum_ter_cost'] = df['ter_cost'].sum()
     stats['initial_capital'] = initial_capital
     stats['final_wealth'] = df['wealth'].iloc[-1]
     stats['hc_final_wealth'] = df['hc_wealth'].iloc[-1]
+    stats['hc2x_final_wealth'] = df['hc2x_wealth'].iloc[-1]
     stats['total_return'] = (df['wealth'].iloc[-1] / initial_capital) - 1
     stats['hc_total_return'] = (df['hc_wealth'].iloc[-1] / initial_capital) - 1
+    stats['hc2x_total_return'] = (df['hc2x_wealth'].iloc[-1] / initial_capital) - 1
 
     # Count risk-off switches (including NASDAQ-100)
     for asset in ['SP500', 'GOLD_OZ_USD', 'NASDAQ_100', 'USD_JPY']:
         stats[f'nb_switch_{asset.lower()}'] = df[f'{asset}_risk_off'].diff().fillna(0).abs().sum() / 2
+
+    # OOS stats (walk-forward honest curve) — added here because stats={} is in step 13
+    if oos_computed and df_oos is not None:
+        stats.update(calculate_stats(df_oos['oos_return'], df_oos['oos_wealth'], 'strategy_oos'))
+        stats['oos_final_wealth'] = float(df_oos['oos_wealth'].iloc[-1])
+        stats['oos_total_return'] = float((df_oos['oos_wealth'].iloc[-1] / initial_capital) - 1)
+        print(f"OOS Backtest: Final Wealth={stats['oos_final_wealth']:.2f} | "
+              f"Total Return={stats['oos_total_return']*100:.1f}% | "
+              f"Sharpe={stats.get('strategy_oos_sharpe_annual', 0):.2f}")
 
     # ========== 14. EXPORT ==========
     pd.DataFrame([stats]).to_csv(f"{output_dir}/backtest_stats.csv", index=False)
@@ -359,8 +467,13 @@ def main():
 
     # Timeseries
     base_weight_cols = [f'{a}_base_weight' for a in ASSETS]
-    out_cols = ['smooth_quadrant', 'portfolio_return', 'wealth', 'hc_return', 'hc_wealth', 'SP500_wealth', 'GOLD_wealth',
-                'transaction_cost', 'ter_cost'] + weight_cols + base_weight_cols
+    out_cols = [
+        'smooth_quadrant', 'portfolio_return', 'wealth',
+        'hc_return', 'hc_wealth',
+        'hc2x_return', 'hc2x_wealth',
+        'SP500_wealth', 'GOLD_wealth',
+        'transaction_cost', 'ter_cost'
+    ] + weight_cols + base_weight_cols
     df_out = df[out_cols].copy()
     df_out.index.name = 'date'
     df_out.to_csv(f"{output_dir}/backtest_timeseries.csv")

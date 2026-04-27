@@ -30,6 +30,16 @@ TICKER_NAMES = {
     'VGEA.DE': 'Bonds d’Etat (Vanguard)'
 }
 
+TICKER_COLORS = {
+    'PHPM.MI': '#0062FF',  # Blue
+    'VGEA.DE': '#7EC2FF',  # Sky Blue
+    'VWRL.AS': '#FF3B3B',  # Red
+    'AEEM.PA': '#9D86E0',  # Purple
+    'CEM.PA': '#0ACF83',  # Emerald
+    'INR.PA': '#00E5FF',  # Cyan
+    'IQQH.DE': '#FF9500'   # Orange
+}
+
 
 # --- DATA FETCHING ---
 @st.cache_data
@@ -246,8 +256,26 @@ def render():
         c3.metric("Risque / Volatilité", f"{opt_vol*100:.2f} %", delta=f"{(opt_vol - min_vol_std)*100:.2f}%", delta_color="inverse")
         
         st.markdown("### Évolution historique (Base 100)")
-        # Ligne de cours normalisée pour la lecture (chaque actif commence à 100)
-        st.line_chart(data / data.iloc[0] * 100)
+        # Ligne de cours normalisée avec Plotly pour plus de contrôle
+        fig_line = go.Figure()
+        normalized_data = data / data.iloc[0] * 100
+        for t in active_tickers:
+            fig_line.add_trace(go.Scatter(
+                x=normalized_data.index,
+                y=normalized_data[t],
+                name=TICKER_NAMES.get(t, t),
+                line=dict(color=TICKER_COLORS.get(t, '#ffffff'), width=2)
+            ))
+        fig_line.update_layout(
+            template="plotly_dark",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(color='white')),
+            margin=dict(l=0, r=0, t=30, b=0),
+            xaxis=dict(showgrid=False, tickfont=dict(color='white')),
+            yaxis=dict(showgrid=True, gridcolor='#3d4263', tickfont=dict(color='white'))
+        )
+        st.plotly_chart(fig_line, use_container_width=True)
 
     with col_chart:
         st.markdown("### L'Allocation Idéale")
@@ -255,14 +283,38 @@ def render():
         fig = go.Figure(data=[go.Pie(
             labels=[TICKER_NAMES.get(t, t) for t in active_tickers], 
             values=optimal_weights, 
-            hole=.4
+            hole=.4,
+            marker=dict(colors=[TICKER_COLORS.get(t) for t in active_tickers]),
+            textinfo='percent',
+            insidetextorientation='radial'
         )])
-        fig.update_layout(margin=dict(t=10, b=10, l=10, r=10), showlegend=True, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font=dict(color='white'))
+        fig.update_layout(
+            margin=dict(t=30, b=10, l=10, r=10), 
+            showlegend=True, 
+            paper_bgcolor='rgba(0,0,0,0)', 
+            plot_bgcolor='rgba(0,0,0,0)', 
+            font=dict(color='white'),
+            legend=dict(
+                orientation="v",
+                yanchor="middle",
+                y=0.5,
+                xanchor="left",
+                x=1.1,
+                bgcolor='rgba(0,0,0,0.3)',
+                bordercolor='#3d4263',
+                borderwidth=1,
+                font=dict(size=12, color='white')
+            )
+        )
         st.plotly_chart(fig, use_container_width=True)
         
-        # Petit tableau montrant les pondérations exactes
-        df_w = pd.DataFrame(optimal_weights * 100, index=[TICKER_NAMES.get(t, t) for t in active_tickers], columns=['Poids (%)']).round(2)
-        st.dataframe(df_w)
+        # Petit tableau montrant les pondérations exactes, mieux stylisé
+        st.markdown("**Poids de chaque actif :**")
+        df_w = pd.DataFrame({
+            'Actif': [TICKER_NAMES.get(t, t) for t in active_tickers],
+            'Poids (%)': (optimal_weights * 100).round(2)
+        })
+        st.table(df_w)
 
 
     st.divider()
@@ -316,15 +368,16 @@ def render():
     ))
     
     fig_mc.update_layout(
+        template="plotly_dark",
         xaxis_title="Volatilité Annuelle (%)",
         yaxis_title="Rendement Annuel (%)",
         margin=dict(t=30, b=30, l=30, r=30),
         paper_bgcolor='rgba(0,0,0,0)',
         plot_bgcolor='rgba(0,0,0,0)',
         font=dict(color='white'),
-        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-        xaxis=dict(gridcolor='#3d4263', zerolinecolor='white'),
-        yaxis=dict(gridcolor='#3d4263', zerolinecolor='white')
+        legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, font=dict(color='white')),
+        xaxis=dict(gridcolor='#3d4263', zerolinecolor='white', tickfont=dict(color='white')),
+        yaxis=dict(gridcolor='#3d4263', zerolinecolor='white', tickfont=dict(color='white'))
     )
     
     st.plotly_chart(fig_mc, use_container_width=True)

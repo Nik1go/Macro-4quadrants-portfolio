@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_option_menu import option_menu
 import yfinance as yf
 import pandas as pd
 import numpy as np
@@ -129,8 +130,8 @@ def run_strategy(df, strategy_type='fixed'):
     return pd.DataFrame(equity).set_index('Date'), pd.DataFrame(trade_history)
     
 def calculate_stats(equity_df, trades_df):
-    if equity_df.empty or trades_df.empty:
-        return {"Win Rate": "0%", "Sharpe": "0.00", "Max DD": "0%", "Profit Factor": "0.00"}
+    if equity_df.empty or trades_df.empty or 'PnL' not in trades_df.columns:
+        return {"Win Rate": "0.0%", "Sharpe": "0.00", "Max DD": "0.0%", "Profit Factor": "0.00"}
     exits = trades_df[trades_df['Type'] == 'Exit']
     win_rate = (len(exits[exits['PnL'] > 0]) / len(exits)) * 100 if len(exits) > 0 else 0
     wins = exits[exits['PnL'] > 0]['PnL'].sum()
@@ -142,55 +143,110 @@ def calculate_stats(equity_df, trades_df):
     max_dd = ((equity_df['Equity'] - peak) / peak).min() * 100
     return {"Win Rate": f"{win_rate:.1f}%", "Sharpe": f"{sharpe:.2f}", "Max DD": f"{max_dd:.1f}%", "Profit Factor": f"{profit_factor:.2f}"}
 
+@st.cache_data(show_spinner=False)
+def compute_rolling_adf(spread_values, window_size):
+    pvals = [np.nan] * window_size
+    for i in range(window_size, len(spread_values)):
+        try:
+            p = adfuller(spread_values[i-window_size:i])[1]
+        except:
+            p = np.nan
+        pvals.append(p)
+    return pvals
+
 def render():
-    st.title("Arbitrage Statistique : Or vs Argent")
+    st.title("Arbitrage Statistique : Paire trading")
     st.markdown("---")
 
-    with st.expander("Comprendre la Stratégie (Introduction)", expanded=False):
+    with st.expander("Comprendre la Stratégie (Introduction)", expanded=True):
         st.markdown("""
         L'arbitrage de paires repose sur le principe de **mean reversion**.
         Si deux actifs sont liés économiquement, leur écart (spread) devrait revenir à sa moyenne. 
         Arbitrer, c'est donc parier sur la convergence de cet écart lorsqu'il devient anormalement haut ou bas.
-        **Cette page n'a pas pour but de trouvé un réel alpha, mais plutot d'illustrer et de comprendre 
-        comment fonctionne ce type de stratégie.**
-        """)
+        <br> **Cette page n'a pas pour but de trouvé un réel alpha, mais plutot d'illustrer et de comprendre 
+        comment fonctionne ce type de stratégie.** <br>
+        """, unsafe_allow_html=True)
+
+    # --- SELECTION DE LA PAIRE ---
+    PAIRS = {
+        "Or vs Argent (GLD / SLV)": {"asset1": "Or", "tk1": "GLD", "color1": "gold", "asset2": "Argent", "tk2": "SLV", "color2": "silver"},
+        "Coca-Cola vs Pepsi (KO / PEP)": {"asset1": "Coca", "tk1": "KO", "color1": "red", "asset2": "Pepsi", "tk2": "PEP", "color2": "blue"},
+        "Visa vs Mastercard (V / MA)": {"asset1": "Visa", "tk1": "V", "color1": "blue", "asset2": "Mastercard", "tk2": "MA", "color2": "orange"}
+    }
+
+    selected_pair_key = option_menu(
+        menu_title=None,
+        options=list(PAIRS.keys()),
+        icons=["coin", "droplet-half", "credit-card"], 
+        menu_icon="cast",
+        default_index=0,
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "0!important", 
+                "background-color": "#0a0e27",
+                "border": "none",
+                "border-radius": "0",
+                "box-shadow": "none"
+            },
+            "icon": {"color": "#00d4ff", "font-size": "15px"},
+            "nav-link": {
+                "color": "#e8e8e8",
+                "font-size": "14px",
+                "text-align": "center",
+                "margin": "0px",
+                "--hover-color": "#1e2139",
+            },
+            "nav-link-selected": {"background-color": "#00d4ff", "color": "white"},
+        }
+    )
+    pair_info = PAIRS[selected_pair_key]
+    
+    asset1 = pair_info["asset1"]
+    tk1 = pair_info["tk1"]
+    color1 = pair_info["color1"]
+    
+    asset2 = pair_info["asset2"]
+    tk2 = pair_info["tk2"]
+    color2 = pair_info["color2"]
 
     # --- DATA FETCHING ---
     with st.spinner("Téléchargement des données..."):
-        data = yf.download("GLD SLV", start=START_DATE, end=END_DATE, interval=INTERVAL, progress=False)
+        tickers = f"{tk1} {tk2}"
+        data = yf.download(tickers, start=START_DATE, end=END_DATE, interval=INTERVAL, progress=False)
         if data.empty or 'Close' not in data.columns:
             st.error("Données indisponibles.")
             return
-        gld = data['Close']['GLD'] if 'GLD' in data['Close'] else data['GLD']
-        slv = data['Close']['SLV'] if 'SLV' in data['Close'] else data['SLV']
-        df = pd.DataFrame({'Or': gld, 'Argent': slv}).dropna()
+            
+        a1_data = data['Close'][tk1] if tk1 in data['Close'] else data[tk1]
+        a2_data = data['Close'][tk2] if tk2 in data['Close'] else data[tk2]
+        
+        df = pd.DataFrame({asset1: a1_data, asset2: a2_data}).dropna()
 
     # --- CALCULATIONS ---
-    X_reg = df[['Argent']].values
-    y_reg = df['Or'].values
+    X_reg = df[[asset2]].values
+    y_reg = df[asset1].values
     model = LinearRegression().fit(X_reg, y_reg)
     hedge_ratio = model.coef_[0]
     intercept = model.intercept_
     df['Spread'] = y_reg - model.predict(X_reg)
     df['ZScore'] = (df['Spread'] - df['Spread'].rolling(ZSCORE_WINDOW).mean()) / df['Spread'].rolling(ZSCORE_WINDOW).std()
-    df['Correlation'] = df['Or'].rolling(252).corr(df['Argent'])
+    df['Correlation'] = df[asset1].rolling(252).corr(df[asset2])
     df = df.dropna()
 
     # --- STEP 1: VISUALISATION & CORRELATION ---
-    st.header("Partie 1 : Validation de la Paire (Corrélation & Stationnarité)")
+    st.header("Partie 1 : Validation de la Paire (Corrélation)")
     c1, c2 = st.columns([2, 1])
     with c1:
         fig_p = go.Figure()
-        fig_p.add_trace(go.Scatter(x=df.index, y=df['Or'], name="Or", line=dict(color='gold')))
-        fig_p.add_trace(go.Scatter(x=df.index, y=df['Argent'], name="Argent", line=dict(color='silver'), yaxis="y2"))
+        fig_p.add_trace(go.Scatter(x=df.index, y=df[asset1], name=asset1, line=dict(color=color1)))
+        fig_p.add_trace(go.Scatter(x=df.index, y=df[asset2], name=asset2, line=dict(color=color2), yaxis="y2"))
         fig_p.update_layout(yaxis2=dict(overlaying="y", side="right"), template="plotly_dark", height=350)
         st.plotly_chart(fig_p, use_container_width=True)
     with c2:
         st.metric("Corrélation (252j)", f"{df['Correlation'].iloc[-1]:.2f}")
-        with st.expander("Bloc Corrélation", expanded=True):
-            st.write("Pour cette étude de cas, nous avons sélectionné une période de données (2018-2026) montrant une corrélation forte (>0.80) pour établir une base d'analyse logique. Une corrélation forte indique que les deux actifs réagissent de manière similaire aux chocs macroéconomiques.")
         with st.expander("Pourquoi la Corrélation ?", expanded=True):
-            st.write("C'est la première étape du filtrage. La corrélation est une **condition nécessaire mais non suffisante**.")
+            st.write("C'est la première étape du filtrage. La corrélation est une **condition nécessaire mais non suffisante** au trading de paires.")
 
     # --- STEP 2: REGRESSION ---
     st.divider()
@@ -200,32 +256,72 @@ def render():
         st.metric("Hedge Ratio", f"{hedge_ratio:.2f}")
         with st.expander("Le Ratio de Couverture", expanded=True):
             st.markdown(f"""
-            Le Hedge Ratio (ex: 5.48, actuellement `{hedge_ratio:.2f}`) nous dit combien d'unités d'Argent il faut vendre pour chaque unité d'Or achetée afin d'être "neutre au marché".
+            Le Hedge Ratio (actuellement `{hedge_ratio:.2f}`) nous dit combien d'unités de {asset2} il faut vendre pour chaque unité de {asset1} achetée afin d'être "neutre au marché".
             
             **Le Spread** est l'écart résiduel :
-            $$Spread = Or - ({hedge_ratio:.2f} \\times Argent + {intercept:.2f})$$
+            $$Spread = {asset1} - ({hedge_ratio:.2f} \\times {asset2} + {intercept:.2f})$$
             """)
     with c4:
         fig_s_adj = go.Figure()
         fig_s_adj.add_trace(go.Scatter(x=df.index, y=df['Spread'], name="Spread Ajusté", line=dict(color='#00d4ff')))
-        fig_s_adj.update_layout(title="Le Spread Ajusté (Or vs Argent)", template="plotly_dark", height=300)
+        fig_s_adj.update_layout(title=f"Le Spread Ajusté ({asset1} vs {asset2})", template="plotly_dark", height=300)
         st.plotly_chart(fig_s_adj, use_container_width=True)
-        st.write("Ce graphique montre le spread brut résultant de notre modèle de régression, sans standardisation.")
+        st.write("""Graphique du spread brut sans standardisation,<br> sklearn : LinearRegression().fit(df[['Asset2']],df['Asset1']).<br>""", unsafe_allow_html=True)
 
     # --- STEP 3: COINTEGRATION ---
     st.divider()
-    st.header("Partie 3 : Cointégration : L'Élastique Statistique")
-    score, pvalue, *unused = adfuller(df['Spread'])
+    st.header("Partie 3 : Cointégration et Fonctionnement Interne du Test (ADF)")
+    
+    with st.expander("Comprendre Mathématiquement le Test ADF", expanded=False):
+        st.markdown(r"""
+        Pour prouver mathématiquement que la paire est cointégrée, on utilise la librairie `statsmodels`. Le code exécuté sur notre spread calculé est le suivant :  
+        `score, pvalue = adfuller(df['Spread'])[0:2]`
+
+        **Le fonctionnement interne de la régression Augmented Dickey-Fuller (ADF) :**
+        
+        La formule modélisée par le test est la suivante :
+        $$\Delta y_t = \alpha + \gamma y_{t-1} + \sum_{i=1}^p \delta_i \Delta y_{t-i} + \epsilon_t$$
+        
+        * $y_t$ : Le **Spread** de notre paire.
+        * $\alpha$ (La Constante / Drift) : C'est l'origine, déterminée par une méthode des moindres carrés (OLS) mise à jour chaque jour. Elle indique si le spread a une tendance naturelle à monter ou descendre (même sans un lien élastique).
+        * $\gamma$ (Le Coefficient de Stationnarité) : C'est le **cœur du test**. Il lie le niveau d'hier ($y_{t-1}$) au mouvement d'aujourd'hui $\Delta y_t$. Plus il tire à l'inverse de la valeur, plus la force de rappel vers la moyenne est forte.
+        * $\sum \delta_i \Delta y_{t-i}$ : On regarde les variations des jours précédents pour nettoyer le bruit et s'assurer que notre test n'est pas faussé par des mouvements très récents ou de la forte autocorrélation.
+        * $\epsilon_t$ : Le reste en erreur de la régression (le bruit que l'on ne peut pas expliquer).
+
+        **Obtention de la P-Value :**
+        La valeur de la `p-value` de ce test précis est identifiée grâce au **T-Score** (score de confiance lié à $\gamma$) en le comparant dans la "table de Dickey Fuller" :
+        - **H0** (Hypothèse Nulle : P-Value > 0.05) : Ce n'est pas stationnaire / il y a présomption de dérive aléatoire. L'élastique ne fonctionne pas à coup sûr.
+        - **H1** (Hypothèse Alternative : P-Value <= 0.05) : On a de la stationnarité prouvée avec un fort niveau de certitude ($\gamma < 0$), l'élastique marchera.
+        """)
+
+    with st.spinner("Calcul glissant de la P-Value (100 jours) en cours..."):
+        pvals = compute_rolling_adf(df['Spread'].to_numpy(), 100)
+        df['Rolling_PValue'] = pvals
+
+    fig_pval = go.Figure()
+    fig_pval.add_trace(go.Scatter(x=df.index, y=df['Rolling_PValue'], name="P-Value (100j)", line=dict(color='#ab63fa')))
+    fig_pval.add_hline(y=0.05, line_dash="dash", line_color="red", annotation_text="Seuil 0.05 (H1 acceptée)", annotation_position="bottom right")
+    fig_pval.update_layout(title="Évolution de la P-Value au fil du temps (Fenêtre Glissante de 100 jours)", template="plotly_dark", height=300, yaxis_range=[0, 1.05])
+    st.plotly_chart(fig_pval, use_container_width=True)
+
+    mean_pvalue = df['Rolling_PValue'].mean()
+    last_pvalue = df['Rolling_PValue'].dropna().iloc[-1] if not df['Rolling_PValue'].dropna().empty else np.nan
+    
     c5, c6 = st.columns(2)
     with c5:
-        st.metric("P-Value (ADF)", f"{pvalue:.4f}")
-        st.error(f"**Warning: P-Value ({pvalue:.4f}) > 0.05. Statistiquement, la paire n'est PAS cointégrée. Le spread peut dériver et l'arbitrage théorique est risqué.**")
+        st.metric("Mean P-Value (Historique de la paire)", f"{mean_pvalue:.4f}")
+        if mean_pvalue > 0.05:
+            st.error("En moyenne, **H0 est majoritaire** (> 0.05). La paire est globalement **faiblement cointégrée** historiquement.")
+        else:
+            st.success("En moyenne, **H1 est validée** (<= 0.05). La paire est historiquement **bien cointégrée** et l'élastique opère.")
     with c6:
-        with st.expander("Pourquoi la Cointégration ?", expanded=True):
-            st.write("C'est la certitude mathématique que l'écart ne depend pas du temps et donc que ce spread finira par revenir à sa moyenne.")
-            st.write("Pourquoi c'est différent de la corrélation ? c'est deux personnes qui marchent ensemble dans la même direction. La cointégration, c'est deux personnes reliées par un élastique. Seul l'élastique garantit que s'ils s'écartent trop, les propriétés physiques de l'élastique font qu'ils se retrouveront. ")
-    
-    st.info("Note : Bien que la cointégration théorique manque ici, j'ai quand même choisi de tester l'arbitrage pour observer dans un second temps la difference avec 1 paire cointégrée comme coca cola et pepsi.")
+        st.metric("Valeur du test (100 derniers jours disponibles)", f"{last_pvalue:.4f}")
+        if np.isnan(last_pvalue):
+            st.write("Données insuffisantes.")
+        elif last_pvalue > 0.05:
+            st.warning("Sur sa partie récente étudiée, la P-Value a grimpé > 0.05. L'élastique actuel est peut-être distendu ou rompu.")
+        else:
+            st.success("Test réussi ! Récemment, l'élastique est solidement en place (P-Value <= 0.05) pour valider une stationnarité.")
 
     # --- STEP 4: SIGNALS ---
     st.divider()
@@ -252,11 +348,16 @@ def render():
     st.divider()
     st.header("Partie 5 : Bilan de Performance et Analyse Post-Mortem")
     
-    with st.expander("Comprendre les types de stratégies", expanded=True):
+    with st.expander("Stratégie Fixe", expanded=False  ):
         st.write("**Stratégie Fixe** : Se base sur des niveaux d'écart (spread) constants et prédéfinis. Les signaux d'achat et de vente sont déclenchés dès que l'écart atteint une valeur fixe (ex: +20 ou -20), sans tenir compte de l'évolution de la volatilité du marché.")
         st.write("*Exemple concret* : Si le Spread atteint 20, on vend. Ce seuil reste identique que le marché soit calme ou très agité.")
+    
+    with st.expander("Strategie Z-Score", expanded=False):
         st.write("**Stratégie Z-Score** : Se base sur un écart standardisé (le nombre d'écarts-types par rapport à la moyenne). Elle s'adapte automatiquement à la volatilité du marché.")
         st.write("*Exemple concret* : Si l'écart type du spread est de 2, un Z-Score de 2 déclenche une vente à un spread de +4 au-dessus de la moyenne. Si le marché devient nerveux et que l'écart type monte à 5, le même Z-Score de 2 ne déclenchera une vente qu'à +10. Cela permet d'éviter d'entrer trop tôt quand le marché est agité.")
+    
+   
+
     eq_f, tr_f = run_strategy(df, 'fixed')
     eq_d, tr_d = run_strategy(df, 'dynamic')
     s_f, s_d = calculate_stats(eq_f, tr_f), calculate_stats(eq_d, tr_d)
@@ -282,7 +383,10 @@ def render():
     st.plotly_chart(fig_res, use_container_width=True)
 
     st.markdown("### Analyse des Résultats et Interprétation")
-    st.write("Bien que l'equity curve s'effondre à la fin, cette étude de cas est riche en enseignements. La contre-performance à partir de 2026 confirme la P-Value élevée de cointégration (Step 3). L'élastique a rompu. Le spread a dérivé indéfiniment, transformant une stratégie de retour à la moyenne en une dérive pure et simple. C'est la preuve que la validation de la cointégration est l'étape la plus critique, et non la corrélation seule.")
+    if mean_pvalue > 0.05:
+        st.write("L'instabilité ou la dérive de l'equity curve illustre le risque d'arbitrer une paire avec une P-Value élevée (non cointégrée). L'élastique finit par rompre ou s'étendre trop longtemps. Le spread dérive indéfiniment. C'est la preuve que la validation de la cointégration est l'étape la plus critique, bien plus que la corrélation.")
+    else:
+        st.write("Ici la cointégration est probante (P-Value <= 0.05), ce qui donne aux stratégies de retour à la moyenne (comme le Z-Score) une meilleure probabilité de succès en maintenant une performance plus stable. L'élastique ramène systématiquement l'écart à sa moyenne globale.")
 
 if __name__ == "__main__":
     render()

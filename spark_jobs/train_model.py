@@ -530,6 +530,54 @@ def main(indicators_path: str, output_dir: str):
     print(f"\n   OOS Metrics (Walk-Forward):")
     print(f"      Growth     - Accuracy: {acc_growth_oos:.1%} | AUC: {auc_growth_oos:.3f}")
     print(f"      Inflation  - Accuracy: {acc_inflation_oos:.1%} | AUC: {auc_inflation_oos:.3f}")
+
+    # ========================================
+    # EXPORT OOS QUADRANTS (Honest Backtest)
+    # ========================================
+    # These predictions represent the model as it was at time T (trained only on data < T).
+    # Use quadrants_oos.csv in backtest instead of quadrants.csv for an unbiased curve.
+    print("\n[OOS Export] Building quadrants_oos.csv from walk-forward predictions...")
+    if (len(wf_growth['oos_probabilities']) > 0 and
+            len(wf_inflation['oos_probabilities']) > 0):
+
+        oos_growth_df = pd.DataFrame({
+            'date': pd.to_datetime(wf_growth['oos_dates']),
+            'PROB_GROWTH_EMA': wf_growth['oos_probabilities'],
+            'PROB_GROWTH_RAW': wf_growth['oos_probabilities'],
+        }).set_index('date')
+
+        oos_inflation_df = pd.DataFrame({
+            'date': pd.to_datetime(wf_inflation['oos_dates']),
+            'PROB_INFLATION_EMA': wf_inflation['oos_probabilities'],
+            'PROB_INFLATION_RAW': wf_inflation['oos_probabilities'],
+        }).set_index('date')
+
+        oos_combined = oos_growth_df.join(oos_inflation_df, how='inner').dropna()
+
+        # Assign quadrant from OOS probs (same logic as compute_quadrants.py)
+        conditions_oos = [
+            (oos_combined['PROB_GROWTH_EMA'] > 0.5) & (oos_combined['PROB_INFLATION_EMA'] < 0.5),
+            (oos_combined['PROB_GROWTH_EMA'] > 0.5) & (oos_combined['PROB_INFLATION_EMA'] >= 0.5),
+            (oos_combined['PROB_GROWTH_EMA'] <= 0.5) & (oos_combined['PROB_INFLATION_EMA'] >= 0.5),
+            (oos_combined['PROB_GROWTH_EMA'] <= 0.5) & (oos_combined['PROB_INFLATION_EMA'] < 0.5),
+        ]
+        oos_combined['assigned_quadrant'] = np.select(conditions_oos, [1, 2, 3, 4], default=1)
+
+        # Score columns for Streamlit viz compatibility (same scale as compute_quadrants)
+        oos_combined['MACRO_GROWTH_SCORE'] = (oos_combined['PROB_GROWTH_EMA'] - 0.5) * 4
+        oos_combined['MACRO_INFLATION_SCORE'] = (oos_combined['PROB_INFLATION_EMA'] - 0.5) * 4
+
+        oos_path = os.path.join(output_dir, 'quadrants_oos.csv')
+        oos_combined.reset_index().to_csv(oos_path, index=False)
+
+        print(f"   ✅ quadrants_oos.csv saved → {oos_path}")
+        print(f"   Date range: {oos_combined.index.min().date()} → {oos_combined.index.max().date()}")
+        print(f"   ({len(oos_combined)} weekly observations)")
+        q_dist = oos_combined['assigned_quadrant'].value_counts().sort_index()
+        for q, cnt in q_dist.items():
+            print(f"      Q{q}: {cnt} weeks ({cnt/len(oos_combined)*100:.1f}%)")
+    else:
+        print("   ⚠️ Not enough OOS data — quadrants_oos.csv NOT exported")
     
 
     

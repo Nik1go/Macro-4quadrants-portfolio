@@ -36,6 +36,11 @@ def load_data():
         data['backtest'] = pd.read_csv(f"{base_dir}/backtest_results/backtest_timeseries.csv", parse_dates=['date'])
     except:
         data['backtest'] = None
+
+    try:
+        data['backtest_oos'] = pd.read_csv(f"{base_dir}/backtest_results/backtest_oos_timeseries.csv", parse_dates=['date'])
+    except:
+        data['backtest_oos'] = None
     
     try:
         data['stats'] = pd.read_csv(f"{base_dir}/backtest_results/backtest_stats.csv")
