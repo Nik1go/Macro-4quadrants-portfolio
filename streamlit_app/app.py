@@ -269,9 +269,11 @@ def render_home():
     st.markdown("---")
     
     # Profile Section
-    col1, col2 = st.columns([1.2, 2])
+    col1, col2 = st.columns([1.4, 2])
     
     with col1:
+          # Petit décalage pour aligner parfaitement le haut de l'image avec le titre "About Me"
+        st.markdown('<div style="margin-top: 25px;"></div>', unsafe_allow_html=True)
         img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "portfoliotete.jpeg")
         if os.path.exists(img_path):
             st.image(img_path, use_container_width=True)
@@ -281,17 +283,23 @@ def render_home():
     with col2:
         st.markdown("### About Me")
         st.markdown("""
-        Passionate engineer who likes building financial models, 
-        data pipelines, and some fun trading strategies.""")
+        **Passionate engineering student with an insatiable curiosity and a love for learning, particularly in financial markets and macroeconomics.** 
+        I enjoy bridging the gap between technology and finance by building data pipelines, quantitative analysis models, and algorithmic strategies. 
+        
+        As I approach the end of my engineering degree (July 2026), I am fully committed to transitioning into the financial industry. **I am currently in the interview process for a Master's in Finance at top French business schools (NEOMA, Audencia, Albert School).** 
+        
+        **I am actively seeking an apprenticeship position for the 2026-2027 academic year** to apply my engineering background while developing advanced financial expertise.
+        """)
 
-        st.markdown("""
-        <div class="metric-container">
-            <h4>Profile</h4>
-            <p><strong>Location:</strong> Paris et Sud de France </p>
-            <p><strong>Focus:</strong> Macro-Quantitative</p>
-            <p><strong>Experience:</strong> Python, Data Engineering, Macroeconomie</p>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="metric-container">
+        <h4>Profile</h4>
+        <p><strong>Location:</strong> Paris & South of France</p>
+        <p><strong>Focus:</strong> Quantitative Finance, Data Engineering & Macroeconomic Analysis</p>
+        <p><strong>Core Skills:</strong> Python, Data Pipelines, Machine Learning</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     
     st.markdown("---")
