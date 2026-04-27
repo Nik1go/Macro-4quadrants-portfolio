@@ -55,8 +55,10 @@ def apply_home_css():
         }
         
         /* All text white/light */
-        .stMarkdown, .stMarkdown p, .stMarkdown span, p, span, div, label {
+        .stMarkdown p, p, span, label {
             color: #e8e8e8 !important;
+            font-size: 1.05rem !important;
+            line-height: 1.6 !important;
         }
         
         /* Card styling */
@@ -102,6 +104,9 @@ def apply_home_css():
         }
         
         /* Headers */
+        h1 { font-size: 2.8rem !important; margin-bottom: 1rem !important; }
+        h2 { font-size: 2.2rem !important; margin-top: 1.5rem !important; }
+        h3 { font-size: 1.8rem !important; margin-top: 1.2rem !important; }
         h1, h2, h3 {
             color: #00d4ff !important;
             font-weight: 600;
@@ -127,6 +132,8 @@ def apply_home_css():
         }
         .block-container {
             padding-top: 2rem !important;
+            max-width: 1300px !important;
+            margin: 0 auto !important;
         }
         
         /* Button styling - Merge tightly to the project card */
