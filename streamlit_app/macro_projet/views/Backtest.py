@@ -324,6 +324,27 @@ def render(data):
     if _date_filtered:
         st.caption(f"Fenêtre Backtest : **{filter_start}** → **{filter_end}** — toutes les métriques sont recalculées sur cette période.")
 
+    # Calculate years for CAGR from the FILTERED window
+    days = (df_bt['date'].max() - df_bt['date'].min()).days if df_bt is not None else 1
+    years = days / 365.25 if days > 0 else 1.0
+
+    # Helper: recalculate all metrics from a wealth series (always from filtered data)
+    def _calc_metrics(w_series):
+        """Returns (tot_ret, cagr, sharpe, vol, max_dd) from a wealth series."""
+        if w_series is None or len(w_series) < 5:
+            return 0.0, 0.0, 0.0, 0.0, 0.0
+        if isinstance(w_series, np.ndarray):
+            w_series = pd.Series(w_series)
+        w = w_series.reset_index(drop=True)
+        tot_ret = (w.iloc[-1] / w.iloc[0]) - 1
+        cagr = (1 + tot_ret) ** (1 / years) - 1 if years > 0 else 0.0
+        rets = w.pct_change().dropna()
+        vol = rets.std() * np.sqrt(252)
+        sharpe = (rets.mean() * 252) / vol if vol > 0 else 0.0
+        peak = w.expanding(min_periods=1).max()
+        max_dd = ((w - peak) / peak).min()
+        return tot_ret, cagr, sharpe, vol, max_dd
+
     st.divider()
 
     # === Smooth Quadrant Distribution ===
@@ -362,7 +383,7 @@ def render(data):
     st.divider()
 
     # === Strategy vs Benchmark ===
-    st.subheader("Stratégie vs Benchmark & Impact Devise (EUR)")
+    st.subheader("Stratégie vs Benchmark ")
     if df_bt is not None:
 
         # Normalize all series to $1000 at the start of the filtered window
@@ -384,21 +405,6 @@ def render(data):
                 x=df_oos_bt['date'], y=_norm(df_oos_bt['oos_wealth']),
                 name='Walk-Forward OOS',
                 line=dict(color='#bf5fff', width=2, dash='dashdot'),
-            ))
-
-        # HC 1x
-        if 'hc_wealth' in df_bt.columns:
-            fig.add_trace(go.Scatter(
-                x=df_bt['date'], y=_norm(df_bt['hc_wealth']),
-                name='HC Haute Conviction', line=dict(color='#39FF14', dash='dot')
-            ))
-
-        # HC 2x Leveraged
-        if 'hc2x_wealth' in df_bt.columns:
-            fig.add_trace(go.Scatter(
-                x=df_bt['date'], y=_norm(df_bt['hc2x_wealth']),
-                name='HC 2x Levier',
-                line=dict(color='#ff4444', width=2, dash='dot')
             ))
 
         # EUR conversion
@@ -444,27 +450,6 @@ def render(data):
     st.divider()
     if data['stats'] is not None and df_bt is not None:
 
-        # Calculate years for CAGR from the FILTERED window
-        days = (df_bt['date'].max() - df_bt['date'].min()).days
-        years = days / 365.25 if days > 0 else 1.0
-
-        # Helper: recalculate all metrics from a wealth series (always from filtered data)
-        def _calc_metrics(w_series):
-            """Returns (tot_ret, cagr, sharpe, vol, max_dd) from a wealth series."""
-            if w_series is None or len(w_series) < 5:
-                return 0.0, 0.0, 0.0, 0.0, 0.0
-            if isinstance(w_series, np.ndarray):
-                w_series = pd.Series(w_series)
-            w = w_series.reset_index(drop=True)
-            tot_ret = (w.iloc[-1] / w.iloc[0]) - 1
-            cagr = (1 + tot_ret) ** (1 / years) - 1 if years > 0 else 0.0
-            rets = w.pct_change().dropna()
-            vol = rets.std() * np.sqrt(252)
-            sharpe = (rets.mean() * 252) / vol if vol > 0 else 0.0
-            peak = w.expanding(min_periods=1).max()
-            max_dd = ((w - peak) / peak).min()
-            return tot_ret, cagr, sharpe, vol, max_dd
-
         # Build wealth map from FILTERED df_bt
         wealth_map = {
             "Stratégie Modèle Complet (USD)": df_bt['wealth'],
@@ -474,12 +459,6 @@ def render(data):
 
         if df_oos_bt is not None and 'oos_wealth' in df_oos_bt.columns:
             wealth_map["Walk-Forward OOS"] = df_oos_bt['oos_wealth']
-
-        if 'hc_wealth' in df_bt.columns:
-            wealth_map["HC Haute Conviction"] = df_bt['hc_wealth']
-
-        if 'hc2x_wealth' in df_bt.columns:
-            wealth_map["HC 2x Levier"] = df_bt['hc2x_wealth']
 
         if wealth_eur is not None:
             wealth_map["Stratégie (EUR)"] = wealth_eur
@@ -707,6 +686,65 @@ def render(data):
                 weights_s = weights_s[weights_s >= 0.049].round(4) * 100
                 st.dataframe(pd.DataFrame({'Allocation (%)': weights_s.round(2)}).T)
                 
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("Stratégie d'Allocation", expanded=False):
+                    st.markdown(
+                        "L'allocation de ce portefeuille pivote dynamiquement selon les quatres régimes identifiés. "
+                        "Les heatmaps ci-dessus comparent les Performances obtenues selon les prédictions du modèle face aux données réelles de marché.\n\n"
+                        "Les quadrants sont définis par deux indicateurs clés (proxies) :\n\n"
+                        "- **Axe Croissance :** High Yield Bond Spread (le risque de crédit comme proxy de la croissance).\n"
+                        "- **Axe Inflation :** 10Y Breakeven Inflation Rate (les anticipations d'inflation du marché obligataire).\n\n"
+                        "**Détail de la Répartition par Régime (Issue du Modèle d'Optimisation Dynamique Z-Score) :**"
+                    )
+                    
+                    # Extract base weights for each quadrant from backtest output
+                    q_weights = {}
+                    if data.get('backtest') is not None:
+                        df_b = data['backtest']
+                        weight_cols = [c for c in df_b.columns if c.endswith('_base_weight') and '_hc_' not in c]
+                        for q in [1, 2, 3, 4]:
+                            df_q = df_b[df_b['smooth_quadrant'] == q]
+                            if not df_q.empty:
+                                # Take the mean of base_weights (which are constant per quadrant) to get the exact optimizer output
+                                w_q = df_q[weight_cols].median()
+                                w_q = w_q[w_q > 0.005].sort_values(ascending=False) * 100
+                                q_weights[q] = w_q
+            
+                    c1_alloc, c2_alloc, c3_alloc, c4_alloc = st.columns(4)
+            
+                    with c1_alloc:
+                        st.markdown("**Q1 | Croissance Saine**\n*Expansion, risque récompensé.*")
+                        if 1 in q_weights:
+                            for idx, val in q_weights[1].items():
+                                asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                                st.markdown(f"- {val:.1f}% {asset_name}")
+            
+                    with c2_alloc:
+                        st.markdown("**Q2 | Inflation**\n*Pricing power et matières premières.*")
+                        if 2 in q_weights:
+                            for idx, val in q_weights[2].items():
+                                asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                                st.markdown(f"- {val:.1f}% {asset_name}")
+            
+                    with c3_alloc:
+                        st.markdown("**Q3 | Stagflation**\n*Protection contre baisse et hausse des prix.*")
+                        if 3 in q_weights:
+                            for idx, val in q_weights[3].items():
+                                asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                                st.markdown(f"- {val:.1f}% {asset_name}")
+            
+                    with c4_alloc:
+                        st.markdown("**Q4 | Crash Déflationniste**\n*Priorité à la sécurité et décorrélation.*")
+                        if 4 in q_weights:
+                            for idx, val in q_weights[4].items():
+                                asset_name = idx.replace('_base_weight', '').replace('_weight', '')
+                                st.markdown(f"- {val:.1f}% {asset_name}")
+            
+                    st.info(
+                        " **Overlay Risk-Off (Filtre de Tendance) :** "
+                        "En complément de cette allocation socle par régime macro, une protection systématique de suivi de tendance (**MA 200 jours**) est active. "
+                        "Si le S&P 500, le NASDAQ 100 ou l'Or clôturent sous leur moyenne mobile à 200 jours pendant 5 jours consécutifs, leur pondération est instantanément coupée à 0% et réallouée en bons du Trésor à 10 ans (Treasuries) jusqu'à ce que la tendance soit reprise."
+                    )
         except Exception as e:
             st.error(f"Erreur lors du calcul de la Frontière Efficiente : {str(e)}")
             import traceback
@@ -731,9 +769,12 @@ def render(data):
         inverse_fx = st.toggle("Inverser paires Forex (ex: EUR/USD)", value=False)
 
     st.markdown(
-        "Cette section affiche la performance uniquement lors des jours où le modèle a une **forte conviction** sur le régime macro-économique. "
-        "Ce niveau de conviction traduit un **alignement fort des différents indicateurs** économiques en faveur d'un quadrant spécifique. "
-        "Le modèle sort ainsi de sa zone d'incertitude centrale (proche de 50%) pour valider un régime clair et réduire le risque de faux signaux."
+        """
+        L'idée de cette section est d'analyser la performance du modèle dans la gestion de portefeuille uniquement lors des jours où le modèle a une **forte conviction** sur le régime macro-économique. 
+        Ce niveau de conviction traduit un **alignement fort des différents indicateurs** économiques en faveur d'un quadrant spécifique. 
+        Le modèle sort ainsi de sa zone centrale ( a partir de 65% de score de confiance sur les 2 axes ) pour valider un régime clair et réduire le risque de faux signaux. 
+        la strategie HC *2 applique donc un effet de levier 2x dans les entrées en positions. On sort de position lorsque le modèle sort de la zone de certitude.
+        """
     )
 
     if data.get('quadrants') is not None and 'PROB_GROWTH_EMA' in data['quadrants'].columns and 'PROB_INFLATION_EMA' in data['quadrants'].columns:
@@ -769,70 +810,76 @@ def render(data):
     else:
         st.warning("Probabilités non disponibles.")
 
-    with st.expander("Focus sur les Signaux à forte Conviction", expanded=False):
+    with st.expander("Stratégie sur Signaux à Haute Conviction", expanded=True):
         st.markdown(
-            "On observe qu'en Q1 profond renvoi effectivement vers un marché fortement Risk-ON. Il est intéressant de tenter une strategie autour de ces signaux."
+            "On observe qu'en Q1 profond renvoi effectivement vers un marché fortement Risk-ON. Voici une stratégie alternative jouant ces signaux de conviction."
         )
+        if df_bt is not None and 'hc_wealth' in df_bt.columns:
+            fig_hc = go.Figure()
+            
+            def _norm_hc(series, base=1000.0):
+                s = series.dropna()
+                if len(s) == 0: return series
+                return s / s.iloc[0] * base
 
-    st.divider()
+            fig_hc.add_trace(go.Scatter(
+                x=df_bt['date'], y=_norm_hc(df_bt['SP500_wealth']),
+                name='SP500 (Benchmark)', line=dict(color='orange')
+            ))
+            
+            fig_hc.add_trace(go.Scatter(
+                x=df_bt['date'], y=_norm_hc(df_bt['wealth']),
+                name='Stratégie Modèle Complet', line=dict(color='cyan', dash='dash')
+            ))
+            
+            fig_hc.add_trace(go.Scatter(
+                x=df_bt['date'], y=_norm_hc(df_bt['hc_wealth']),
+                name='HC Haute Conviction', line=dict(color='#39FF14')
+            ))
 
-    with st.expander("Stratégie d'Allocation", expanded=True):
-        st.markdown(
-            "L'allocation de ce portefeuille pivote dynamiquement selon les quatres régimes identifiés. "
-            "Les heatmaps ci-dessus comparent les Performances obtenues selon les prédictions du modèle face aux données réelles de marché.\n\n"
-            "Les quadrants sont définis par deux indicateurs clés (proxies) :\n\n"
-            "- **Axe Croissance :** High Yield Bond Spread (le risque de crédit comme proxy de la croissance).\n"
-            "- **Axe Inflation :** 10Y Breakeven Inflation Rate (les anticipations d'inflation du marché obligataire).\n\n"
-            "**Détail de la Répartition par Régime (Issue du Modèle d'Optimisation Dynamique Z-Score) :**"
-        )
-        
-        # Extract base weights for each quadrant from backtest output
-        q_weights = {}
-        if data.get('backtest') is not None:
-            df_b = data['backtest']
-            weight_cols = [c for c in df_b.columns if c.endswith('_base_weight') and '_hc_' not in c]
-            for q in [1, 2, 3, 4]:
-                df_q = df_b[df_b['smooth_quadrant'] == q]
-                if not df_q.empty:
-                    # Take the mean of base_weights (which are constant per quadrant) to get the exact optimizer output
-                    w_q = df_q[weight_cols].median()
-                    w_q = w_q[w_q > 0.005].sort_values(ascending=False) * 100
-                    q_weights[q] = w_q
+            if 'hc2x_wealth' in df_bt.columns:
+                fig_hc.add_trace(go.Scatter(
+                    x=df_bt['date'], y=_norm_hc(df_bt['hc2x_wealth']),
+                    name='HC 2x Levier',
+                    line=dict(color='#ff4444', width=2)
+                ))
+            
+            fig_hc.update_layout(
+                height=400, yaxis_title="Wealth indicée ($, base 1 000)", xaxis_title="Date",
+                legend=dict(orientation="h", y=1.08),
+            )
+            st.plotly_chart(fig_hc, use_container_width=True)
+            
+            hc_wealth_map = {
+                "HC Haute Conviction": df_bt['hc_wealth'],
+                "Stratégie Modèle Complet": df_bt['wealth'],
+                "S&P 500 (Benchmark)": df_bt['SP500_wealth']
+            }
+            if 'hc2x_wealth' in df_bt.columns:
+                hc_wealth_map["HC 2x Levier"] = df_bt['hc2x_wealth']
+                
+            def display_hc_compare_panel(key_id, default_selection_idx):
+                choice = st.selectbox(
+                    f"Sélecteur {key_id} :",
+                    options=list(hc_wealth_map.keys()),
+                    index=min(default_selection_idx, len(hc_wealth_map) - 1),
+                    key=f"sel_hc_{key_id}"
+                )
+                w_series = hc_wealth_map[choice]
+                tot_ret, cagr, sharpe, vol, max_dd = _calc_metrics(w_series)
 
-        c1, c2, c3, c4 = st.columns(4)
+                st.write(f"### {choice}")
+                m_c1, m_c2 = st.columns(2)
+                m_c1.metric("Total Return", f"{tot_ret * 100:.1f}%")
+                m_c1.metric("Annual Return", f"{cagr * 100:.1f}%")
+                m_c1.metric("Max Drawdown", f"{abs(max_dd) * 100:.1f}%")
+                m_c2.metric("Sharpe Ratio", f"{sharpe:.2f}")
+                m_c2.metric("Annual Vol", f"{vol * 100:.1f}%")
 
-        with c1:
-            st.markdown("**Q1 | Croissance Saine**\n*Expansion, risque récompensé.*")
-            if 1 in q_weights:
-                for idx, val in q_weights[1].items():
-                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
-                    st.markdown(f"- {val:.1f}% {asset_name}")
+            st.write("### Comparaison Stratégie HC")
+            comp_hc1, comp_hc2 = st.columns(2)
+            with comp_hc1:
+                display_hc_compare_panel("A_HC", 0)
+            with comp_hc2:
+                display_hc_compare_panel("B_HC", 2)
 
-        with c2:
-            st.markdown("**Q2 | Inflation**\n*Pricing power et matières premières.*")
-            if 2 in q_weights:
-                for idx, val in q_weights[2].items():
-                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
-                    st.markdown(f"- {val:.1f}% {asset_name}")
-
-        with c3:
-            st.markdown("**Q3 | Stagflation**\n*Protection contre baisse et hausse des prix.*")
-            if 3 in q_weights:
-                for idx, val in q_weights[3].items():
-                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
-                    st.markdown(f"- {val:.1f}% {asset_name}")
-
-        with c4:
-            st.markdown("**Q4 | Crash Déflationniste**\n*Priorité à la sécurité et décorrélation.*")
-            if 4 in q_weights:
-                for idx, val in q_weights[4].items():
-                    asset_name = idx.replace('_base_weight', '').replace('_weight', '')
-                    st.markdown(f"- {val:.1f}% {asset_name}")
-
-        st.info(
-            " **Overlay Risk-Off (Filtre de Tendance) :** "
-            "En complément de cette allocation socle par régime macro, une protection systématique de suivi de tendance (**MA 200 jours**) est active. "
-            "Si le S&P 500, le NASDAQ 100 ou l'Or clôturent sous leur moyenne mobile à 200 jours pendant 5 jours consécutifs, leur pondération est instantanément coupée à 0% et réallouée en bons du Trésor à 10 ans (Treasuries) jusqu'à ce que la tendance soit reprise."
-        )
-
-    st.divider()

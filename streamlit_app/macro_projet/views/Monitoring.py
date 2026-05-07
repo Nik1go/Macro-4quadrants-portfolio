@@ -257,6 +257,37 @@ def render(data):
     st.caption("ℹ *Les dates affichées correspondent aux dates de publication récupérées par l'api. Les delais de publication de Fred(~24H après sortie officielle) peuvent amené des **données obsoletes ici et dans le reste de l'algorithme**.")
     _render_last_indicators(data)
 
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("Voir l'historique complet des indicateurs et features", expanded=False):
+        if data.get('indicators') is not None:
+            df_ind = data['indicators']
+            # Selectionner uniquement les colonnes numériques, en excluant 'date'
+            avail_cols = sorted([c for c in df_ind.columns if c != 'date' and pd.api.types.is_numeric_dtype(df_ind[c])])
+            if avail_cols:
+                name_map = {
+                    "TAUX_FED": "TAUX_FED (US)",
+                    "TAUX_ECB": "TAUX_ECB (Zone Euro)",
+                    "TAUX_BOJ": "TAUX_BOJ (Japon)",
+                    "TAUX_BOC": "TAUX_BOC (Canada)",
+                    "TAUX_RBA": "TAUX_RBA (Australie)",
+                    "TAUX_BCB": "TAUX_BCB (Brésil)",
+                    "WALCL": "WALCL (Bilan Fed)",
+                    "RRPONTSYD": "RRPONTSYD (Reverse Repo)",
+                    "WTREGEN": "WTREGEN (Treasury General Account)"
+                }
+                def _fmt_ind(col):
+                    return name_map.get(col, col)
+
+                selected_ind = st.selectbox("Sélectionnez un indicateur / feature :", avail_cols, format_func=_fmt_ind)
+                if selected_ind:
+                    fig_ind = px.line(df_ind, x='date', y=selected_ind, title=f"Historique : {selected_ind}")
+                    fig_ind.update_layout(xaxis_title="Date", yaxis_title="Valeur", height=400)
+                    st.plotly_chart(fig_ind, use_container_width=True)
+            else:
+                st.warning("Aucune donnée numérique trouvée.")
+        else:
+            st.warning("Données d'indicateurs non disponibles.")
+
     st.divider()
 
     # === Scatter Plot + Allocation ===

@@ -272,8 +272,6 @@ def render_home():
     col1, col2 = st.columns([1.4, 2])
     
     with col1:
-          # Petit décalage pour aligner parfaitement le haut de l'image avec le titre "About Me"
-        st.markdown('<div style="margin-top: 25px;"></div>', unsafe_allow_html=True)
         img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "portfoliotete.jpeg")
         if os.path.exists(img_path):
             st.image(img_path, use_container_width=True)
@@ -281,7 +279,7 @@ def render_home():
             st.image("https://img.icons8.com/fluency/256/000000/financial-analytics.png", width=200)
         
     with col2:
-        st.markdown("### About Me")
+        st.markdown("<h3 style='margin-top: 0;'>About Me</h3>", unsafe_allow_html=True)
         st.markdown("""
         **Passionate engineering student with an insatiable curiosity and a love for learning, particularly in financial markets and macroeconomics.** 
         I enjoy bridging the gap between technology and finance by building data pipelines, quantitative analysis models, and algorithmic strategies. 
