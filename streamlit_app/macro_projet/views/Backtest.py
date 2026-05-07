@@ -799,21 +799,25 @@ def render(data):
                     scores_hc, conf_hc = get_dynamic_heatmap_data(assets_no_btc, bt_filtered, 'smooth_quadrant', selected_metric)
                     if not _render_heatmap(scores_hc, conf_hc, None, "Actions/ETF — HAUTE CONVICTION", f"Signaux profonds (éloignement des axes)", selected_metric, height=350):
                         st.info("Données insuffisantes pour le heatmap HC Actions.")
+              
                 
                 with hc_col2:
                     st.markdown("**Forex — HAUTE CONVICTION**")
                     scores_hcfx, conf_hcfx = get_dynamic_heatmap_data(data.get('daily_forex'), bt_filtered, 'smooth_quadrant', selected_metric, inverse_fx=inverse_fx)
                     if not _render_heatmap(scores_hcfx, conf_hcfx, None, "Forex — HAUTE CONVICTION", f"Signaux nets (>65% proba)", selected_metric, height=300):
                         st.info("Données insuffisantes pour le heatmap HC Forex.")
+                    
         else:
             st.warning("Aucun jour de haute conviction détecté.")
     else:
         st.warning("Probabilités non disponibles.")
 
+
+    st.markdown(
+        "On observe qu'en Q1 profond renvoi effectivement vers un marché fortement Risk-ON."
+    )
+
     with st.expander("Stratégie sur Signaux à Haute Conviction", expanded=True):
-        st.markdown(
-            "On observe qu'en Q1 profond renvoi effectivement vers un marché fortement Risk-ON. Voici une stratégie alternative jouant ces signaux de conviction."
-        )
         if df_bt is not None and 'hc_wealth' in df_bt.columns:
             fig_hc = go.Figure()
             

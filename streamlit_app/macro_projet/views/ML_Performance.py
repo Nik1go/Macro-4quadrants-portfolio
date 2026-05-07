@@ -395,8 +395,19 @@ def render(data):
             diagonal_sum = sum(cm[i][i] for i in range(4))
             total = sum(sum(row) for row in cm)
             if total > 0:
-                st.info(f"{diagonal_sum}/{total} classifications correctes ({diagonal_sum / total:.1%})")
-
+                info_text = f"**{diagonal_sum}/{total} classifications correctes ({diagonal_sum / total:.1%})**\n\n"
+                info_text += "**Détail par quadrant (Rappel / Recall) :**\n"
+                for i in range(4):
+                    q_total = sum(cm[i])
+                    if q_total > 0:
+                        q_correct = cm[i][i]
+                        q_acc = q_correct / q_total
+                        info_text += f"- **Q{i+1}** : {q_correct} / {q_total} ({q_acc:.1%})\n"
+                    else:
+                        info_text += f"- **Q{i+1}** : 0 / 0 (N/A)\n"
+                st.info(info_text)
+                
+             
         with col_right:
             st.subheader("Feature Importance")
 
