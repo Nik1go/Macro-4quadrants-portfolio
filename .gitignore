@@ -38,3 +38,4 @@ tests/*
 setup_vps.sh
 
 polymarket_arbitrage/data/*
+**/.streamlit/secrets.toml
