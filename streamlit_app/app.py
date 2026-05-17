@@ -203,7 +203,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Pairs trading", "Equity Research","Portfolio Optimizer", "Polymarket Arbitrage"]
+        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Pairs trading", "Equity Research","Portfolio Optimizer", "Polymarket Arbitrage", "Mon Portefeuille"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -215,7 +215,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier","activity"], 
+            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier","activity", "wallet2"], 
             #bootstrap icons (7 icons for 7 options)
             menu_icon="cast",
             default_index=default_idx,
@@ -284,7 +284,7 @@ def render_home():
         **Passionate engineering student with an insatiable curiosity and a love for learning, particularly in financial markets and macroeconomics.** 
         I enjoy bridging the gap between technology and finance by building data pipelines, quantitative analysis models, and algorithmic strategies. 
         
-        As I approach the end of my engineering degree (July 2026), I am fully committed to transitioning into the financial industry. **I am currently in the interview process for a Master's in Finance at top French business schools (NEOMA, Audencia, Albert School).** 
+        As I approach the end of my engineering degree (July 2026), I am fully committed to transitioning into the financial industry. **I am currently in the interview process for a Master's in Finance at top French business schools (NEOMA, Albert School).** 
         
         **I am actively seeking an apprenticeship position for the 2026-2027 academic year** to apply my engineering background while developing advanced financial expertise.
         """)
@@ -422,6 +422,20 @@ def render_home():
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Polymarket Arbitrage"
             st.rerun()
+            
+    with col8:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+            <h3><i class="bi bi-wallet2"></i> Mon Portefeuille</h3>
+            <p><strong>Tech:</strong> Python, Streamlit, yFinance</p>
+            <p>Portfolio tracker connected to Trade Republic CSV exports and manual entries for precious metals/crypto. Live price tracking and performance calculations.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_portfolio", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Mon Portefeuille"
+            st.rerun()
     
    
     st.markdown("---")
@@ -515,6 +529,15 @@ if __name__ == "__main__":
         st.title("Equity Research")
         st.write("Page under construction...")
     
+
+    elif st.session_state.current_page == "Mon Portefeuille":
+        _render_nav_sidebar("Mon Portefeuille")
+        try:
+            apply_home_css()
+            import portfolio_tracker.app_portfolio as app_portfolio
+            app_portfolio.render()
+        except Exception as e:
+            st.error(f"Could not load the Portfolio Tracker app: {str(e)}")
 
     else:
         st.session_state.current_page = "Home"
