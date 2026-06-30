@@ -143,7 +143,14 @@ def execute_signals(signal_report, dry_run=True):
 
         order = place_order(symbol, side_action, qty, dry_run=dry_run)
         order["signal_type"] = "exit"
+        order["position_side"] = ex.get("side", "")
         order["reason"] = ex.get("reason", "unknown")
+        # Copy signal-level price data into the execution log for dashboard display
+        order["qty"] = qty
+        order["entry_price"] = ex.get("entry_price")
+        order["exit_price"] = ex.get("exit_price")
+        order["trade_pnl"] = ex.get("trade_pnl")
+        order["exit_value"] = ex.get("exit_value")
         execution_log["orders"].append(order)
 
     # Process entries
@@ -155,6 +162,10 @@ def execute_signals(signal_report, dry_run=True):
         order = place_order(symbol, side_action, qty, dry_run=dry_run)
         order["signal_type"] = "entry"
         order["position_side"] = entry["side"]
+        # Copy signal-level price data into the execution log for dashboard display
+        order["qty"] = qty
+        order["entry_price"] = entry.get("entry_price")
+        order["size_cash"] = entry.get("size_cash")
         execution_log["orders"].append(order)
 
     # Save execution log

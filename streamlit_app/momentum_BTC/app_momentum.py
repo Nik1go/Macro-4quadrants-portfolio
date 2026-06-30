@@ -688,15 +688,40 @@ def render():
                     delta_color="normal"
                 )
             with col_d:
-                # Total NAV from last nav_history entry
-                _nav_total = current_cash  # fallback
-                if os.path.exists(nav_path):
+                # NAV Totale = cash restant + valeur mark-to-market des positions
+                # cash = 0 quand fully invested (le notionnel est dans la position)
+                # Quand tout est fermé: cash = initial_cash + realized_pnl (avec code corrigé)
+                # Fallback si état corrompu (cash=0, pos=[], realized_pnl=0):
+                # → lire le dernier point VALIDE de nav_history (nav > 0)
+                _nav_total = current_cash + realized_pnl  # estimation de base
+
+                # Si positions ouvertes, utiliser le dernier nav_history valide
+                if n_pos > 0 and os.path.exists(nav_path):
                     try:
                         _nav_df_tmp = pd.read_csv(nav_path)
-                        if not _nav_df_tmp.empty:
-                            _nav_total = float(_nav_df_tmp.iloc[-1]["nav"])
+                        _valid = _nav_df_tmp[_nav_df_tmp["nav"] > 100]
+                        if not _valid.empty:
+                            _nav_total = float(_valid.iloc[-1]["nav"])
                     except Exception:
                         pass
+                elif n_pos == 0:
+                    # Tout fermé: NAV = cash disponible (= initial + realized si code OK)
+                    # Si cash=0 et realized=0, c'est un état corrompu → montrer "?"
+                    if current_cash == 0 and realized_pnl == 0:
+                        # État corrompu: lire dernier nav valide de l'historique
+                        if os.path.exists(nav_path):
+                            try:
+                                _nav_df_tmp2 = pd.read_csv(nav_path)
+                                _valid2 = _nav_df_tmp2[_nav_df_tmp2["nav"] > 100]
+                                if not _valid2.empty:
+                                    _nav_total = float(_valid2.iloc[-1]["nav"])
+                            except Exception:
+                                _nav_total = initial_cash  # last resort
+                        else:
+                            _nav_total = initial_cash
+                    else:
+                        _nav_total = current_cash
+
                 total_pnl = _nav_total - initial_cash
                 total_pct = (total_pnl / initial_cash) if initial_cash > 0 else 0
                 st.metric(
