@@ -5,6 +5,7 @@ import plotly.express as px
 import os
 import io
 from datetime import datetime
+import scipy.optimize
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), "data", "portfolio_transactions.csv")
 
@@ -392,15 +393,50 @@ def render():
     total_pnl = total_value - total_invested
     total_pnl_pct = (total_pnl / total_invested * 100) if total_invested > 0 else 0
 
-    # CAGR Calculation
-    start_date = datetime(2023, 3, 1)
-    today = datetime.today()
-    years_diff = (today - start_date).days / 365.25
+    # True CAGR (XIRR) Calculation
     cagr_pct = 0.0
-    if total_invested > 0 and years_diff > 0:
-        ratio = total_value / total_invested
-        if ratio > 0:
-            cagr_pct = ((ratio ** (1 / years_diff)) - 1) * 100
+    try:
+        cash_flows = []
+        dates = []
+        for _, row in df_tx.iterrows():
+            try:
+                # Handle dates like '2023-03-01'
+                date_str = str(row['Date']).strip()
+                if " " in date_str:
+                    date_str = date_str.split(" ")[0]
+                d = datetime.strptime(date_str, '%Y-%m-%d')
+                
+                amt = float(row['Total_Amount'])
+                if str(row['Type']).lower() in ['achat', 'buy']:
+                    cash_flows.append(-amt)
+                else:
+                    cash_flows.append(amt)
+                dates.append(d)
+            except Exception:
+                continue
+        
+        if cash_flows:
+            dates.append(datetime.today())
+            cash_flows.append(total_value)
+            
+            def xnpv(rate, values, dts):
+                if rate <= -1.0:
+                    return float('inf')
+                d0 = dts[0]
+                return sum([vi / (1.0 + rate)**((di - d0).days / 365.25) for vi, di in zip(values, dts)])
+            
+            try:
+                cagr = scipy.optimize.newton(lambda r: xnpv(r, cash_flows, dates), 0.0)
+            except Exception:
+                try:
+                    cagr = scipy.optimize.bisect(lambda r: xnpv(r, cash_flows, dates), -0.99, 100.0)
+                except Exception:
+                    cagr = 0.0
+            
+            if cagr is not None:
+                cagr_pct = cagr * 100
+    except Exception:
+        cagr_pct = 0.0
 
     # Metrics
     m1, m2, m3, m4 = st.columns(4)

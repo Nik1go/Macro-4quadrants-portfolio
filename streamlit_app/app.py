@@ -428,7 +428,7 @@ def render_home():
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-wallet2"></i> Mon Portefeuille</h3>
             <p><strong>Tech:</strong> Python, Streamlit, yFinance</p>
-            <p>Portfolio tracker connected to Trade Republic CSV exports and manual entries for precious metals/crypto. Live price tracking and performance calculations.</p>
+            <p>Portfolio tracker. Live price tracking and performance calculations.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)

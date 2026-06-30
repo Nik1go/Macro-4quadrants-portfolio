@@ -668,24 +668,58 @@ def render():
             with open(state_path, "r") as f:
                 state = json.load(f)
 
-            col_a, col_b, col_c = st.columns(3)
+            initial_cash = state.get("initial_cash", 10000)
+            # Realized PnL = cumulative PnL from all closed trades (stored in state)
+            realized_pnl = state.get("realized_pnl", 0.0)
+            current_cash = state.get("cash", 0)
+            n_pos = len(state.get("positions", []))
+
+            col_a, col_b, col_c, col_d = st.columns(4)
             with col_a:
-                st.metric(" Cash Disponible", f"${state.get('cash', 0):,.2f}")
+                st.metric(" Cash Disponible", f"${current_cash:,.2f}")
             with col_b:
-                n_pos = len(state.get("positions", []))
                 st.metric(" Positions Ouvertes", n_pos)
             with col_c:
-                initial_cash = state.get('initial_cash', 10000)
-                current_cash = state.get('cash', 0)
-                realized_pnl = current_cash - initial_cash
-                
-                st.metric("P/L Réalisé", f"${realized_pnl:+,.2f}", 
-                          delta=f"{(realized_pnl / initial_cash):+.2%}" if initial_cash > 0 else "0.00%")
+                pnl_pct = (realized_pnl / initial_cash) if initial_cash > 0 else 0
+                st.metric(
+                    "P/L Réalisé (trades fermés)",
+                    f"${realized_pnl:+,.2f}",
+                    delta=f"{pnl_pct:+.2%}",
+                    delta_color="normal"
+                )
+            with col_d:
+                # Total NAV from last nav_history entry
+                _nav_total = current_cash  # fallback
+                if os.path.exists(nav_path):
+                    try:
+                        _nav_df_tmp = pd.read_csv(nav_path)
+                        if not _nav_df_tmp.empty:
+                            _nav_total = float(_nav_df_tmp.iloc[-1]["nav"])
+                    except Exception:
+                        pass
+                total_pnl = _nav_total - initial_cash
+                total_pct = (total_pnl / initial_cash) if initial_cash > 0 else 0
+                st.metric(
+                    "NAV Totale (réalisé + latent)",
+                    f"${_nav_total:,.2f}",
+                    delta=f"{total_pct:+.2%}",
+                    delta_color="normal"
+                )
 
             positions = state.get("positions", [])
             if positions:
                 st.markdown("##### Positions Actives")
-                pos_df = pd.DataFrame(positions)
+                pos_display = []
+                for p in positions:
+                    pos_display.append({
+                        "Symbol": p.get("symbol", ""),
+                        "Side": p.get("side", "").upper(),
+                        "Entry Price": f"${p.get('entry_price', 0):,.4f}",
+                        "Qty": f"{p.get('qty', 0):,.2f}",
+                        "Entry Date": p.get("entry_date", ""),
+                        "Notional": f"${p.get('entry_price', 0) * p.get('qty', 0):,.2f}",
+                    })
+                pos_df = pd.DataFrame(pos_display)
                 st.dataframe(pos_df, use_container_width=True)
         else:
             st.info("Portefeuille non initialisé.")
@@ -728,12 +762,20 @@ def render():
                     with open(lf, "r") as f:
                         log = json.load(f)
                     for order in log.get("orders", []):
+                        qty_val = order.get("quantity", order.get("qty", 0))
+                        qty_display = f"{qty_val:,.4f}" if qty_val and qty_val < 1000 else (f"{qty_val:,.2f}" if qty_val else "—")
+                        exit_px = order.get("exit_price")
+                        entry_px = order.get("entry_price")
+                        trade_pnl = order.get("trade_pnl")
                         all_trades.append({
                             "Date": log["date"],
                             "Symbol": order.get("symbol"),
                             "Side": order.get("side"),
-                            "Qty": order.get("quantity"),
+                            "Qty": qty_display,
                             "Type": order.get("signal_type"),
+                            "Entry $": f"${entry_px:,.4f}" if entry_px else "—",
+                            "Exit $": f"${exit_px:,.4f}" if exit_px else "—",
+                            "PnL $": f"${trade_pnl:+,.2f}" if trade_pnl is not None else "—",
                             "Reason": order.get("reason", "—"),
                             "Status": order.get("status"),
                         })

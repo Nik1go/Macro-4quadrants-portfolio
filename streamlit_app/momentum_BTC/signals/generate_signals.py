@@ -41,12 +41,17 @@ def load_state():
         "positions": [],          # List of open positions
         "cash": 10000.0,          # Available cash
         "initial_cash": 10000.0,
+        "realized_pnl": 0.0,      # Cumulative realized PnL from closed trades
         "underperf_streaks": {},  # {symbol: consecutive underperf days}
     }
     if os.path.exists(state_path):
         try:
             with open(state_path, "r") as f:
-                return json.load(f)
+                loaded = json.load(f)
+            # Migrate old states without realized_pnl
+            if "realized_pnl" not in loaded:
+                loaded["realized_pnl"] = 0.0
+            return loaded
         except Exception:
             return default_state
     return default_state
@@ -306,6 +311,45 @@ def generate_daily_signals(indicators, state=None):
     # ── STEP 1: Evaluate exits on open positions ──
     exit_signals = evaluate_exits(state, indicators, today_idx)
     for ex in exit_signals:
+        # Find the matching open position to compute exit value
+        matched_pos = next(
+            (p for p in state["positions"] if p["symbol"] == ex["symbol"] and p["side"] == ex["side"]),
+            None
+        )
+        if matched_pos:
+            symbol = ex["symbol"]
+            qty = matched_pos.get("qty", 0)
+            entry_price = matched_pos.get("entry_price", 0)
+
+            # Get current exit price from indicators
+            if symbol in indicators["alt_usdt_closes"].columns:
+                exit_price = float(indicators["alt_usdt_closes"].at[today, symbol])
+            else:
+                exit_price = entry_price  # fallback: no PnL if delisted
+
+            # Compute position exit value and realized PnL
+            if ex["side"] == "long":
+                trade_pnl = (exit_price - entry_price) * qty
+                exit_value = entry_price * qty + trade_pnl  # = exit_price * qty
+            else:  # short: profit when price drops
+                trade_pnl = (entry_price - exit_price) * qty
+                exit_value = entry_price * qty + trade_pnl
+
+            # Restore cash with exit value (initial notional + PnL)
+            state["cash"] += exit_value
+            state["realized_pnl"] = state.get("realized_pnl", 0.0) + trade_pnl
+
+            # Enrich exit signal with prices for logging and execution
+            ex["exit_price"] = round(exit_price, 8)
+            ex["entry_price"] = round(entry_price, 8)
+            ex["qty"] = round(qty, 6)
+            ex["trade_pnl"] = round(trade_pnl, 4)
+            ex["exit_value"] = round(exit_value, 4)
+
+            print(f"   💰 EXIT {ex['side'].upper()} {symbol}: "
+                  f"entry=${entry_price:.4f} exit=${exit_price:.4f} "
+                  f"qty={qty:.2f} PnL=${trade_pnl:+.2f} → cash back: ${exit_value:.2f}")
+
         report["exits"].append(ex)
         # Remove position from state
         state["positions"] = [p for p in state["positions"] if not (p["symbol"] == ex["symbol"] and p["side"] == ex["side"])]

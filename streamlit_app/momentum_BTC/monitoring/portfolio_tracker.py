@@ -30,29 +30,33 @@ def load_state():
 def compute_nav(state, current_prices):
     """
     Compute current Net Asset Value.
+    NAV = cash (available) + unrealized value of open positions
+    Cash is 0 when fully invested, but the position value makes up for it.
     
     Args:
         state: portfolio state dict
         current_prices: dict of {symbol: current_price}
         
     Returns:
-        float: total NAV (cash + position values)
+        float: total NAV (cash + position mark-to-market values)
     """
     nav = state.get("cash", 0)
     for pos in state.get("positions", []):
         symbol = pos["symbol"]
         qty = pos.get("qty", 0)
         entry_price = pos.get("entry_price", 0)
+        # Use current market price; fallback to entry_price (NAV = cost basis)
         current_price = current_prices.get(symbol, entry_price)
 
         if pos["side"] == "long":
-            # Long P&L
-            pnl = (current_price - entry_price) * qty
+            # Long: current value = qty * current_price
+            position_value = current_price * qty
         else:
-            # Short P&L (profit when price drops)
-            pnl = (entry_price - current_price) * qty
-        
-        position_value = entry_price * qty + pnl
+            # Short: PnL = (entry - exit) * qty; cash was not consumed (margin)
+            # We track it as: initial_notional + pnl
+            unrealized_pnl = (entry_price - current_price) * qty
+            position_value = entry_price * qty + unrealized_pnl
+
         nav += position_value
 
     return nav
