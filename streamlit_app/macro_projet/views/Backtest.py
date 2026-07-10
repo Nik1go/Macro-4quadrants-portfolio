@@ -489,7 +489,7 @@ def render(data):
     # SECTION 2.B: FRONTIERE EFFICIENTE PAR QUADRANT
     # =========================================================
     st.subheader("Optimisation et Frontiere Efficiente (Par Quadrant)")
-    st.markdown("""L'algorithme génère une simulation de Monte-Carlo (*via Numpy*) de **8 000 portefeuilles virtuels**, en testant aléatoirement différentes combinaisons de poids (*weights*) sur notre univers d'actifs. Cette méthode stochastique permet d'explorer la "frontière efficiente" afin de trouver l'allocation statistiquement optimale face au risque.
+    st.markdown("""L'algorithme génère un échantillonnage aléatoire de l'espace des poids de Markowitz (*via Numpy*) pour tester **8 000 portefeuilles virtuels**, en testant différentes combinaisons de poids (*weights*) sur notre univers d'actifs. Cette méthode stochastique permet d'explorer la "frontière efficiente" afin de trouver l'allocation statistiquement optimale face au risque.
     Le **Custom Z-Score Average** est la moyenne pondérée du Z-score de 3 ratios clés (Sharpe, Sortino et Calmar).
     """)
     
@@ -541,8 +541,8 @@ def render(data):
                         rf = data['indicators'].set_index('date').loc[shared_idx, 'TAUX_FED'].mean() / 100.0
                 
                 # Execute PyPortfolioOpt Efficient Frontier Simulation
-                # Use cache for performance to prevent 3000 montecarlo on every ui click unless parameters change
-                @st.cache_data(ttl=3600, show_spinner="Simulation de 8000 portefeuilles Monte-Carlo...")
+                # Use cache for performance to prevent 8000 simulations on every ui click unless parameters change
+                @st.cache_data(ttl=3600, show_spinner="Simulation de 8000 portefeuilles Markowitz...")
                 def compute_ef_v6(returns_df_bytes, rf_rate):
                     import io
                     # Streamlit cache bug bypass by passing parquet bytes
@@ -670,7 +670,7 @@ def render(data):
                 
                 st.plotly_chart(fig_ef, use_container_width=True)
                 
-                st.markdown("*Note : Dans un souci de simplicité et afin d'éviter un biais de sur-optimisation (overfitting), l'allocation du modèle officiel est arrondie à des chiffres ronds, ce qui explique son léger décalage assumé avec le point optimal théorique Monte-Carlo.*")
+                st.markdown("*Note : Dans un souci de simplicité et afin d'éviter un biais de sur-optimisation (overfitting), l'allocation du modèle officiel est arrondie à des chiffres ronds, ce qui explique son léger décalage assumé avec le point optimal théorique de Markowitz.*")
                 
                 # Composition du Portefeuille Optimal
                 st.markdown(f"**Composition du Portefeuille Optimal ({selected_opt_metric.capitalize()}) :**")
