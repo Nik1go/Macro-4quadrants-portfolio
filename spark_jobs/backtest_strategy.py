@@ -148,14 +148,14 @@ def main():
     
     df_ind = pd.read_csv(indicators_csv, parse_dates=['date']).set_index('date').sort_index()
 
-    # Pre-calculate optimized weight allocation for the Backtest using Monte-Carlo ZScore Custom Custom Function
+    # Pre-calculate optimized weight allocation for the Backtest using Random Generation ZScore Custom Function
     df_returns_all = get_carry_adjusted_returns_wide(df_a.reset_index(), df_f.reset_index(), df_ind.reset_index())
     df_returns_all = df_returns_all.dropna(how='all')
     
     # Combine assets + forex
     df_a_combined = pd.merge(df_a, df_f, left_index=True, right_index=True, how='outer').ffill()
 
-    # Option 1: Poids Bloqués par Régime (Locked Weights) au lieu d'optimisation Monte Carlo dynamique continuelle
+    # Option 1: Poids Bloqués par Régime (Locked Weights) au lieu d'optimisation aléatoire dynamique continuelle
     # Ceci empêche l'overfitting (suroptimisation) et réduit les frictions inutiles pour l'exécuteur.
     print("Application des Poids fixes (Locked Weights Option 1) en cours...")
     

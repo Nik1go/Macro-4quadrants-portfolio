@@ -48,16 +48,16 @@ def run_offline_backtest():
         print("No daily_universe.json found. Engine will rely completely on historical rolling 30d baseline.")
     
     # 4. Execute Grid Search
-    # Using a focused grid to avoid hours of calculation (3x3x2x2x2 = 72 tests)
+    # Grid etendue pour une heatmap plus granulaire (5x5x3x3x2x2 = ~900 tests)
     results_df, best_params, pf, btc_close = mu.run_grid_search_simulation(
         symbols=top_symbols,
         start_date=start_date,
-        sma_periods=[30, 50, 80,120],
-        roll_lookbacks=[60, 120, 180, 240],
-        skew_threshs=[0.0, 0.15],
-        std_mults=[0.3, 0.5],
+        sma_periods=[20, 30, 50, 80, 120],
+        roll_lookbacks=[30, 60, 120, 180, 240],
+        skew_threshs=[0.0, 0.10, 0.20],
+        std_mults=[0.3, 0.5, 0.8],
         atr_mults=[2.0, 3.0],
-        streak_limits=[3],
+        streak_limits=[2, 3, 5],
         vol_filters=[True, False],
         fees_bps=6,
         slippage_bps=10,

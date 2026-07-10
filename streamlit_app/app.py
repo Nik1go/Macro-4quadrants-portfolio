@@ -395,8 +395,8 @@ def render_home():
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-bezier"></i> Portfolio Optimizer</h3>
             <p><strong>Tech:</strong> Python, NumPy, Plotly</p>
-            <p>Portfolio optimization using Markowitz theory and SciPy. Includes Monte Carlo 
-            simulations to visualize the Efficient Frontier and find the optimal Risk/Reward balance.</p>
+            <p>Portfolio optimization using Markowitz theory and SciPy. Includes random portfolio 
+            generation to visualize the Efficient Frontier and find the optimal Risk/Reward balance.</p>
             <hr>
         </div>
         """, unsafe_allow_html=True)

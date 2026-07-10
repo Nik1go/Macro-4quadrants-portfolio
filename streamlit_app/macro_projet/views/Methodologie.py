@@ -146,7 +146,7 @@ def render(data):
         - **Win Rate (%)** : Probabilité qu'une journée soit positive. 
 
         **La Confiance Statistique (Block Bootstrap) :**
-        Au lieu de tester la stratégie sur de l'aléatoire avec un montecarlo par exemple (ce qui n'aurait pas de sens économique avec un model macros comme celui-ci), l'application teste la **fiabilité des rendements**.
+        L'application utilise une méthode de **Block Bootstrap** : elle tire aléatoirement des sous-échantillons des *rendements historiques réels* observés (et non des scénarios futurs simulés) afin d'estimer la robustesse statistique de chaque performance.
         Pour un actif donné dans un quadrant précis (ex: l'Or en Q4), le système :
         1. Isole tous les rendements quotidiens réels de l'actif durant ce régime.
         2. Tire aléatoirement 500 échantillons distincts de cette série de rendements (avec remise).

@@ -88,7 +88,13 @@ def portfolio_performance_vectorized(weights, returns, rf_rate):
     
     return mean_ret, vol_safe, sharpe, sortino, calmar
 
-def run_monte_carlo(returns, rf_rate, n_sims=25000):
+def sample_random_weights(returns, rf_rate, n_sims=25000):
+    """
+    Échantillonnage aléatoire de l'espace des poids de Markowitz.
+    On tire des combinaisons de poids aléatoires (via distribution de Dirichlet) et on
+    évalue chaque portefeuille sur les rendements historiques réels.
+    Ce n'est PAS une simulation de Monte Carlo : aucun scénario futur n'est simulé.
+    """
     # Set seed for consistency between backend and UI
     np.random.seed(42)
     n_assets = returns.shape[1]
@@ -144,7 +150,7 @@ def run_monte_carlo(returns, rf_rate, n_sims=25000):
 
 def optimize_for_metric(returns, rf_rate, metric="custom", stats=None, max_weight=0.40, res=None):
     if res is None:
-        stats, res = run_monte_carlo(returns, rf_rate, 25000)
+        stats, res = sample_random_weights(returns, rf_rate, 25000)
         
     metric_array = res[metric]
     best_idx = np.argmax(metric_array)
@@ -156,9 +162,9 @@ def optimize_for_metric(returns, rf_rate, metric="custom", stats=None, max_weigh
 
 def run_efficient_frontier_points(returns, rf_rate, n_sims=8000):
     # Reduced sims for UI rendering speed
-    stats, res = run_monte_carlo(returns, rf_rate, n_sims)
+    stats, res = sample_random_weights(returns, rf_rate, n_sims)
     
-    mc_data = {
+    frontier_data = {
         'returns': res['mean_ret'],
         'volatilities': res['vol'],
         'sharpes': res['sharpe'],
@@ -172,14 +178,14 @@ def run_efficient_frontier_points(returns, rf_rate, n_sims=8000):
     min_vol_idx = np.argmin(res['vol'])
     min_vol_w = res['weights'][min_vol_idx]
     
-    # Optimizations simply pluck the argmax from the monte carlo! Perfectly robust.
+    # Optimizations simply pluck the argmax from the random generation! Perfectly robust.
     opt_sharpe = optimize_for_metric(returns, 0, "sharpe", res=res)
     opt_sortino = optimize_for_metric(returns, 0, "sortino", res=res)
     opt_calmar = optimize_for_metric(returns, 0, "calmar", res=res)
     opt_custom = optimize_for_metric(returns, 0, "custom", res=res)
     
     return {
-        'mc_data': mc_data,
+        'frontier_data': frontier_data,
         'min_vol_weights': dict(zip(returns.columns, min_vol_w)),
         'opt_sharpe': opt_sharpe,
         'opt_sortino': opt_sortino,

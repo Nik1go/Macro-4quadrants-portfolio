@@ -140,7 +140,14 @@ def optimize_portfolio(data):
 
 
 # --- EXTRA ANALYTICS ---
-def generate_random_portfolios(returns, cov_matrix, num_portfolios=5000):
+def sample_random_weights(returns, cov_matrix, num_portfolios=5000):
+    """
+    Échantillonnage aléatoire de l'espace des poids pour visualiser la frontière efficiente.
+    Ce n'est PAS une simulation de Monte Carlo : on tire des combinaisons de poids aléatoires
+    normalisées (somme = 1) et on calcule le couple (rendement, volatilité) de chaque portefeuille
+    à partir des données historiques réelles. Le but est de cartographier l'espace risque/rendement
+    atteignable selon la théorie de Markowitz.
+    """
     num_assets = len(returns.columns)
     results = np.zeros((3, num_portfolios))
     
@@ -319,23 +326,31 @@ def render():
 
     st.divider()
     
-    # --- MONTE CARLO SECTION ---
-    st.markdown("### Simulation Monte-Carlo & Frontière Efficiente")
-    st.markdown("Cette simulation génère 5 000 combinaisons de portefeuilles aléatoires pour visualiser le sharpe ratio.")
+    # --- RANDOM WEIGHT SAMPLING SECTION ---
+    st.markdown("### Espace des Poids & Frontière Efficiente (Markowitz)")
+    st.markdown("""
+    Pour visualiser la **frontière efficiente**, 5 000 combinaisons de poids aléatoires sont générées
+    et évaluées sur les données historiques réelles. Cela cartographie l'ensemble des couples
+    (rendement, volatilité) atteignables, et permet de situer le portefeuille optimal (Max Sharpe)
+    et le portefeuille à variance minimale dans cet espace.
+
+    *(Ce n'est pas une simulation de Monte Carlo : on ne modélise pas de scénarios futurs.
+    On explore simplement l'espace des poids possibles sur les rendements historiques observés.)*
+    """)
     
-    with st.spinner("Génération des portefeuilles aléatoires..."):
-        mc_results = generate_random_portfolios(returns, cov_matrix, num_portfolios=5000)
+    with st.spinner("Échantillonnage de l'espace des poids..."):
+        sim_results = sample_random_weights(returns, cov_matrix, num_portfolios=5000)
         
-    fig_mc = go.Figure()
+    fig_sim = go.Figure()
     
     # Nuage de points
-    fig_mc.add_trace(go.Scatter(
-        x=mc_results[1, :] * 100,
-        y=mc_results[0, :] * 100,
+    fig_sim.add_trace(go.Scatter(
+        x=sim_results[1, :] * 100,
+        y=sim_results[0, :] * 100,
         mode='markers',
         marker=dict(
             size=5,
-            color=mc_results[2, :], # Sharpe ratio
+            color=sim_results[2, :], # Sharpe ratio
             colorscale='Viridis',
             showscale=True,
             colorbar=dict(
@@ -343,12 +358,12 @@ def render():
                 tickfont=dict(color='white')
             ),
         ),
-        name="Portefeuilles Simulés",
+        name="Portefeuilles échantillonnés",
         hovertemplate="Volatilité: %{x:.2f}%<br>Rendement: %{y:.2f}%<extra></extra>"
     ))
     
     # Point Max Sharpe
-    fig_mc.add_trace(go.Scatter(
+    fig_sim.add_trace(go.Scatter(
         x=[opt_vol * 100],
         y=[opt_ret * 100],
         mode='markers',
@@ -358,7 +373,7 @@ def render():
     ))
     
     # Point Min Vol
-    fig_mc.add_trace(go.Scatter(
+    fig_sim.add_trace(go.Scatter(
         x=[min_vol_std * 100],
         y=[min_vol_ret * 100],
         mode='markers',
@@ -367,7 +382,7 @@ def render():
         hovertemplate="MIN VOLATILITE<br>Vol: %{x:.2f}%<br>Ret: %{y:.2f}%<extra></extra>"
     ))
     
-    fig_mc.update_layout(
+    fig_sim.update_layout(
         template="plotly_dark",
         xaxis_title="Volatilité Annuelle (%)",
         yaxis_title="Rendement Annuel (%)",
@@ -380,4 +395,4 @@ def render():
         yaxis=dict(gridcolor='#3d4263', zerolinecolor='white', tickfont=dict(color='white'))
     )
     
-    st.plotly_chart(fig_mc, use_container_width=True)
+    st.plotly_chart(fig_sim, use_container_width=True)

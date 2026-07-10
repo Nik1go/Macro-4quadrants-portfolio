@@ -220,14 +220,26 @@ def render():
                 st.markdown(f"**Frais :** 6 bps | **Slippage :** 10 bps")
 
                 st.markdown("---")
-                st.markdown("### Meilleure Configuration")
-                st.info(f" SMA : **{summary.get('best_sma', 'N/A')}**\n\n Lookback : **{summary.get('best_lookback', 'N/A')}**")
+                st.markdown("### Meilleure Config")
+                st.info(f"SMA : **{summary.get('best_sma', 'N/A')}** | Lookback : **{summary.get('best_lookback', 'N/A')}**")
 
-                st.markdown("### Métriques globales")
+                st.markdown("### Best")
                 st.metric("Rendement Total", f"{summary.get('tot_ret_pct', 0.0):.2f}%")
                 st.metric("Win Rate", f"{summary.get('win_rate_pct', 0.0):.2f}%")
                 st.metric("Ratio de Sharpe", f"{summary.get('sharpe', 0.0):.2f}")
                 st.metric("Max Drawdown", f"{summary.get('max_dd_pct', 0.0):.2f}%")
+
+                # Worst config from grid
+                if os.path.exists(grid_path):
+                    _gdf_tmp = pd.read_csv(grid_path)
+                    if not _gdf_tmp.empty:
+                        _worst = _gdf_tmp.sort_values("Sharpe Ratio").iloc[0]
+                        st.markdown("### Worst")
+                        st.metric("Rendement Total", f"{_worst.get('Total Return (%)', 0.0):.2f}%")
+                        st.metric("Win Rate", f"{_worst.get('Win Rate (%)', 0.0):.2f}%")
+                        st.metric("Ratio de Sharpe", f"{_worst.get('Sharpe Ratio', 0.0):.2f}")
+                        st.metric("Max Drawdown", f"{_worst.get('Max Drawdown (%)', 0.0):.2f}%")
+                        st.caption(f"SMA {int(_worst.get('SMA',0))} | LB {int(_worst.get('Lookback',0))} | Skew {_worst.get('Skew',0.0)}")
 
             with col_results:
                 grid_df = pd.read_csv(grid_path)
@@ -268,6 +280,113 @@ def render():
                                           title="Dispersion du Ratio de Sharpe par Lookback", labels={"x": "Lookback Momentum", "y": "Sharpe Ratio", "color":"Lookback"})
                         fig_look.update_layout(plot_bgcolor="#0a0e27", paper_bgcolor="#0a0e27", font_color="white", showlegend=False)
                         st.plotly_chart(fig_look, use_container_width=True)
+
+                # ── HEATMAP PARAMÈTRES ──
+                st.markdown("---")
+                st.markdown("#### Heatmap des Performances par Parametres")
+                st.markdown("*Chaque cellule = une combinaison de paramètres unique. Plus les valeurs sont homogènes, plus la stratégie est robuste.*")
+
+                hm_metric = st.selectbox(
+                    "Metrique a afficher",
+                    ["Sharpe Ratio", "Total Return (%)", "Win Rate (%)", "Max Drawdown (%)"],
+                    key="hm_metric_sel"
+                )
+
+                if all(c in grid_df.columns for c in ["SMA", "Lookback", "Skew", "StdMult"]):
+                    _df_hm = grid_df.copy()
+
+                    # Ne garde que les params qui varient vraiment
+                    _cands_y = ["SMA", "Lookback"]
+                    _cands_x = ["Skew", "StdMult", "ATR", "VolFilter", "Streak"]
+                    _vary_y = [c for c in _cands_y if c in _df_hm.columns and _df_hm[c].nunique() > 1]
+                    _vary_x = [c for c in _cands_x if c in _df_hm.columns and _df_hm[c].nunique() > 1]
+
+                    # Labels Y
+                    if _vary_y:
+                        _df_hm["_Y"] = _df_hm[_vary_y[0]].astype(str)
+                        for _yc in _vary_y[1:]:
+                            _df_hm["_Y"] = _df_hm["_Y"] + "/" + _df_hm[_yc].astype(str)
+                        _y_title = "/".join(_vary_y)
+                    else:
+                        _df_hm["_Y"] = "All"
+                        _y_title = "params"
+
+                    # Labels X : abreviations courtes
+                    _abbrev = {"Skew": "Sk", "StdMult": "Std", "ATR": "ATR", "VolFilter": "Vol", "Streak": "Str"}
+                    if _vary_x:
+                        _df_hm["_X"] = _df_hm[_vary_x[0]].astype(str)
+                        for _xc in _vary_x[1:]:
+                            _v = _df_hm[_xc].astype(str)
+                            # Bool -> T/F
+                            if _df_hm[_xc].dtype == object or _df_hm[_xc].isin([True, False]).all():
+                                _v = _v.str[0]
+                            _df_hm["_X"] = _df_hm["_X"] + "|" + _v
+                        _pfx = "|".join([_abbrev.get(c, c) for c in _vary_x]) + "="
+                        _df_hm["_X"] = _pfx + _df_hm["_X"]
+                        _x_title = " | ".join([_abbrev.get(c, c) for c in _vary_x])
+                    else:
+                        _df_hm["_X"] = "All"
+                        _x_title = "params"
+
+                    pivot_full = _df_hm.pivot_table(
+                        index="_Y", columns="_X", values=hm_metric, aggfunc="mean"
+                    ).sort_index()
+                    pivot_full = pivot_full.reindex(sorted(pivot_full.columns), axis=1)
+
+                    _n_rows = len(pivot_full.index)
+                    _n_cols = len(pivot_full.columns)
+
+                    _colorscale = "RdYlGn" if hm_metric != "Max Drawdown (%)" else "RdYlGn_r"
+
+                    import plotly.graph_objects as go_hm
+                    import numpy as _np_hm
+                    _z_raw = pivot_full.values
+                    _z = _z_raw.tolist()
+                    _text = [[f"{v:.2f}" if not _np_hm.isnan(v) else "" for v in row] for row in _z_raw]
+
+                    # Font et hauteur adaptatifs
+                    _fsize = max(7, min(11, int(110 / max(_n_cols, 1))))
+                    _row_px = max(22, min(50, int(480 / max(_n_rows, 1))))
+                    _total_h = max(350, _n_rows * _row_px + 160)
+
+                    fig_hm = go_hm.Figure(data=go_hm.Heatmap(
+                        z=_z,
+                        x=list(pivot_full.columns),
+                        y=list(pivot_full.index),
+                        colorscale=_colorscale,
+                        text=_text,
+                        texttemplate="%{text}",
+                        textfont=dict(size=_fsize, color="white"),
+                        showscale=True,
+                        xgap=1, ygap=1,
+                        colorbar=dict(
+                            title=dict(text=hm_metric, font=dict(color="white", size=10)),
+                            tickfont=dict(color="white", size=9),
+                            thickness=12, len=0.8
+                        )
+                    ))
+                    _x_fsize = max(7, min(10, int(900 / max(_n_cols * 7, 1))))
+                    fig_hm.update_layout(
+                        title=dict(
+                            text=f"{hm_metric} — {_n_rows} lignes x {_n_cols} colonnes = {_n_rows * _n_cols} combinaisons",
+                            font=dict(color="white", size=12)
+                        ),
+                        xaxis=dict(
+                            title=_x_title,
+                            tickfont=dict(color="white", size=_x_fsize),
+                            title_font=dict(color="white", size=9),
+                            tickangle=-45
+                        ),
+                        yaxis=dict(
+                            title=_y_title,
+                            tickfont=dict(color="white", size=9),
+                            title_font=dict(color="white", size=9)
+                        ),
+                        plot_bgcolor="#0a0e27", paper_bgcolor="#0a0e27",
+                        margin=dict(l=80, r=30, t=50, b=140),
+                        height=_total_h
+                    )
+                    st.plotly_chart(fig_hm, use_container_width=True)
 
                 st.markdown("---")
 

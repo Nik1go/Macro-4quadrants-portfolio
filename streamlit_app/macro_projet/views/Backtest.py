@@ -399,13 +399,7 @@ def render(data):
             name='Stratégie Modèle Complet', line=dict(color='cyan')
         ))
 
-        # OOS Walk-Forward curve
-        if df_oos_bt is not None and 'oos_wealth' in df_oos_bt.columns:
-            fig.add_trace(go.Scatter(
-                x=df_oos_bt['date'], y=_norm(df_oos_bt['oos_wealth']),
-                name='Walk-Forward OOS',
-                line=dict(color='#bf5fff', width=2, dash='dashdot'),
-            ))
+
 
         # EUR conversion
         df_f = data.get('daily_forex')
@@ -457,8 +451,7 @@ def render(data):
             "Or (Gold)": df_bt['GOLD_wealth'],
         }
 
-        if df_oos_bt is not None and 'oos_wealth' in df_oos_bt.columns:
-            wealth_map["Walk-Forward OOS"] = df_oos_bt['oos_wealth']
+
 
         if wealth_eur is not None:
             wealth_map["Stratégie (EUR)"] = wealth_eur
@@ -563,7 +556,7 @@ def render(data):
                 ef_res = compute_ef_v6(parquet_bytes.getvalue(), rf)
                 
                 # Render Plot
-                mc = ef_res['mc_data']
+                frontier = ef_res['frontier_data']
                 opt_key = f"opt_{selected_opt_metric}"
                 opt_w = ef_res[opt_key]
                 
@@ -618,20 +611,20 @@ def render(data):
                 }
                 c_key = metric_col_map.get(selected_opt_metric, 'sharpes')
                 c_title = metric_name_map.get(selected_opt_metric, 'Sharpe Ratio')
-                metric_color = mc[c_key]
+                metric_color = frontier[c_key]
                 
                 # Format weights for hover template
                 weights_hover = []
-                for w in mc['weights']:
+                for w in frontier['weights']:
                     hover_text = "<br>".join([f"{a}: {w[i]*100:.1f}%" for i, a in enumerate(ret_q_opt.columns) if w[i] > 0.005])
                     weights_hover.append(hover_text)
                     
                 fig_ef.add_trace(go.Scatter(
-                    x=mc['volatilities']*100, y=mc['returns']*100,
+                    x=frontier['volatilities']*100, y=frontier['returns']*100,
                     mode='markers',
                     marker=dict(size=4, color=metric_color, colorscale='Viridis', showscale=True, 
                                 colorbar=dict(title=c_title)),
-                    name='Monte Carlo',
+                    name='Espace des Poids (Markowitz)',
                     customdata=weights_hover,
                     hovertemplate="<b>Volatilité:</b> %{x:.2f}%<br><b>Rendement:</b> %{y:.2f}%<br><b>" + c_title + ":</b> %{marker.color:.2f}<br><br><b>Allocation:</b><br>%{customdata}<extra></extra>"
                 ))
