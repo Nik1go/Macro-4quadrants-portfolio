@@ -102,6 +102,7 @@ MODEL_RESULT_KEYS = [
     "key_points",
     "risks",
     "allocation_comment",
+    "performance_attribution",
     "markdown",
 ]
 
@@ -218,6 +219,7 @@ def display_signal(value):
 
 
 def fallback_debrief_markdown(record, metrics, signal, forward_view):
+    attribution = safe_dict(record.get("performance_attribution"))
     allocation = safe_dict(metrics.get("current_allocation"))
     allocation_text = ", ".join(
         f"{clean_asset_name(asset)}: {pd.to_numeric(weight, errors='coerce') * 100:.1f}%"
@@ -231,11 +233,15 @@ def fallback_debrief_markdown(record, metrics, signal, forward_view):
         safe_text(record.get("strategy_status"), "Synthese non disponible."),
         "",
         "## Performance",
-        f"Strategie: {display_pct(metrics.get('strategy_week_return'))} | S&P 500: {display_pct(metrics.get('sp500_week_return'))} | Drawdown: {display_pct(metrics.get('week_max_drawdown'))}.",
+        f"Strategie: {display_pct(metrics.get('strategy_week_return'))} | S&P 500: {display_pct(metrics.get('sp500_week_return'))} | Or: {display_pct(metrics.get('gold_week_return'))} | Drawdown: {display_pct(metrics.get('week_max_drawdown'))}.",
         "",
         "## Signal NLP",
-        f"Risk-on {display_signal(signal.get('risk_on_score'))}, croissance {display_signal(signal.get('growth_score'))}, inflation {display_signal(signal.get('inflation_pressure_score'))}, confiance {display_pct(signal.get('confidence'))}.",
+        f"Risk-on {display_signal(signal.get('risk_on_score'))}, croissance {display_signal(signal.get('growth_score'))}, inflation {display_signal(signal.get('inflation_pressure_score'))}, confiance {display_signal(signal.get('confidence'))}.",
         safe_text(signal.get("rationale"), "Rationale non disponible."),
+        "",
+        "## Attribution",
+        safe_text(attribution.get("gold_move_explanation"), "Attribution de l'or non disponible."),
+        safe_text(attribution.get("model_miss_explanation"), "Explication de l'ecart modele non disponible."),
         "",
         "## Allocation",
         f"Allocation actuelle: {allocation_text}.",
@@ -310,8 +316,8 @@ def render(data):
 
     meta1, meta2, meta3 = st.columns(3)
     meta1.metric("Current quadrant", safe_text(metrics.get("current_quadrant_label")))
-    meta2.metric("NLP risk-on", format_signal_value(signal.get("risk_on_score")))
-    meta3.metric("NLP confidence", fmt_pct(signal.get("confidence")))
+    meta2.metric("NLP risk-on score", format_signal_value(signal.get("risk_on_score")))
+    meta3.metric("NLP confidence score", format_signal_value(signal.get("confidence")))
 
     generated_at = record.get("generated_at")
     model_name = record.get("model", "N/A")
@@ -330,12 +336,13 @@ def render(data):
             ("Risk-on", signal.get("risk_on_score")),
             ("Growth", signal.get("growth_score")),
             ("Inflation pressure", signal.get("inflation_pressure_score")),
-            ("Policy risk", signal.get("policy_risk_score")),
+            ("Policy/Fed risk", signal.get("policy_risk_score")),
             ("Confidence", signal.get("confidence")),
         ]
         signal_df = pd.DataFrame(signal_rows, columns=["Signal", "Value"])
         signal_df["Value"] = pd.to_numeric(signal_df["Value"], errors="coerce")
         st.dataframe(signal_df.style.format({"Value": "{:+.2f}"}), use_container_width=True, hide_index=True)
+        st.caption("Scores: -1 = negatif/risk-off, 0 = neutre, +1 = positif/risk-on. Confidence: 0 = faible, 1 = forte; ce n'est pas une probabilite de rendement.")
         st.info(safe_text(signal.get("suggested_use"), "shadow_only"))
         st.caption(safe_text(signal.get("rationale"), "No rationale provided."))
 
@@ -349,6 +356,23 @@ def render(data):
             st.markdown("**Watchlist:**")
             for item in watchlist:
                 st.markdown(f"- {item}")
+
+
+    st.divider()
+    attribution = safe_dict(record.get("performance_attribution"))
+    if attribution:
+        st.markdown("### Performance attribution")
+        att1, att2 = st.columns(2)
+        with att1:
+            st.markdown(f"**Gold move:** {safe_text(attribution.get('gold_move_explanation'))}")
+            st.markdown(f"**Strategy gap:** {safe_text(attribution.get('strategy_vs_benchmark_gap'))}")
+        with att2:
+            st.markdown(f"**Model miss:** {safe_text(attribution.get('model_miss_explanation'))}")
+            monitors = safe_list(attribution.get("what_to_monitor"))
+            if monitors:
+                st.markdown("**Monitor:**")
+                for item in monitors:
+                    st.markdown(f"- {item}")
 
     st.divider()
     points_col, risks_col = st.columns(2)

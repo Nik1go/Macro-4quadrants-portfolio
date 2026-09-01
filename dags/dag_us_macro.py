@@ -750,6 +750,31 @@ with DAG(
         },
         verbose=False
     )
+
+    backtest_ibkr_live_task = BashOperator(
+        task_id='backtest_ibkr_live_compatible',
+        bash_command=f"""
+            cd {PROJECT_ROOT} && \
+            source {os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'activate')} && \
+            python spark_jobs/backtest_live_compatible.py \
+                --backtest-csv {os.path.join(BACKTEST_OUTPUT, 'backtest_timeseries.csv')} \
+                --forex-parquet {os.path.join(OUTPUT_DIR, 'Forex_daily.parquet')} \
+                --initial-capital 1000 \
+                --base-currency EUR \
+                --output-dir {BACKTEST_OUTPUT}
+        """,
+    )
+    fetch_macro_news_task = BashOperator(
+        task_id='fetch_macro_news',
+        bash_command=f"""
+            cd {PROJECT_ROOT} && \
+            source {os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'activate')} && \
+            python nlp_jobs/fetch_macro_news.py \
+                --base-dir {base_dir} \
+                --start-date 2026-04-03
+        """,
+    )
+
     generate_weekly_nlp_debrief_task = BashOperator(
         task_id='generate_weekly_nlp_debrief',
         bash_command=f"""
@@ -764,6 +789,7 @@ with DAG(
             python nlp_jobs/generate_weekly_debriefs.py \
                 --base-dir {base_dir} \
                 --start-date 2026-04-03 \
+                --news-file {os.path.join(base_dir, 'nlp', 'news_events.jsonl')} \
                 --skip-if-missing-key
         """,
     )
@@ -787,4 +813,6 @@ with DAG(
     [compute_quadrant_task, format_forex_task] >> compute_forex_performance_task
     [compute_assets_performance_task,
         compute_forex_performance_task] >> backtest_task
-    backtest_task >> [generate_weekly_nlp_debrief_task, ibkr_execute_task]
+    backtest_task >> backtest_ibkr_live_task >> [fetch_macro_news_task, ibkr_execute_task]
+    fetch_macro_news_task >> generate_weekly_nlp_debrief_task
+

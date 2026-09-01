@@ -269,6 +269,7 @@ def render(data):
     # =========================================================
     df_bt_raw = data.get('backtest')
     df_oos_raw = data.get('backtest_oos')
+    df_ibkr_live_raw = data.get('backtest_ibkr_live')
 
     # Determine available date range
     if df_bt_raw is not None and 'date' in df_bt_raw.columns:
@@ -319,6 +320,14 @@ def render(data):
         ].copy()
     else:
         df_oos_bt = None
+
+    if df_ibkr_live_raw is not None and 'date' in df_ibkr_live_raw.columns:
+        df_ibkr_live = df_ibkr_live_raw[
+            (df_ibkr_live_raw['date'] >= _ts(filter_start)) &
+            (df_ibkr_live_raw['date'] <= _ts(filter_end))
+        ].copy()
+    else:
+        df_ibkr_live = None
 
     _date_filtered = (filter_start != _min_date or filter_end != _max_date)
     if _date_filtered:
@@ -399,7 +408,11 @@ def render(data):
             name='Stratégie Modèle Complet', line=dict(color='cyan')
         ))
 
-
+        if df_ibkr_live is not None and not df_ibkr_live.empty and 'ibkr_live_wealth' in df_ibkr_live.columns:
+            fig.add_trace(go.Scatter(
+                x=df_ibkr_live['date'], y=_norm(df_ibkr_live['ibkr_live_wealth']),
+                name='Stratégie IBKR Live-Compatible', line=dict(color='#ff4f8b', dash='dot')
+            ))
 
         # EUR conversion
         df_f = data.get('daily_forex')
@@ -434,6 +447,23 @@ def render(data):
             legend=dict(orientation="h", y=1.08),
         )
         st.plotly_chart(fig, use_container_width=True)
+
+        live_mapping = data.get('backtest_ibkr_live_mapping')
+        live_stats = data.get('backtest_ibkr_live_stats')
+        if live_mapping is not None and not live_mapping.empty:
+            with st.expander("Mapping IBKR live-compatible"):
+                cols = [c for c in [
+                    'asset', 'model_proxy', 'ibkr_symbol', 'yahoo_ticker',
+                    'isin', 'currency', 'ter', 'status', 'note'
+                ] if c in live_mapping.columns]
+                st.dataframe(live_mapping[cols], use_container_width=True, hide_index=True)
+                if live_stats is not None and not live_stats.empty:
+                    row = live_stats.iloc[0]
+                    st.caption(
+                        f"Base {row.get('base_currency', 'EUR')} | "
+                        f"Missing weight max: {float(row.get('max_missing_weight', 0.0)) * 100:.2f}% | "
+                        f"Missing assets: {row.get('missing_assets') or 'none'}"
+                    )
     else:
         st.warning("Données backtest non disponibles")
 
@@ -452,6 +482,9 @@ def render(data):
         }
 
 
+
+        if df_ibkr_live is not None and not df_ibkr_live.empty and 'ibkr_live_wealth' in df_ibkr_live.columns:
+            wealth_map["Stratégie IBKR Live-Compatible"] = df_ibkr_live['ibkr_live_wealth']
 
         if wealth_eur is not None:
             wealth_map["Stratégie (EUR)"] = wealth_eur
@@ -879,4 +912,6 @@ def render(data):
                 display_hc_compare_panel("A_HC", 0)
             with comp_hc2:
                 display_hc_compare_panel("B_HC", 2)
+
+
 

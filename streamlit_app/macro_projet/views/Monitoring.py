@@ -35,6 +35,81 @@ SKIP_COLUMNS = {"date", "TAUX_ECB", "TAUX_BOJ", "TAUX_BOC", "TAUX_RBA", "TAUX_BC
                 "WTREGEN", "RRPONTSYD", "WALCL","COPPER","US_DOLLAR_INDEX","VIX"}
 
 
+def _fmt_pct(value):
+    if value is None or pd.isna(value):
+        return "N/A"
+    return f"{value * 100:.2f}%"
+
+
+def render_ibkr_tracking_audit(data):
+    audit = data.get('ibkr_tracking_audit')
+    if not audit:
+        return
+
+    summary = audit.summary
+    st.subheader("Audit Tracking IBKR vs Modele")
+
+    latest_ok = summary.get('latest_run_success')
+    latest_error = summary.get('latest_run_error')
+    if latest_ok is False:
+        st.error(f"Derniere execution IBKR en echec: {latest_error or 'erreur inconnue'}")
+    elif latest_ok is True:
+        st.success("Derniere execution IBKR terminee sans erreur fonctionnelle detectee.")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Live return", _fmt_pct(summary.get('live_return')))
+    m2.metric("Modele meme periode", _fmt_pct(summary.get('model_return')))
+    m3.metric("Tracking gap", _fmt_pct(summary.get('tracking_gap')))
+    m4.metric("Ordres non confirmes", f"{summary.get('unconfirmed_orders_count', 0)}")
+
+    tracking = audit.tracking
+    if tracking is not None and not tracking.empty:
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=tracking['date'], y=tracking['live_index'],
+            mode='lines+markers', name='IBKR NAV logs'
+        ))
+        fig.add_trace(go.Scatter(
+            x=tracking['date'], y=tracking['model_index'],
+            mode='lines', name='Backtest modele meme dates'
+        ))
+        fig.update_layout(
+            title="Live IBKR vs Backtest sur les dates logguees",
+            yaxis_title="Indice base 1000",
+            xaxis_title="Date",
+            height=320,
+            margin=dict(l=20, r=20, t=45, b=20),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+    drift = audit.drift
+    if drift is not None and not drift.empty:
+        latest_ts = drift['timestamp'].max()
+        latest_drift = drift[(drift['timestamp'] == latest_ts) & (drift['abs_diff'] > 0.005)].copy()
+        if not latest_drift.empty:
+            latest_drift = latest_drift.sort_values('abs_diff', ascending=False)
+            latest_drift['current_weight'] = latest_drift['current_weight'] * 100
+            latest_drift['target_weight'] = latest_drift['target_weight'] * 100
+            latest_drift['diff'] = latest_drift['diff'] * 100
+            st.caption("Derniere derive poids courant vs poids cible (>0.5 pt)")
+            st.dataframe(
+                latest_drift[['asset', 'current_weight', 'target_weight', 'diff']].head(20),
+                use_container_width=True,
+                column_config={
+                    'current_weight': st.column_config.NumberColumn('Current (%)', format='%.2f'),
+                    'target_weight': st.column_config.NumberColumn('Target (%)', format='%.2f'),
+                    'diff': st.column_config.NumberColumn('Diff (pts)', format='%+.2f'),
+                }
+            )
+
+    unconfirmed = audit.unconfirmed_orders
+    if unconfirmed is not None and not unconfirmed.empty:
+        st.warning("Des ordres historiques ne sont pas confirmes comme Filled. Le backtest peut donc diverger du compte reel/paper.")
+        cols = ['timestamp', 'asset', 'action', 'status', 'shares', 'filled', 'avgFillPrice', 'error']
+        shown_cols = [c for c in cols if c in unconfirmed.columns]
+        st.dataframe(unconfirmed[shown_cols].tail(25).sort_values('timestamp', ascending=False), use_container_width=True)
+
+
 def render_ibkr_dashboard(data):
     # Attempt to import PortfolioManager
     try:
@@ -43,19 +118,19 @@ def render_ibkr_dashboard(data):
             asyncio.get_event_loop()
         except RuntimeError:
             asyncio.set_event_loop(asyncio.new_event_loop())
-            
+
         from ibkr.portfolio import PortfolioManager
         has_ibkr_module = True
     except ImportError:
         has_ibkr_module = False
-        
+
     c1, c2 = st.columns([1, 1])
-    
+
     with c1:
         st.subheader("Positions Actuelles (Live ou Dernier Log)")
         positions_df = None
         portfolio_val = None
-        
+
         if has_ibkr_module:
             try:
                 # Use a very random client ID to avoid conflicts with other bot instances
@@ -68,13 +143,13 @@ def render_ibkr_dashboard(data):
                     if positions and portfolio_val:
                         # Detect base currency
                         base_curr = pm.get_base_currency()
-                        
+
                         pos_list = []
                         for asset, info in positions.items():
                             raw_val = info['market_value']
                             raw_pnl = info.get('unrealized_pnl', 0)
                             currency = info.get('currency', base_curr)
-                            
+
                             # Convert value to base currency for display and weight
                             if currency != base_curr:
                                 rate = pm.get_exchange_rate(currency, base_curr)
@@ -83,9 +158,9 @@ def render_ibkr_dashboard(data):
                             else:
                                 val_in_base = raw_val
                                 pnl_in_base = raw_pnl
-                                
+
                             weight = (val_in_base / portfolio_val) * 100 if portfolio_val > 0 else 0
-                            
+
                             # Perspective Macro: On affiche l'exposition voulue (Long)
                             display_weight = abs(weight)
                             display_val = abs(val_in_base)
@@ -93,8 +168,8 @@ def render_ibkr_dashboard(data):
 
                             pos_list.append({
                                 'Asset': asset,
-                                'Weight (%)': round(display_weight, 2), 
-                                'Value ($)': round(display_val, 2),      
+                                'Weight (%)': round(display_weight, 2),
+                                'Value ($)': round(display_val, 2),
                                 'Shares': int(display_shares),
                                 'Unrealized PNL ($)': round(pnl_in_base, 2)
                             })
@@ -109,7 +184,7 @@ def render_ibkr_dashboard(data):
                         st.warning("⚠️ Impossible de se connecter à IB Gateway (Live).")
             except Exception as e:
                 logger.error(f"Streamlit IBKR connection error: {e}")
-                
+
         # --- Fallback to logs if live fails or returns nothing ---
         # 1. Fallback for Portfolio Value
         if portfolio_val is None:
@@ -117,10 +192,10 @@ def render_ibkr_dashboard(data):
                 portfolio_val = data['ibkr_last_portfolio_val']
             elif 'ibkr_nav' in data and not data['ibkr_nav'].empty:
                 portfolio_val = data['ibkr_nav'].iloc[-1]['nav']
-            
+
         if portfolio_val is not None:
             st.metric("Valeur du Portefeuille", f"${portfolio_val:,.2f}")
-            
+
         # 2. Fallback for Positions
         if positions_df is not None and not positions_df.empty:
             st.dataframe(positions_df, use_container_width=True)
@@ -130,10 +205,10 @@ def render_ibkr_dashboard(data):
             # Convert weights dict to DataFrame (inclure les v < 0 pour les Shorts)
             weights_df = pd.DataFrame([
                 {
-                    'Asset': k, 
+                    'Asset': k,
                     'Weight (%)': round(abs(v) * 100, 2),
                     'Value ($)': round(abs(v * portfolio_val), 2) if portfolio_val else "-"
-                } 
+                }
                 for k, v in last_pos.items() if abs(v) > 0.001
             ])
             if not weights_df.empty:
@@ -142,42 +217,46 @@ def render_ibkr_dashboard(data):
                 st.info("Aucun poids significatif.")
         else:
             st.info("Recherche de positions...")
-            
+
     with c2:
         st.subheader("Performance Historique")
         if 'ibkr_nav' in data and not data['ibkr_nav'].empty:
             nav_df = data['ibkr_nav'].copy()
             nav_df.set_index('date', inplace=True)
-            
+
             # Plot NAV
             fig_nav = px.line(nav_df, y='nav', title="Evolution du Portefeuille (Logs)", markers=True)
             fig_nav.update_layout(yaxis_title="Valeur ($)", xaxis_title="Date", height=300)
             st.plotly_chart(fig_nav, use_container_width=True)
-            
+
             # Simple stats
             first_val = nav_df['nav'].iloc[0]
             last_val = nav_df['nav'].iloc[-1]
             total_return = (last_val / first_val - 1) * 100 if first_val > 0 else 0
-            
+
             st.metric("Total Return (depuis 1er log)", f"{total_return:.2f}%")
         else:
             st.info("Pas d'historique de NAV (Logs d'exécution introuvables)")
+
+    render_ibkr_tracking_audit(data)
 
     st.subheader("Dernières Transactions (Logs)")
     if 'ibkr_orders' in data and not data['ibkr_orders'].empty:
         df = data['ibkr_orders'].sort_values('Date', ascending=False).head(40)
         # Reorder columns for better readability
-        cols = ['Date', 'Action', 'Asset', 'Status', 'Shares', 'Estimated Value ($)', 'Error', 'Reason']
+        cols = ['Date', 'Action', 'Asset', 'Status', 'Shares', 'Filled', 'Avg Fill', 'Confirmed Fill', 'Estimated Value ($)', 'Error', 'Reason']
         existing_cols = [c for c in cols if c in df.columns]
         df = df[existing_cols]
-        
+
         st.dataframe(
-            df, 
+            df,
             use_container_width=True,
             column_config={
                 "Status": st.column_config.TextColumn("Status", help="Order execution status"),
                 "Error": st.column_config.TextColumn("Détails Erreur", help="Raison du rejet IBKR"),
-                "Estimated Value ($)": st.column_config.NumberColumn("Valeur ($)", format="$%.2f")
+                "Estimated Value ($)": st.column_config.NumberColumn("Valeur ($)", format="$%.2f"),
+                "Avg Fill": st.column_config.NumberColumn("Avg Fill", format="%.4f"),
+                "Confirmed Fill": st.column_config.CheckboxColumn("Filled confirme")
             }
         )
     else:
@@ -198,7 +277,7 @@ def _render_last_indicators(data):
     for i, info in enumerate(top5):
         with cols[i]:
             label = INDICATOR_LABELS.get(info["col"], info["col"].replace("_", " ").title())
-            
+
             # Format values: show as % if small absolute value (e.g. rates/spreads), else 2 dec
             def _fmt(v):
                 return f"{v:.3f}" if abs(v) < 10 else f"{v:,.2f}"
@@ -387,7 +466,7 @@ def render(data):
 
             fig.update_layout(
                 xaxis_title=x_title, yaxis_title=y_title, height=500, showlegend=True,
-                xaxis=dict(range=[-limit, limit], zeroline=True, zerolinecolor='rgba(255,255,255,0.2)'), 
+                xaxis=dict(range=[-limit, limit], zeroline=True, zerolinecolor='rgba(255,255,255,0.2)'),
                 yaxis=dict(range=[-limit, limit], zeroline=True, zerolinecolor='rgba(255,255,255,0.2)'),
                 margin=dict(l=0, r=0, t=30, b=0)
             )
@@ -403,12 +482,12 @@ def render(data):
             last_row = data['backtest'].iloc[-1]
             current_bt_q = int(last_row.get('smooth_quadrant', 1))
             st.caption(f"Base sur le **Regime Modele Q{current_bt_q}** (Lisse)")
-            
+
             # Extract actual weights from backtest result columns
             weight_cols = [c for c in data['backtest'].columns if c.endswith('_base_weight') and '_hc_' not in c]
             weights = last_row[weight_cols]
             weights = weights[weights > 0.005] # Filter tiny values
-            
+
             if not weights.empty:
                 alloc_df = pd.DataFrame({
                     'Asset': [c.replace('_base_weight', '').replace('_weight', '') for c in weights.index],
@@ -441,5 +520,6 @@ def render(data):
             recent = data['quadrants'].tail(20)[['date', 'assigned_quadrant', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']]
             recent['Regime'] = recent['assigned_quadrant'].map(QUADRANT_NAMES)
             st.dataframe(recent[['date', 'Regime', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']], use_container_width=True)
+
 
 

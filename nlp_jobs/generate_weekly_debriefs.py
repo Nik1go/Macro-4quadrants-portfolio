@@ -50,6 +50,7 @@ MODEL_RESULT_KEYS = [
     "key_points",
     "risks",
     "allocation_comment",
+    "performance_attribution",
     "markdown",
 ]
 
@@ -113,13 +114,46 @@ def load_news_context(path):
         return {"available": False, "source": None, "items": [], "note": "No external news file was provided. Do not invent current news."}
     news_path = Path(path)
     if not news_path.exists():
-        raise FileNotFoundError(f"Missing news file: {news_path}")
+        return {"available": False, "source": str(news_path), "items": [], "note": "News file was not found. Do not invent current news."}
     raw = news_path.read_text(encoding="utf-8").strip()
     if not raw:
         return {"available": True, "source": str(news_path), "items": []}
-    if news_path.suffix.lower() == ".json":
-        return {"available": True, "source": str(news_path), "items": json.loads(raw)}
-    return {"available": True, "source": str(news_path), "items": raw}
+    if news_path.suffix.lower() == ".jsonl":
+        items = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    elif news_path.suffix.lower() == ".json":
+        items = json.loads(raw)
+    else:
+        items = raw
+    return {"available": True, "source": str(news_path), "items": items}
+
+
+def item_date(value):
+    if not isinstance(value, dict):
+        return None
+    for key in ["date", "published_at", "seendate", "seen_date"]:
+        if value.get(key):
+            parsed = pd.to_datetime(value[key], errors="coerce", utc=True)
+            if pd.notna(parsed):
+                return parsed.tz_convert(None).normalize()
+    return None
+
+
+def filter_news_context(news_context, start, end, max_items=8):
+    if not news_context.get("available"):
+        return news_context
+    items = news_context.get("items", [])
+    if not isinstance(items, list):
+        return news_context
+    start_ts = pd.Timestamp(start).normalize()
+    end_ts = pd.Timestamp(end).normalize()
+    filtered = []
+    for item in items:
+        dt = item_date(item)
+        if dt is None or not (start_ts <= dt <= end_ts):
+            continue
+        filtered.append(item)
+    filtered.sort(key=lambda row: (row.get("relevance_score", 0), str(row.get("date", ""))), reverse=True)
+    return {**news_context, "items": filtered[:max_items], "total_items_in_period": len(filtered)}
 
 
 def load_existing(path):
@@ -303,7 +337,8 @@ def build_week_payload(start, end, backtest, quadrants, indicators, strategy_sta
         "current_allocation": current_allocation(latest_bt),
         "allocation_changes": allocation_changes(week_bt),
     }
-    payload = {"period_start": metrics["period_start"], "period_end": metrics["period_end"], "metrics": metrics, "news_context": news_context}
+    weekly_news_context = filter_news_context(news_context, start, end)
+    payload = {"period_start": metrics["period_start"], "period_end": metrics["period_end"], "metrics": metrics, "news_context": weekly_news_context}
     payload["input_digest"] = hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
     return payload
 
@@ -327,6 +362,17 @@ def compact_model_input(payload):
         "indicator_moves": metrics.get("top_indicator_moves", [])[:8],
         "indicator_scores": metrics.get("latest_indicator_scores", [])[:8],
         "news_context": payload.get("news_context", {}),
+        "attribution_focus": {
+            "explain_gold_if_abs_week_move_gt_2pct": True,
+            "explain_strategy_gap_vs_sp500_and_gold": True,
+            "score_units": {
+                "risk_on_score": "-1 = risk-off, 0 = neutral, +1 = risk-on",
+                "growth_score": "-1 = growth stress, 0 = neutral, +1 = strong growth impulse",
+                "inflation_pressure_score": "-1 = disinflation pressure, 0 = neutral, +1 = inflation pressure",
+                "policy_risk_score": "-1 = policy relief, 0 = neutral/unknown, +1 = Fed/fiscal/geopolitical policy risk",
+                "confidence": "0 = weak confidence in the NLP reading, 1 = strong confidence; not a return probability",
+            },
+        },
     }
 
 
@@ -336,6 +382,10 @@ def system_prompt():
         "Tu ecris en francais clair, lisible, utile pour un dashboard. "
         "Tu ne donnes pas de conseil d'investissement personnalise et tu ne promets jamais de performance. "
         "Tu relies strictement les donnees fournies: performance, quadrant, indicateurs, allocation et news si elles existent. "
+        "Les scores NLP sont des scores normalises: -1 a +1 pour les biais directionnels, 0 a 1 pour confidence. "
+        "Confidence n'est pas une probabilite de performance; c'est le degre de confiance dans la lecture narrative. "
+        "Policy risk mesure le risque Fed/fiscal/reglementaire/geopolitique deduit des donnees fournies; 0 signifie neutre ou information insuffisante. "
+        "Explique les ecarts de performance, surtout si l'or bouge fortement ou si la strategie sous-performe. "
         "Si aucune news n'est fournie, dis-le sobrement et n'invente aucun evenement recent. "
         "Ne copie jamais les donnees sous forme de JSON dans les champs redactionnels."
     )
@@ -352,6 +402,12 @@ def structured_schema():
         "key_points": ["short bullet", "short bullet", "short bullet"],
         "risks": ["short bullet", "short bullet", "short bullet"],
         "allocation_comment": "2 readable French sentences",
+        "performance_attribution": {
+            "gold_move_explanation": "why gold likely moved from the provided rates, dollar, inflation, volatility and risk indicators; say if data is insufficient",
+            "strategy_vs_benchmark_gap": "why the strategy beat or lagged S&P 500 and gold this week",
+            "model_miss_explanation": "plain-language explanation of what the model did not capture this week",
+            "what_to_monitor": ["specific indicator to monitor", "specific indicator to monitor"]
+        },
     }
 
 
@@ -511,6 +567,13 @@ def coerce_model_result(model_result, payload=None):
     coerced["key_points"] = as_list(model_result.get("key_points"))[:5]
     coerced["risks"] = as_list(model_result.get("risks"))[:5]
     coerced["allocation_comment"] = str(model_result.get("allocation_comment") or "").strip()
+    attribution = as_dict(model_result.get("performance_attribution"))
+    coerced["performance_attribution"] = {
+        "gold_move_explanation": str(attribution.get("gold_move_explanation") or "").strip(),
+        "strategy_vs_benchmark_gap": str(attribution.get("strategy_vs_benchmark_gap") or "").strip(),
+        "model_miss_explanation": str(attribution.get("model_miss_explanation") or "").strip(),
+        "what_to_monitor": as_list(attribution.get("what_to_monitor"))[:5],
+    }
     coerced["markdown"] = clean_markdown(model_result.get("markdown"), coerced, payload)
     return coerced
 
@@ -546,6 +609,7 @@ def build_fallback_markdown(model_result, payload=None):
     metrics = payload.get("metrics", {}) if isinstance(payload, dict) else {}
     signal = as_dict(model_result.get("nlp_signal"))
     forward = as_dict(model_result.get("forward_view"))
+    attribution = as_dict(model_result.get("performance_attribution"))
     allocation = metrics.get("current_allocation", {})
     allocation_text = ", ".join(f"{asset}: {weight * 100:.1f}%" for asset, weight in allocation.items()) or "non disponible"
     lines = [
@@ -555,11 +619,15 @@ def build_fallback_markdown(model_result, payload=None):
         model_result.get("strategy_status") or "Synthese non disponible.",
         "",
         "## Performance",
-        f"Strategie: {format_pct_text(metrics.get('strategy_week_return'))} | S&P 500: {format_pct_text(metrics.get('sp500_week_return'))} | Drawdown semaine: {format_pct_text(metrics.get('week_max_drawdown'))}.",
+        f"Strategie: {format_pct_text(metrics.get('strategy_week_return'))} | S&P 500: {format_pct_text(metrics.get('sp500_week_return'))} | Or: {format_pct_text(metrics.get('gold_week_return'))} | Drawdown semaine: {format_pct_text(metrics.get('week_max_drawdown'))}.",
         "",
         "## Signal NLP",
-        f"Risk-on {format_signal_text(signal.get('risk_on_score'))}, croissance {format_signal_text(signal.get('growth_score'))}, inflation {format_signal_text(signal.get('inflation_pressure_score'))}, confiance {format_pct_text(signal.get('confidence'))}.",
+        f"Risk-on {format_signal_text(signal.get('risk_on_score'))}, croissance {format_signal_text(signal.get('growth_score'))}, inflation {format_signal_text(signal.get('inflation_pressure_score'))}, confiance {format_signal_text(signal.get('confidence'))}.",
         signal.get("rationale") or "Rationale non disponible.",
+        "",
+        "## Attribution",
+        attribution.get("gold_move_explanation") or "Attribution de l'or non disponible.",
+        attribution.get("model_miss_explanation") or "Explication de l'ecart modele non disponible.",
         "",
         "## Allocation",
         f"Allocation actuelle: {allocation_text}.",
@@ -679,7 +747,8 @@ def main():
         raise RuntimeError(message)
 
     backtest, quadrants, indicators = load_inputs(base_dir)
-    news_context = load_news_context(args.news_file)
+    default_news_file = base_dir / "nlp" / "news_events.jsonl"
+    news_context = load_news_context(args.news_file or default_news_file)
     strategy_start = pd.Timestamp(args.start_date)
     latest_date = pd.Timestamp(args.end_date) if args.end_date else backtest["date"].max()
     week_periods = completed_week_periods(strategy_start, latest_date)
@@ -718,6 +787,7 @@ def main():
             "key_points": model_result.get("key_points", []),
             "risks": model_result.get("risks", []),
             "allocation_comment": model_result.get("allocation_comment", ""),
+            "performance_attribution": model_result.get("performance_attribution", {}),
             "markdown": model_result.get("markdown", ""),
             "usage": usage,
         }

@@ -6,6 +6,12 @@ Configuration settings for Interactive Brokers API connection.
 
 # ===== CONNECTION SETTINGS =====
 import os
+from ibkr.live_universe import (
+    selected_contract_details,
+    selected_etf_mapping,
+    selected_yfinance_mapping,
+)
+
 HOST = "127.0.0.1"          # Localhost (IB Gateway runs on the same VPS via Docker)
 PAPER_PORT = 4002           # Paper trading port (IB Gateway default)
 LIVE_PORT = 4001            # Live trading port (IB Gateway default)
@@ -16,46 +22,12 @@ ACCOUNT_ID = os.getenv("IBKR_ACCOUNT_ID", "")  # Specific account to manage (e.g
 # Use paper trading by default for safety
 CURRENT_PORT = PAPER_PORT
 
-# ===== ETF SYMBOL MAPPING (UCITS - EU Compliant) =====
-# Using UCITS ETFs tradeable by EU retail investors (PRIIPs compliant)
-# Trading on Euronext Amsterdam (AEB) - better liquidity for EU traders
-
-# IBKR tickers (used for order execution)
-ETF_MAPPING = {
-    'SP500': 'SXR8',        # iShares Core S&P 500 UCITS (Xetra)
-    'GOLD_OZ_USD': 'SGLD',  # iShares Physical Gold ETC (AEB)
-    'SmallCAP': 'IUSN',     # iShares MSCI World Small Cap UCITS (AEB)
-    'US_REIT_VNQ': 'IUSP',  # iShares US Property Yield UCITS (AEB)
-    'TREASURY_10Y': 'SXRM', # iShares $ Treasury Bond 7-10yr UCITS (Xetra) - 0.07% TER
-    'OBLIGATION': 'LQDE',   # iShares $ Corp Bond UCITS (AEB)
-    'NASDAQ_100': 'SXRV',   # iShares Nasdaq 100 UCITS (Xetra ticker on AEB)
-    'COMMODITIES': 'EXXY',  # iShares Diversified Commodity Swap UCITS (AEB)
-    'SHORT_SP500': 'DXS3',  # Xtrackers S&P 500 Inverse Daily Swap UCITS ETF (ISIN: LU0322251520)
-    'USD_JPY': 'USD_JPY',   # Forex pairing, using custom CONTRACT_DETAILS below
-    'USD_EUR': 'USD_EUR',   # Forex pairing
-}
-
-# Contract detail overrides (optional - if SMART routing fails or needs primaryExchange)
-CONTRACT_DETAILS = {
-    'SXRM': {'secIdType': 'ISIN', 'secId': 'IE00B1FZS798', 'exchange': 'SMART', 'currency': 'EUR'},
-    'LQDE': {'secIdType': 'ISIN', 'secId': 'IE0032895942', 'exchange': 'SMART', 'currency': 'EUR'},
-    'DXS3': {'secIdType': 'ISIN', 'secId': 'LU0322251520', 'exchange': 'SMART', 'currency': 'EUR'},
-    'USD_JPY': {'symbol': 'USD', 'secType': 'CFD', 'exchange': 'SMART', 'currency': 'JPY'},
-    'USD_EUR': {'symbol': 'EUR', 'secType': 'CFD', 'exchange': 'SMART', 'currency': 'USD'},
-}
-
-# Yahoo Finance tickers (used for price lookup - need exchange suffix)
-YFINANCE_MAPPING = {
-    'SP500': 'SXR8.DE',        # Xetra (Germany)
-    'GOLD_OZ_USD': 'SGLD.L',   # London (Gold ETC)
-    'SmallCAP': 'IUSN.AS',     # Amsterdam
-    'US_REIT_VNQ': 'IUSP.L',   # London
-    'TREASURY_10Y': 'SXRM.DE', # Xetra
-    'OBLIGATION': 'LQDE.L',    # London
-    'NASDAQ_100': 'SXRV.DE',   # Germany (Xetra)
-    'COMMODITIES': 'EXXY.DE',  # Germany
-}
-
+# ===== ETF SYMBOL MAPPING (UCITS / IBKR LIVE UNIVERSE) =====
+# Single source of truth lives in ibkr/live_universe.py.
+# This keeps execution, Yahoo live-compatible prices, and contract details aligned.
+ETF_MAPPING = selected_etf_mapping()
+CONTRACT_DETAILS = selected_contract_details()
+YFINANCE_MAPPING = selected_yfinance_mapping()
 
 # ===== SAFETY LIMITS (Paper Trading) =====
 MAX_ORDER_VALUE_USD = 1000000    # Maximum value per single order (for 1M portfolio)
@@ -87,8 +59,9 @@ SKIP_WEEKENDS = True
 SKIP_US_HOLIDAYS = True
 
 # ===== DATA PATHS (Fallback) =====
-import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ASSETS_DATA_PATH = os.path.join(BASE_DIR, "data", "US", "output_dag", "Assets_daily.parquet")
 FOREX_DATA_PATH = os.path.join(BASE_DIR, "data", "US", "output_dag", "Forex_daily.parquet")
+LIVE_ASSETS_DATA_PATH = os.path.join(BASE_DIR, "data", "US", "backtest_results", "ibkr_live_prices.csv")
+
 

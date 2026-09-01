@@ -26,19 +26,19 @@ def get_current_quadrant(backtest_output_dir: str) -> int:
     Read the current (latest) quadrant from backtest results.
     """
     timeseries_path = os.path.join(backtest_output_dir, "backtest_timeseries.csv")
-    
+
     if not os.path.exists(timeseries_path):
         raise FileNotFoundError(f"Backtest timeseries not found: {timeseries_path}")
-    
+
     df = pd.read_csv(timeseries_path, parse_dates=['date'])
     df = df.sort_values('date')
-    
+
     # Get the latest quadrant
     latest_quadrant = int(df['smooth_quadrant'].iloc[-1])
     latest_date = df['date'].iloc[-1]
-    
+
     logger.info(f"Current quadrant: Q{latest_quadrant} (as of {latest_date.date()})")
-    
+
     return latest_quadrant
 
 
@@ -50,29 +50,29 @@ def get_target_weights(backtest_output_dir: str) -> Dict[str, float]:
     timeseries_path = os.path.join(backtest_output_dir, "backtest_timeseries.csv")
     if not os.path.exists(timeseries_path):
         raise FileNotFoundError(f"Backtest results not found: {timeseries_path}")
-        
+
     df = pd.read_csv(timeseries_path)
     if df.empty:
         raise ValueError("Backtest timeseries is empty")
-        
+
     # Take the last row (latest optimized state)
     last_row = df.iloc[-1]
-    
+
     # Extract columns ending with _weight but exclude _base_weight and _hc_weight
     # This selects the final '_weight' columns which include the Trend Following overlay
     weight_cols = [c for c in df.columns if c.endswith('_weight') and not c.endswith('_base_weight') and not c.endswith('_hc_weight')]
-    
+
     target_weights = {}
     for col in weight_cols:
         asset_name = col.replace('_weight', '')
         weight = float(last_row[col])
         if weight >= 0.0:
             target_weights[asset_name] = weight
-            
+
     # Verification: total weight should be approx 1.0 (some assets might be 0)
     total_w = sum(target_weights.values())
     logger.info(f"Dynamically loaded weights (Total={total_w:.1%}): {target_weights}")
-    
+
     return target_weights
 
 
@@ -84,25 +84,25 @@ def execute_strategy(
 ) -> Dict[str, Any]:
     """
     Main execution function: reads backtest results and executes trades.
-    
+
     This function:
     1. Reads the current quadrant from backtest results
     2. Gets target allocation for that quadrant
     3. Reads current positions from IBKR
     4. Calculates rebalancing orders (if delta > threshold)
     5. Executes orders
-    
+
     Args:
         backtest_output_dir: Path to backtest results (contains backtest_timeseries.csv)
         dry_run: If True, only log orders without executing
         rebalance_threshold: Minimum weight difference to trigger rebalance
         execution_log_dir: Directory to save execution logs (default: data/US/execution_logs)
-        
+
     Returns:
         Execution summary dict
     """
     execution_start = datetime.now()
-    
+
     result = {
         'timestamp': execution_start.isoformat(),
         'dry_run': dry_run,
@@ -112,33 +112,35 @@ def execute_strategy(
         'target_weights': None,
         'current_weights': None,
         'portfolio_value': None,
+        'post_execution_weights': None,
+        'post_execution_portfolio_value': None,
         'orders': [],
         'execution_result': None
     }
-    
+
     # Set up logging directory
     if execution_log_dir is None:
         base_dir = os.path.dirname(backtest_output_dir)
         execution_log_dir = os.path.join(base_dir, "execution_logs")
     os.makedirs(execution_log_dir, exist_ok=True)
-    
+
     try:
         # 1. Get current quadrant from backtest (for logging/metadata)
         quadrant = get_current_quadrant(backtest_output_dir)
         result['quadrant'] = quadrant
-        
+
         # 2. Get target weights dynamically from backtest results
         target_weights = get_target_weights(backtest_output_dir)
         result['target_weights'] = target_weights
         logger.info(f"Target weights loaded from CSV (Quadrant Q{quadrant}): {target_weights}")
-        
+
         # 3. Connect to IBKR and get current positions
         pm = PortfolioManager()
         om = OrderManager()
-        
+
         if not pm.connect():
             raise ConnectionError("Failed to connect PortfolioManager to IBKR")
-        
+
         try:
             current_weights = pm.get_current_weights()
             portfolio_value = pm.get_portfolio_value()
@@ -146,16 +148,16 @@ def execute_strategy(
             result['current_weights'] = current_weights
             result['portfolio_value'] = portfolio_value
             result['base_currency'] = base_currency
-            
+
             logger.info(f"Portfolio value: {portfolio_value:,.2f} {base_currency}")
             logger.info(f"Current weights: {current_weights}")
         finally:
             pm.disconnect()
-        
+
         # 4. Calculate rebalancing orders
         if not om.connect():
             raise ConnectionError("Failed to connect OrderManager to IBKR")
-        
+
         try:
             orders = om.calculate_rebalance_orders(
                 current_weights=current_weights,
@@ -164,7 +166,7 @@ def execute_strategy(
                 threshold=rebalance_threshold,
                 base_currency=base_currency
             )
-            
+
             result['orders'] = [
                 {
                     'asset': o.asset_name,
@@ -176,16 +178,18 @@ def execute_strategy(
                 }
                 for o in orders
             ]
-            
+
             if not orders:
                 logger.info("No rebalancing needed - all positions within threshold")
                 result['success'] = True
                 result['execution_result'] = {'message': 'No rebalancing needed'}
+                result['post_execution_weights'] = current_weights
+                result['post_execution_portfolio_value'] = portfolio_value
             else:
                 # 5. Execute orders
                 execution_result = om.execute_orders(orders, dry_run=dry_run)
                 result['execution_result'] = execution_result
-                
+
                 # Merge status into orders list for better logging
                 for order_log in result['orders']:
                     asset = order_log['asset']
@@ -193,30 +197,48 @@ def execute_strategy(
                     status_info = next((o for o in execution_result.get('executed', []) if o['asset'] == asset), None)
                     if not status_info:
                         status_info = next((o for o in execution_result.get('failed', []) if o['asset'] == asset), None)
-                    
+
                     if status_info:
                         order_log['status'] = status_info.get('status', 'Unknown')
                         order_log['filled'] = status_info.get('filled', 0)
+                        order_log['remaining'] = status_info.get('remaining', 0)
                         order_log['avgFillPrice'] = status_info.get('avgFillPrice', 0)
+                        order_log['confirmed_fill'] = status_info.get('confirmed_fill', False)
                         order_log['error'] = status_info.get('error')
                     elif dry_run:
                         order_log['status'] = 'Dry Run'
                     else:
                         order_log['status'] = 'Submitted'
-                
+
                 result['success'] = len(execution_result.get('failed', [])) == 0
-                
+
+                # Snapshot the account after execution so tracking can compare the
+                # actual account state, not only the submitted order intent.
+                if not dry_run:
+                    pm_after = PortfolioManager()
+                    if pm_after.connect():
+                        try:
+                            result['post_execution_weights'] = pm_after.get_current_weights()
+                            result['post_execution_portfolio_value'] = pm_after.get_portfolio_value()
+                        finally:
+                            pm_after.disconnect()
+                    else:
+                        logger.warning("Could not capture post-execution IBKR portfolio snapshot")
+                else:
+                    result['post_execution_weights'] = current_weights
+                    result['post_execution_portfolio_value'] = portfolio_value
+
         finally:
             om.disconnect()
-        
+
     except Exception as e:
         logger.error(f"Strategy execution failed: {e}")
         result['error'] = str(e)
         result['success'] = False
-        
+
         # Send alert on failure
         send_alert(f"<b>Strategy Execution Failed</b>\nError: {e}", severity="error")
-    
+
     # Send alert if there are failed orders
     if result.get('execution_result') and result['execution_result'].get('failed'):
         failed_count = len(result['execution_result']['failed'])
@@ -226,15 +248,15 @@ def execute_strategy(
     # Save execution log
     execution_end = datetime.now()
     result['duration_seconds'] = (execution_end - execution_start).total_seconds()
-    
+
     log_filename = f"execution_{execution_start.strftime('%Y-%m-%d_%H%M%S')}.json"
     log_path = os.path.join(execution_log_dir, log_filename)
-    
+
     with open(log_path, 'w') as f:
         json.dump(result, f, indent=2, default=str)
-    
+
     logger.info(f"Execution log saved to: {log_path}")
-    
+
     # Print summary
     print(f"\n{'='*50}")
     print(f"IBKR Strategy Execution Summary")
@@ -252,7 +274,7 @@ def execute_strategy(
     if result['error']:
         print(f"Error: {result['error']}")
     print(f"{'='*50}\n")
-    
+
     return result
 
 
@@ -260,13 +282,13 @@ def execute_strategy(
 def airflow_execute_strategy(**kwargs) -> Dict[str, Any]:
     """
     Wrapper for Airflow PythonOperator.
-    
+
     Reads parameters from op_kwargs.
     """
     backtest_output_dir = kwargs.get('backtest_output_dir')
     dry_run = kwargs.get('dry_run', False)
     rebalance_threshold = kwargs.get('rebalance_threshold', REBALANCE_THRESHOLD)
-    
+
     return execute_strategy(
         backtest_output_dir=backtest_output_dir,
         dry_run=dry_run,
@@ -276,22 +298,22 @@ def airflow_execute_strategy(**kwargs) -> Dict[str, Any]:
 
 if __name__ == "__main__":
     import sys
-    
+
     if len(sys.argv) < 2:
         print("Usage: python -m ibkr.executor <backtest_output_dir> [--dry-run]")
         print("Example: python -m ibkr.executor data/US/backtest_results")
         sys.exit(1)
-    
+
     backtest_dir = sys.argv[1]
     is_dry_run = '--dry-run' in sys.argv
-    
+
     # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
     result = execute_strategy(backtest_dir, dry_run=is_dry_run)
-    
+
     if not result['success']:
         sys.exit(1)
