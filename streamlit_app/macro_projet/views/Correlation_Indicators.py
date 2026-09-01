@@ -3,8 +3,10 @@ Page 5: NLP Weekly Debrief
 Weekly macro/strategy debrief generated with OpenRouter.
 """
 
+import ast
 import json
 import os
+import re
 
 import pandas as pd
 import plotly.express as px
@@ -104,29 +106,48 @@ MODEL_RESULT_KEYS = [
 ]
 
 
+def strip_code_fence(value):
+    cleaned = value.strip()
+    if not cleaned.startswith("```"):
+        return cleaned
+    cleaned = cleaned.removeprefix("```").strip()
+    if cleaned.lower().startswith("json"):
+        cleaned = cleaned[4:].strip()
+    if cleaned.endswith("```"):
+        cleaned = cleaned[:-3].strip()
+    return cleaned
+
+
 def parse_json_object_text(value):
     if isinstance(value, dict):
         return value
     if not isinstance(value, str):
         return {}
-    cleaned = value.strip()
+    cleaned = strip_code_fence(value)
     if not cleaned:
         return {}
-    if cleaned.startswith("```"):
-        cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
-        if cleaned.lower().startswith("json"):
-            cleaned = cleaned[4:].strip()
-    try:
-        parsed = json.loads(cleaned)
-    except json.JSONDecodeError:
-        start = cleaned.find("{")
-        if start < 0:
-            return {}
+    for candidate in [cleaned, cleaned[cleaned.find("{"):] if "{" in cleaned else ""]:
+        if not candidate:
+            continue
         try:
-            parsed, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+            parsed = json.loads(candidate)
+            return parsed if isinstance(parsed, dict) else {}
         except json.JSONDecodeError:
-            return {}
-    return parsed if isinstance(parsed, dict) else {}
+            pass
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(candidate)
+            return parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            pass
+        pythonish = re.sub(r"\bnull\b", "None", candidate)
+        pythonish = re.sub(r"\btrue\b", "True", pythonish, flags=re.IGNORECASE)
+        pythonish = re.sub(r"\bfalse\b", "False", pythonish, flags=re.IGNORECASE)
+        try:
+            parsed = ast.literal_eval(pythonish)
+            return parsed if isinstance(parsed, dict) else {}
+        except (SyntaxError, ValueError):
+            pass
+    return {}
 
 
 def is_empty_or_fallback(value):
@@ -180,6 +201,68 @@ def normalize_debrief_record(record):
         elif is_empty_or_fallback(current):
             normalized[key] = replacement
     return normalized
+
+
+def display_pct(value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "n/a"
+    return f"{numeric * 100:+.2f}%"
+
+
+def display_signal(value):
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "n/a"
+    return f"{numeric:+.2f}"
+
+
+def fallback_debrief_markdown(record, metrics, signal, forward_view):
+    allocation = safe_dict(metrics.get("current_allocation"))
+    allocation_text = ", ".join(
+        f"{clean_asset_name(asset)}: {pd.to_numeric(weight, errors='coerce') * 100:.1f}%"
+        for asset, weight in allocation.items()
+        if not str(asset).endswith("_base") and not pd.isna(pd.to_numeric(weight, errors="coerce"))
+    ) or "non disponible"
+    lines = [
+        f"# {safe_text(record.get('title'), 'Debrief hebdomadaire')}",
+        "",
+        "## Synthese",
+        safe_text(record.get("strategy_status"), "Synthese non disponible."),
+        "",
+        "## Performance",
+        f"Strategie: {display_pct(metrics.get('strategy_week_return'))} | S&P 500: {display_pct(metrics.get('sp500_week_return'))} | Drawdown: {display_pct(metrics.get('week_max_drawdown'))}.",
+        "",
+        "## Signal NLP",
+        f"Risk-on {display_signal(signal.get('risk_on_score'))}, croissance {display_signal(signal.get('growth_score'))}, inflation {display_signal(signal.get('inflation_pressure_score'))}, confiance {display_pct(signal.get('confidence'))}.",
+        safe_text(signal.get("rationale"), "Rationale non disponible."),
+        "",
+        "## Allocation",
+        f"Allocation actuelle: {allocation_text}.",
+        safe_text(record.get("allocation_comment"), "Aucun commentaire d'allocation disponible."),
+        "",
+        "## Vue prospective",
+        safe_text(forward_view.get("base_case_next_week"), "Scenario central non disponible."),
+    ]
+    return "\n".join(lines).strip()
+
+
+def clean_display_markdown(markdown, record, metrics, signal, forward_view):
+    if not isinstance(markdown, str) or not markdown.strip():
+        return fallback_debrief_markdown(record, metrics, signal, forward_view)
+    embedded = parse_json_object_text(markdown)
+    if embedded:
+        inner = embedded.get("markdown")
+        if isinstance(inner, str) and inner.strip() and not parse_json_object_text(inner):
+            return inner.strip()
+        repaired = normalize_debrief_record({**record, **embedded})
+        return fallback_debrief_markdown(
+            repaired,
+            safe_dict(repaired.get("metrics")) or metrics,
+            safe_dict(repaired.get("nlp_signal")) or signal,
+            safe_dict(repaired.get("forward_view")) or forward_view,
+        )
+    return markdown.strip()
 
 
 def render(data):
@@ -238,7 +321,7 @@ def render(data):
         st.caption(f"Model: {model_name}")
 
     st.divider()
-    st.markdown(safe_text(record.get("markdown") or record.get("macro_regime"), "Debrief unavailable."))
+    st.markdown(clean_display_markdown(record.get("markdown") or record.get("macro_regime"), record, metrics, signal, forward_view))
 
     col_left, col_right = st.columns(2)
     with col_left:
