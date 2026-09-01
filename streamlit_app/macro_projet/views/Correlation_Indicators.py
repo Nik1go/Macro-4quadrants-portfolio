@@ -90,6 +90,98 @@ def format_signal_value(value):
     return f"{numeric:+.2f}"
 
 
+MODEL_RESULT_KEYS = [
+    "title",
+    "macro_regime",
+    "strategy_status",
+    "available_information",
+    "nlp_signal",
+    "forward_view",
+    "key_points",
+    "risks",
+    "allocation_comment",
+    "markdown",
+]
+
+
+def parse_json_object_text(value):
+    if isinstance(value, dict):
+        return value
+    if not isinstance(value, str):
+        return {}
+    cleaned = value.strip()
+    if not cleaned:
+        return {}
+    if cleaned.startswith("```"):
+        cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:].strip()
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find("{")
+        if start < 0:
+            return {}
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+        except json.JSONDecodeError:
+            return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def is_empty_or_fallback(value):
+    if is_missing(value):
+        return True
+    if isinstance(value, dict):
+        return not value or all(is_empty_or_fallback(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return not value or all(is_empty_or_fallback(item) for item in value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return not normalized or "non parseable" in normalized or "fallback because model output" in normalized
+    return False
+
+
+def is_fallback_signal(signal):
+    signal = safe_dict(signal)
+    if not signal:
+        return True
+    score_keys = ["risk_on_score", "growth_score", "inflation_pressure_score", "policy_risk_score", "confidence"]
+    values = pd.to_numeric([signal.get(key) for key in score_keys], errors="coerce")
+    all_zero = all(pd.notna(value) and abs(value) < 1e-12 for value in values)
+    rationale = str(signal.get("rationale", "")).lower()
+    return all_zero and ("fallback" in rationale or signal.get("suggested_use") == "shadow_only")
+
+
+def normalize_debrief_record(record):
+    normalized = dict(record)
+    embedded = {}
+    for key in ["raw_model_result", "model_result", "markdown"]:
+        embedded = parse_json_object_text(normalized.get(key))
+        if embedded:
+            break
+    if not embedded:
+        return normalized
+
+    for key in MODEL_RESULT_KEYS:
+        if key not in embedded:
+            continue
+        current = normalized.get(key)
+        replacement = embedded.get(key)
+        if key == "nlp_signal":
+            if is_fallback_signal(current):
+                normalized[key] = replacement
+        elif key == "markdown":
+            if is_empty_or_fallback(current) or parse_json_object_text(current):
+                normalized[key] = replacement
+        elif key == "title":
+            if is_empty_or_fallback(current) or current == "Debrief hebdomadaire":
+                normalized[key] = replacement
+        elif is_empty_or_fallback(current):
+            normalized[key] = replacement
+    return normalized
+
+
 def render(data):
     st.header("NLP Weekly Debrief")
     st.caption(
@@ -120,7 +212,7 @@ def render(data):
         for row in nlp_df.itertuples()
     ]
     selected_label = st.selectbox("Analysed week", labels, index=len(labels) - 1)
-    record = nlp_df.iloc[labels.index(selected_label)].to_dict()
+    record = normalize_debrief_record(nlp_df.iloc[labels.index(selected_label)].to_dict())
     metrics = safe_dict(record.get("metrics"))
     signal = safe_dict(record.get("nlp_signal"))
     forward_view = safe_dict(record.get("forward_view"))
@@ -213,8 +305,13 @@ def render(data):
     with alloc_col:
         st.markdown("### Current allocation")
         allocation = safe_dict(metrics.get("current_allocation"))
-        if allocation:
-            alloc_df = pd.DataFrame([{"Asset": clean_asset_name(asset), "Weight": weight * 100} for asset, weight in allocation.items()])
+        alloc_rows = [
+            {"Asset": clean_asset_name(asset), "Weight": pd.to_numeric(weight, errors="coerce") * 100}
+            for asset, weight in allocation.items()
+            if not str(asset).endswith("_base")
+        ]
+        if alloc_rows:
+            alloc_df = pd.DataFrame(alloc_rows).dropna(subset=["Weight"])
             fig_alloc = px.bar(alloc_df, x="Weight", y="Asset", orientation="h", text=alloc_df["Weight"].map(lambda value: f"{value:.1f}%"))
             fig_alloc.update_layout(height=330, xaxis_title="Weight (%)", yaxis_title="")
             st.plotly_chart(fig_alloc, use_container_width=True)

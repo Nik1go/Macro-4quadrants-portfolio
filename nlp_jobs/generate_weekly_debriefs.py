@@ -204,26 +204,34 @@ def latest_indicator_scores(quadrant_row):
     return rows[:10]
 
 
+def is_live_weight_column(col):
+    return col.endswith("_weight") and not col.endswith("_base_weight") and "_hc_" not in col
+
+
+def asset_name_from_weight_column(col):
+    return col.replace("_weight", "")
+
+
 def current_allocation(backtest_row):
     allocation = {}
     for col in backtest_row.index:
-        if not col.endswith("_weight"):
+        if not is_live_weight_column(col):
             continue
         value = latest_number(backtest_row, col)
         if value and abs(value) > 0.000001:
-            allocation[col.replace("_weight", "")] = value
+            allocation[asset_name_from_weight_column(col)] = value
     return dict(sorted(allocation.items(), key=lambda item: item[1], reverse=True))
 
 
 def allocation_changes(backtest_window):
-    weight_cols = [col for col in backtest_window.columns if col.endswith("_weight")]
+    weight_cols = [col for col in backtest_window.columns if is_live_weight_column(col)]
     if not weight_cols or len(backtest_window) < 2:
         return {}
     first = backtest_window.iloc[0][weight_cols]
     last = backtest_window.iloc[-1][weight_cols]
     changes = (last - first).dropna()
     changes = changes[changes.abs() > 0.000001].sort_values(key=lambda s: s.abs(), ascending=False)
-    return {col.replace("_weight", ""): float(value) for col, value in changes.items()}
+    return {asset_name_from_weight_column(col): float(value) for col, value in changes.items()}
 
 
 def build_week_payload(start, end, backtest, quadrants, indicators, strategy_start, news_context):
@@ -311,24 +319,32 @@ def call_openrouter(api_key, model, payload):
 def parse_model_content(content):
     cleaned = content.strip()
     if cleaned.startswith("```"):
-        cleaned = cleaned.strip("`")
+        cleaned = cleaned.removeprefix("```").removesuffix("```").strip()
         if cleaned.lower().startswith("json"):
             cleaned = cleaned[4:].strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        return {
-            "title": "Debrief hebdomadaire",
-            "macro_regime": "",
-            "strategy_status": "",
-            "available_information": {"algo_data": [], "news_data": [], "missing_information": ["Reponse NLP non parseable en JSON strict."]},
-            "nlp_signal": {"risk_on_score": 0, "growth_score": 0, "inflation_pressure_score": 0, "policy_risk_score": 0, "confidence": 0, "suggested_use": "shadow_only", "rationale": "Fallback because model output was not valid JSON."},
-            "forward_view": {"base_case_next_week": "", "bull_case": "", "bear_case": "", "watchlist": []},
-            "key_points": [],
-            "risks": ["Reponse NLP non parseable en JSON strict."],
-            "allocation_comment": "",
-            "markdown": content,
-        }
+        start = cleaned.find("{")
+        if start >= 0:
+            try:
+                parsed, _ = json.JSONDecoder().raw_decode(cleaned[start:])
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+    return {
+        "title": "Debrief hebdomadaire",
+        "macro_regime": "",
+        "strategy_status": "",
+        "available_information": {"algo_data": [], "news_data": [], "missing_information": ["Reponse NLP non parseable en JSON strict."]},
+        "nlp_signal": {"risk_on_score": 0, "growth_score": 0, "inflation_pressure_score": 0, "policy_risk_score": 0, "confidence": 0, "suggested_use": "shadow_only", "rationale": "Fallback because model output was not valid JSON."},
+        "forward_view": {"base_case_next_week": "", "bull_case": "", "bear_case": "", "watchlist": []},
+        "key_points": [],
+        "risks": ["Reponse NLP non parseable en JSON strict."],
+        "allocation_comment": "",
+        "markdown": content,
+    }
 
 
 def load_dotenv_if_present(repo_root):
