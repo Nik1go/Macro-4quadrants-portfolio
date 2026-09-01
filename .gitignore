@@ -36,6 +36,6 @@ agents/*
 diff_backtest.txt
 tests/*
 setup_vps.sh
-
+data/EU/*
 polymarket_arbitrage/data/*
 **/.streamlit/secrets.toml

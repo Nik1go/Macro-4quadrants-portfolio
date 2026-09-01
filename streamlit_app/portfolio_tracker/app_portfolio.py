@@ -318,9 +318,10 @@ def render():
         st.markdown("<p style='color:#b0b0b0;'>Suivi de mon portefeuille : Compte-Titres, PEA, Métaux Précieux (physique), Crypto et biens divers.</p>", unsafe_allow_html=True)
         st.markdown("<p style='color:#b0b0b0;'>Début du portefeuille en mars 2023.</p>", unsafe_allow_html=True)
         st.markdown("<p style='color:#b0b0b0;'>La plupart de mes nouvelles entrées se font en DCA (hebdomadaire) sur les différents ETFs (principalement pays émergents).</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#b0b0b0;'>Ma stratégie actuelle est d'équilibrer mon portefeuille par rapport aux entrées agressives que j'ai pu faire sur l'or, l'argent et Thales.</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#b0b0b0;'>Je souhaiterais aussi, dans un avenir proche,restructurer mon PEA en supprimant certaines lignes pour pouvoir renforcer mes positions stock picking (Constellation Software et Odontoprev étant mes principales convictions), ainsi que mes positions en biens divers.</p>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#b0b0b0;'>A noter que ce portefeuille ne prend pas en compte mes liquidités, mon placement en PER (abondement Interessement et Participation), ainsi que mes placement en biens divers.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#b0b0b0;'>Ma stratégie actuelle est d'équilibrer mon portefeuille par rapport aux entrées agressives que j'ai pu faire sur l'or, l'argent et Thales en 2023/2024.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#b0b0b0;'>Je souhaiterais aussi, dans un avenir proche,restructurer mon PEA en supprimant certaines lignes pour pouvoir renforcer mes positions stock picking sur mon CT (Constellation Software et Odontoprev étant mes principales convictions), ainsi que mes positions en biens divers.</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#b0b0b0;'>A noter que ce portefeuille ne prend pas en compte mes liquidités et donc mes differentes ventes, mon placement en PER (abondement Interessement et Participation), ainsi que mes placement en biens divers (Principalement en lego).</p>", unsafe_allow_html=True)
+        st.markdown("<p style='color:#b0b0b0;'>Je compte faire une Maj de l'interface et ameliorer le suivi quand j'aurais un moment...</p>", unsafe_allow_html=True)
 
     col_title, col_btn = st.columns([5, 1])
     with col_btn:

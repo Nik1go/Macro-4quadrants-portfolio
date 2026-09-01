@@ -281,14 +281,14 @@ def render_home():
     with col2:
         st.markdown("<h3 style='margin-top: 0;'>About Me</h3>", unsafe_allow_html=True)
         st.markdown("""
-        **Passionate engineering student with an insatiable curiosity and a love for learning, particularly in financial markets and macroeconomics.** 
-        I enjoy bridging the gap between technology and finance by building data pipelines, quantitative analysis models, and algorithmic strategies. 
+        **Passionate engineering graduate with an insatiable curiosity and a love for learning, particularly in financial markets and macroeconomics.** 
+        This portfolio is a curated collection of some of the projects I have built to bridge the gap between technology and finance, including data pipelines, quantitative analysis models, and algorithmic strategies. 
         
-        As I approach the end of my engineering degree (July 2026), I am fully committed to transitioning into the financial industry. **I am currently in the interview process for a Master's in Finance at top French business schools (NEOMA, Albert School).** 
+        Having recently validated my engineering degree, I am fully committed to transitioning into the financial industry and am about to begin the MSc Finance & Big Data at NEOMA Business School. 
         
-        **I am actively seeking an apprenticeship position for the 2026-2027 academic year** to apply my engineering background while developing advanced financial expertise.
+        **I am actively seeking an apprenticeship position for the 2026-2027 academic year** to complement my Master's studies, applying my technical background while developing advanced financial expertise.
         """)
-
+    
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("""
     <div class="metric-container">
