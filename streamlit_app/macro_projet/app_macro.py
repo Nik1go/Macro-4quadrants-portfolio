@@ -107,7 +107,7 @@ def render():
         "Monitoring & Live",
         "Backtest & Perf",
         "ML Performance",
-        "Correlation & Indicators"
+        "NLP Weekly Debrief"
     ])
     
     with tab1:

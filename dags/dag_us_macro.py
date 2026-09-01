@@ -750,6 +750,24 @@ with DAG(
         },
         verbose=False
     )
+    generate_weekly_nlp_debrief_task = BashOperator(
+        task_id='generate_weekly_nlp_debrief',
+        bash_command=f"""
+            if [ "$(date +%u)" != "5" ]; then
+                echo "Skipping weekly NLP debrief: today is not Friday."
+                exit 0
+            fi
+
+            cd {PROJECT_ROOT} && \
+            set -a && [ -f .env ] && source .env && set +a && \
+            source {os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'activate')} && \
+            python nlp_jobs/generate_weekly_debriefs.py \
+                --base-dir {base_dir} \
+                --start-date 2026-04-03 \
+                --skip-if-missing-key
+        """,
+    )
+
     ibkr_execute_task = PythonOperator(
         task_id='ibkr_execute',
         python_callable=airflow_execute_strategy,
@@ -768,4 +786,5 @@ with DAG(
     [compute_quadrant_task, format_assets_task] >> compute_assets_performance_task
     [compute_quadrant_task, format_forex_task] >> compute_forex_performance_task
     [compute_assets_performance_task,
-        compute_forex_performance_task] >> backtest_task >> ibkr_execute_task
+        compute_forex_performance_task] >> backtest_task
+    backtest_task >> [generate_weekly_nlp_debrief_task, ibkr_execute_task]

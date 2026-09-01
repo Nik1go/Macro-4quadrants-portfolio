@@ -92,6 +92,29 @@ def load_data():
     except:
         data['indicators'] = None
     
+    try:
+        nlp_path = f"{base_dir}/nlp/weekly_debriefs.jsonl"
+        rows = []
+        if os.path.exists(nlp_path):
+            with open(nlp_path, "r", encoding="utf-8") as handle:
+                for line_number, line in enumerate(handle, start=1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        rows.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        print(f"Ignored invalid NLP JSON line {line_number}")
+        if rows:
+            data['weekly_nlp'] = pd.DataFrame(rows)
+            data['weekly_nlp']['period_start'] = pd.to_datetime(data['weekly_nlp']['period_start'])
+            data['weekly_nlp']['period_end'] = pd.to_datetime(data['weekly_nlp']['period_end'])
+            data['weekly_nlp'] = data['weekly_nlp'].sort_values('period_end')
+        else:
+            data['weekly_nlp'] = None
+    except Exception:
+        data['weekly_nlp'] = None
+
     # --- Load Raw Indicators (for true publication dates & filtering out daily noise) ---
     raw_indicators = []
     # Only keep these specific macroeconomic metrics (exclude WTI, Copper, Interbank, DXY, VIX, Repos)

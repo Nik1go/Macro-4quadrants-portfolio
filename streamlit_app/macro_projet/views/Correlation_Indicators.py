@@ -1,182 +1,248 @@
 """
-Page 5: Correlation & Indicators
-Visualization of raw indicators and their relationships.
+Page 5: NLP Weekly Debrief
+Weekly macro/strategy debrief generated with OpenRouter.
 """
 
-import streamlit as st
-import pandas as pd
-import plotly.graph_objects as go
+import json
 import os
+
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+import streamlit as st
 
 
 @st.cache_data
-def load_indicators():
+def load_weekly_debriefs():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
-    path = os.path.join(project_root, "data", "US", "output_dag", "combined_indicators.csv")
+    path = os.path.join(project_root, "data", "US", "nlp", "weekly_debriefs.jsonl")
+    rows = []
+    if not os.path.exists(path):
+        return None, path
     try:
-        df = pd.read_csv(path, parse_dates=['date'])
-        return df.sort_values('date')
-    except:
-        return None
+        with open(path, "r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except json.JSONDecodeError:
+                    print(f"Ignored invalid NLP JSON line {line_number}")
+    except Exception as exc:
+        print(f"Could not read NLP debriefs: {exc}")
+        return None, path
+    if not rows:
+        return None, path
+    df = pd.DataFrame(rows)
+    df["period_start"] = pd.to_datetime(df["period_start"])
+    df["period_end"] = pd.to_datetime(df["period_end"])
+    return df.sort_values("period_end").reset_index(drop=True), path
+
+
+def is_missing(value):
+    if isinstance(value, (dict, list, tuple)):
+        return False
+    return value is None or pd.isna(value)
+
+
+def safe_text(value, fallback="N/A"):
+    return fallback if is_missing(value) else str(value)
+
+
+def safe_list(value):
+    return value if isinstance(value, list) else []
+
+
+def safe_dict(value):
+    return value if isinstance(value, dict) else {}
+
+
+def clean_asset_name(name):
+    return str(name).replace("_", " ")
+
+
+def fmt_pct(value):
+    if is_missing(value):
+        return "N/A"
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "N/A"
+    return f"{numeric * 100:+.2f}%"
+
+
+def fmt_money(value):
+    if is_missing(value):
+        return "N/A"
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "N/A"
+    return f"{numeric:,.0f}$".replace(",", " ")
+
+
+def format_signal_value(value):
+    if is_missing(value):
+        return "N/A"
+    numeric = pd.to_numeric(value, errors="coerce")
+    if pd.isna(numeric):
+        return "N/A"
+    return f"{numeric:+.2f}"
 
 
 def render(data):
-    st.header("Correlation & Indicators")
+    st.header("NLP Weekly Debrief")
+    st.caption(
+        "Weekly OpenRouter analysis based on current algorithm data. "
+        "The NLP signal is stored as shadow information first, not as a live allocation override."
+    )
 
-    indicators = load_indicators()
+    nlp_df = data.get("weekly_nlp") if isinstance(data, dict) else None
+    nlp_path = None
+    if nlp_df is None:
+        nlp_df, nlp_path = load_weekly_debriefs()
 
-    if indicators is not None:
-        # --- PRE-PROCESSING: Calculate Real Rates & Clean Data ---
-        # 1. Calculate Real Rates (Fed Rate - CPI YoY)
-        if 'TAUX_FED' in indicators.columns and 'INFLATION' in indicators.columns:
-            # Assuming INFLATION is CPI Index, need 1-year change
-            # However, check if 'INFLATION' is already YoY or Index. 
-            # In other scripts: inflation_yoy = calculate_yoy_change(df['INFLATION'], 252)
-            # We will replicate this logic locally for visualization
-            indicators['INFLATION_YOY'] = indicators['INFLATION'].pct_change(periods=252) * 100
-            indicators['REAL_RATES'] = indicators['TAUX_FED'] - indicators['INFLATION_YOY']
-        
-        # 2. Filter out unnecessary columns (Net Liquidity components + others if needed)
-        cols_to_drop = ['WALCL', 'WTREGEN', 'RRPONTSYD', 'INFLATION'] 
-        indicators = indicators.drop(columns=[c for c in cols_to_drop if c in indicators.columns], errors='ignore')
+    if nlp_df is None or nlp_df.empty:
+        st.warning("No weekly NLP debrief has been generated yet.")
+        st.markdown("Run the generator on the VPS/WSL repo after exposing the OpenRouter key:")
+        st.code(
+            "export KEY='sk-or-v1-...'\n"
+            "python nlp_jobs/generate_weekly_debriefs.py --start-date 2026-04-03",
+            language="bash",
+        )
+        if nlp_path:
+            st.caption(f"Expected output: {nlp_path}")
+        return
 
-        # --- APPLY PUBLICATION LAGS (REALISTIC CORRELATION) ---
-        # Same lags as in compute_quadrants.py / train_model.py
-        LAGS_TRADING_DAYS = {
-            # Real-time market data (Lag 0)
-            'WTI_CRUDE_OIL': 0,
-            'US_DOLLAR_INDEX': 0,
-            'VIX': 0,
-            'BREAKEVEN_10Y': 0,
-            'High_Yield_Bond_SPREAD': 0,
-            '10-2Year_Treasury_Yield_Bond': 0,
-            'COPPER': 0,
-            'TAUX_FED': 0,
-            'NET_LIQUIDITY': 0,
-        
-            # Monthly economic indicators (typical publication delays)
-            'IND_PRODUCTION': 35,
-            'HOUSING_PERMITS': 25,
-            'CONSUMER_SENTIMENT': 5,
-            'INITIAL_CLAIMS': 5,
-            'INFLATION_YOY': 30,
-            'USPHCI': 60,
-            'Real_Gross_Domestic_Product': 60,
-        }
-        
-        st.info(f"Applying publication lags to reflect realistic information availability.")
-        
-        for col, lag in LAGS_TRADING_DAYS.items():
-            if col in indicators.columns:
-                indicators[col] = indicators[col].shift(lag)
-        
-        # Select only numeric columns for correlation
-        numeric_df = indicators.select_dtypes(include=['float64', 'int64'])
-        
-        # --- 2. CORRELATION MATRIX ---
-        st.subheader("Global Correlation Matrix")
-        
-        # Filter out date/unnecessary columns if any remain
-        corr_matrix = numeric_df.corr()
-        
-        fig_corr = go.Figure(data=go.Heatmap(
-            z=corr_matrix.values,
-            x=corr_matrix.columns,
-            y=corr_matrix.index,
-            colorscale='RdBu', # Red to Blue (Red=Neg, Blue=Pos)
-            zmid=0,
-            text=corr_matrix.values.round(2),
-            texttemplate="%{text}"
-        ))
-        fig_corr.update_layout(height=800, title="Correlation Heatmap")
-        st.plotly_chart(fig_corr, use_container_width=True)
-        
-        st.divider()
+    nlp_df = nlp_df.sort_values("period_end").reset_index(drop=True)
+    labels = [
+        f"{row.period_start.strftime('%Y-%m-%d')} -> {row.period_end.strftime('%Y-%m-%d')}"
+        for row in nlp_df.itertuples()
+    ]
+    selected_label = st.selectbox("Analysed week", labels, index=len(labels) - 1)
+    record = nlp_df.iloc[labels.index(selected_label)].to_dict()
+    metrics = safe_dict(record.get("metrics"))
+    signal = safe_dict(record.get("nlp_signal"))
+    forward_view = safe_dict(record.get("forward_view"))
 
-        # --- 3. TARGET DRIVERS (HY SPREAD & BREAKEVEN) ---
-        st.subheader("Target Drivers Analysis")
-        st.info("Correlation of all indicators with key Targets (over full history).")
+    st.subheader(safe_text(record.get("title"), "Weekly macro debrief"))
 
-        col_risk, col_inf = st.columns(2)
-        
-        # Risk Driver (HY Spread)
-        with col_risk:
-            st.markdown("#### vs High Yield Spread (Risk)")
-            if 'High_Yield_Bond_SPREAD' in corr_matrix.columns:
-                target_corr = corr_matrix['High_Yield_Bond_SPREAD'].drop('High_Yield_Bond_SPREAD').sort_values()
-                
-                fig_risk = go.Figure(go.Bar(
-                    x=target_corr.values,
-                    y=target_corr.index,
-                    orientation='h',
-                    marker=dict(color=target_corr.values, colorscale='RdBu', cmid=0)
-                ))
-                fig_risk.update_layout(height=600, xaxis_title="Correlation w/ HY Spread")
-                st.plotly_chart(fig_risk, use_container_width=True)
-            else:
-                st.error("High_Yield_Bond_SPREAD not found.")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    kpi1.metric("Strategy week", fmt_pct(metrics.get("strategy_week_return")))
+    kpi2.metric("SP500 week", fmt_pct(metrics.get("sp500_week_return")))
+    kpi3.metric("Since 2026-04-03", fmt_pct(metrics.get("strategy_since_start_return")))
+    kpi4.metric("Week max drawdown", fmt_pct(metrics.get("week_max_drawdown")))
 
-        # Inflation Driver (Breakeven)
-        with col_inf:
-            st.markdown("#### vs Breakeven 10Y (Inflation)")
-            if 'BREAKEVEN_10Y' in corr_matrix.columns:
-                target_corr = corr_matrix['BREAKEVEN_10Y'].drop('BREAKEVEN_10Y').sort_values()
-                
-                fig_inf = go.Figure(go.Bar(
-                    x=target_corr.values,
-                    y=target_corr.index,
-                    orientation='h',
-                    marker=dict(color=target_corr.values, colorscale='RdBu', cmid=0)
-                ))
-                fig_inf.update_layout(height=600, xaxis_title="Correlation w/ Breakeven")
-                st.plotly_chart(fig_inf, use_container_width=True)
-            else:
-                st.error("BREAKEVEN_10Y not found.")
+    meta1, meta2, meta3 = st.columns(3)
+    meta1.metric("Current quadrant", safe_text(metrics.get("current_quadrant_label")))
+    meta2.metric("NLP risk-on", format_signal_value(signal.get("risk_on_score")))
+    meta3.metric("NLP confidence", fmt_pct(signal.get("confidence")))
 
-        st.divider()
-
-        # --- 4. ROLLING CORRELATION TOOL ---
-        st.subheader("Rolling Correlation Analysis")
-        st.caption("Analyze how the relationship between two assets changes over time (e.g., during crises).")
-
-        col1, col2, col3 = st.columns(3)
-        
-        all_assets = numeric_df.columns.tolist()
-        
-        with col1:
-            asset_a = st.selectbox("Asset A", options=all_assets, index=all_assets.index('High_Yield_Bond_SPREAD') if 'High_Yield_Bond_SPREAD' in all_assets else 0)
-        with col2:
-            asset_b = st.selectbox("Asset B", options=all_assets, index=all_assets.index('BREAKEVEN_10Y') if 'BREAKEVEN_10Y' in all_assets else 1)
-        with col3:
-            window = st.slider("Rolling Window (Days)", min_value=10, max_value=252*2, value=63, step=5)
-
-        if asset_a and asset_b:
-            # Calculate Rolling Correlation
-            rolling_corr = indicators[asset_a].rolling(window=window).corr(indicators[asset_b])
-            
-            # Plot
-            fig_roll = go.Figure()
-            fig_roll.add_trace(go.Scatter(
-                x=indicators['date'], 
-                y=rolling_corr,
-                mode='lines',
-                name=f"Corr({asset_a}, {asset_b})",
-                line=dict(width=2)
-            ))
-            
-            # Add Zero Line
-            fig_roll.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.5)
-            
-            fig_roll.update_layout(
-                height=500,
-                title=f"{window}-Day Rolling Correlation: {asset_a} vs {asset_b}",
-                yaxis_title="Correlation Coefficient",
-                xaxis_title="Date",
-                yaxis=dict(range=[-1.1, 1.1])
-            )
-            st.plotly_chart(fig_roll, use_container_width=True)
-
+    generated_at = record.get("generated_at")
+    model_name = record.get("model", "N/A")
+    if generated_at:
+        st.caption(f"Generated at {pd.to_datetime(generated_at).strftime('%Y-%m-%d %H:%M')} with {model_name}")
     else:
-        st.error("Impossible de charger combined_indicators.csv. Lancez le DAG.")
-        st.code("airflow dags trigger dag_us_macro", language="bash")
+        st.caption(f"Model: {model_name}")
+
+    st.divider()
+    st.markdown(safe_text(record.get("markdown") or record.get("macro_regime"), "Debrief unavailable."))
+
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.markdown("### Structured NLP signal")
+        signal_rows = [
+            ("Risk-on", signal.get("risk_on_score")),
+            ("Growth", signal.get("growth_score")),
+            ("Inflation pressure", signal.get("inflation_pressure_score")),
+            ("Policy risk", signal.get("policy_risk_score")),
+            ("Confidence", signal.get("confidence")),
+        ]
+        signal_df = pd.DataFrame(signal_rows, columns=["Signal", "Value"])
+        signal_df["Value"] = pd.to_numeric(signal_df["Value"], errors="coerce")
+        st.dataframe(signal_df.style.format({"Value": "{:+.2f}"}), use_container_width=True, hide_index=True)
+        st.info(safe_text(signal.get("suggested_use"), "shadow_only"))
+        st.caption(safe_text(signal.get("rationale"), "No rationale provided."))
+
+    with col_right:
+        st.markdown("### Forward view")
+        st.markdown(f"**Base case:** {safe_text(forward_view.get('base_case_next_week'))}")
+        st.markdown(f"**Bull case:** {safe_text(forward_view.get('bull_case'))}")
+        st.markdown(f"**Bear case:** {safe_text(forward_view.get('bear_case'))}")
+        watchlist = safe_list(forward_view.get("watchlist"))
+        if watchlist:
+            st.markdown("**Watchlist:**")
+            for item in watchlist:
+                st.markdown(f"- {item}")
+
+    st.divider()
+    points_col, risks_col = st.columns(2)
+    with points_col:
+        st.markdown("### Key points")
+        for point in safe_list(record.get("key_points")):
+            st.markdown(f"- {point}")
+
+    with risks_col:
+        st.markdown("### Risks / watch points")
+        for risk in safe_list(record.get("risks")):
+            st.markdown(f"- {risk}")
+
+    st.divider()
+    chart_col, alloc_col = st.columns(2)
+    with chart_col:
+        st.markdown("### Weekly curve")
+        backtest = data.get("backtest") if isinstance(data, dict) else None
+        if backtest is not None and not backtest.empty:
+            period_start = pd.to_datetime(record["period_start"])
+            period_end = pd.to_datetime(record["period_end"])
+            bt = backtest.copy()
+            bt["date"] = pd.to_datetime(bt["date"])
+            week_bt = bt[(bt["date"] >= period_start) & (bt["date"] <= period_end)]
+            if not week_bt.empty:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=week_bt["date"], y=week_bt["wealth"] / week_bt["wealth"].iloc[0] * 100, name="Strategy", line=dict(width=4)))
+                if "SP500_wealth" in week_bt.columns:
+                    fig.add_trace(go.Scatter(x=week_bt["date"], y=week_bt["SP500_wealth"] / week_bt["SP500_wealth"].iloc[0] * 100, name="SP500", line=dict(dash="dash")))
+                fig.update_layout(height=330, yaxis_title="Base 100", hovermode="x unified")
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.caption("No backtest points for this week.")
+        else:
+            st.caption("Backtest data unavailable.")
+
+    with alloc_col:
+        st.markdown("### Current allocation")
+        allocation = safe_dict(metrics.get("current_allocation"))
+        if allocation:
+            alloc_df = pd.DataFrame([{"Asset": clean_asset_name(asset), "Weight": weight * 100} for asset, weight in allocation.items()])
+            fig_alloc = px.bar(alloc_df, x="Weight", y="Asset", orientation="h", text=alloc_df["Weight"].map(lambda value: f"{value:.1f}%"))
+            fig_alloc.update_layout(height=330, xaxis_title="Weight (%)", yaxis_title="")
+            st.plotly_chart(fig_alloc, use_container_width=True)
+        else:
+            st.caption("Allocation unavailable.")
+
+    st.divider()
+    ind_col, score_col = st.columns(2)
+    with ind_col:
+        st.markdown("### Indicator moves")
+        moves = safe_list(metrics.get("top_indicator_moves"))
+        if moves:
+            moves_df = pd.DataFrame(moves)
+            display_cols = ["indicator", "start", "end", "absolute_change", "pct_change"]
+            display_cols = [col for col in display_cols if col in moves_df.columns]
+            st.dataframe(
+                moves_df[display_cols].style.format({"start": "{:.2f}", "end": "{:.2f}", "absolute_change": "{:+.2f}", "pct_change": "{:+.2%}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("No indicator moves available.")
+
+    with score_col:
+        st.markdown("### Quadrant scores")
+        scores = safe_dict(metrics.get("latest_quadrant_scores"))
+        if scores:
+            score_df = pd.DataFrame([{"Score": key, "Value": value} for key, value in scores.items()])
+            st.dataframe(score_df.style.format({"Value": "{:.2f}"}), use_container_width=True, hide_index=True)
+        else:
+            st.caption("Quadrant scores unavailable.")
