@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -10,7 +11,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 DEFAULT_START_DATE = "2026-04-03"
-GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+GDELT_DOC_URL = "http://api.gdeltproject.org/api/v2/doc/doc"
 
 THEMES = {
     "monetary_policy": {
@@ -82,9 +83,12 @@ def parse_args():
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=None)
     parser.add_argument("--output", default=None)
-    parser.add_argument("--max-records-per-query", type=int, default=40)
-    parser.add_argument("--sleep-seconds", type=float, default=0.25)
-    parser.add_argument("--timeout-seconds", type=float, default=12.0)
+    parser.add_argument("--max-records-per-query", type=int, default=75)
+    parser.add_argument("--chunk-days", type=int, default=45)
+    parser.add_argument("--max-errors", type=int, default=10)
+    parser.add_argument("--endpoint", default=os.getenv("GDELT_DOC_URL", GDELT_DOC_URL))
+    parser.add_argument("--sleep-seconds", type=float, default=1.0)
+    parser.add_argument("--timeout-seconds", type=float, default=6.0)
     parser.add_argument("--incremental-lookback-days", type=int, default=10)
     parser.add_argument("--full-refresh", action="store_true", help="Fetch the full requested date range even when an output file already exists.")
     parser.add_argument("--dry-run", action="store_true")
@@ -97,10 +101,11 @@ def parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
 
-def week_ranges(start_date, end_date):
+def date_chunks(start_date, end_date, chunk_days):
     current = start_date
+    step = max(int(chunk_days), 1)
     while current <= end_date:
-        end = min(current + timedelta(days=6), end_date)
+        end = min(current + timedelta(days=step - 1), end_date)
         yield current, end
         current = end + timedelta(days=1)
 
@@ -110,7 +115,7 @@ def gdelt_datetime(day, end_of_day=False):
     return day.strftime("%Y%m%d") + suffix
 
 
-def fetch_gdelt(query, start_day, end_day, max_records, timeout_seconds):
+def fetch_gdelt(endpoint, query, start_day, end_day, max_records, timeout_seconds):
     params = {
         "query": query,
         "mode": "artlist",
@@ -120,7 +125,7 @@ def fetch_gdelt(query, start_day, end_day, max_records, timeout_seconds):
         "maxrecords": max_records,
         "sort": "hybridrel",
     }
-    url = f"{GDELT_DOC_URL}?{urlencode(params)}"
+    url = f"{endpoint}?{urlencode(params)}"
     request = Request(url, headers={"User-Agent": "Macro4QuadrantsNewsFetcher/1.0"})
     with urlopen(request, timeout=timeout_seconds) as response:
         payload = json.loads(response.read().decode("utf-8"))
@@ -265,19 +270,25 @@ def main():
     fetched = []
     errors = []
 
-    for week_start, week_end in week_ranges(fetch_start_date, end_date):
+    stopped_early = False
+    for chunk_start, chunk_end in date_chunks(fetch_start_date, end_date, args.chunk_days):
         for theme, config in THEMES.items():
             try:
-                articles = fetch_gdelt(config["query"], week_start, week_end, args.max_records_per_query, args.timeout_seconds)
+                articles = fetch_gdelt(args.endpoint, config["query"], chunk_start, chunk_end, args.max_records_per_query, args.timeout_seconds)
             except Exception as exc:
-                errors.append(f"{week_start}..{week_end} {theme}: {exc}")
+                errors.append(f"{chunk_start}..{chunk_end} {theme}: {exc}")
+                if len(errors) >= args.max_errors:
+                    stopped_early = True
+                    break
                 continue
             for article in articles:
-                record = normalize_article(article, theme, week_start)
+                record = normalize_article(article, theme, chunk_start)
                 if record:
                     fetched.append(record)
             if args.sleep_seconds > 0:
                 time.sleep(args.sleep_seconds)
+        if stopped_early:
+            break
 
     merged = dedupe(existing + fetched)
     new_count = len(dedupe(fetched))
@@ -289,6 +300,9 @@ def main():
             "requested_start_date": start_date.isoformat(),
             "effective_fetch_start_date": fetch_start_date.isoformat(),
             "end_date": end_date.isoformat(),
+            "chunk_days": args.chunk_days,
+            "endpoint": args.endpoint,
+            "stopped_early": stopped_early,
             "fetched_records_before_merge": len(fetched),
             "unique_fetched_records": new_count,
             "records_after_merge": len(merged),
@@ -299,6 +313,8 @@ def main():
 
     write_jsonl(output, merged)
     print(f"Wrote {len(merged)} news records to {output} ({max(added_count, 0)} new).")
+    if stopped_early:
+        print(f"Stopped early after {len(errors)} fetch errors. Existing records were preserved.", file=sys.stderr)
     if errors:
         print("Some GDELT requests failed:", file=sys.stderr)
         for error in errors[:20]:

@@ -771,7 +771,11 @@ with DAG(
             source {os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'activate')} && \
             python nlp_jobs/fetch_macro_news.py \
                 --base-dir {base_dir} \
-                --start-date 2026-04-03
+                --start-date 2026-04-03 \
+                --chunk-days 45 \
+                --timeout-seconds 6 \
+                --sleep-seconds 1 \
+                --max-errors 10
         """,
     )
 
