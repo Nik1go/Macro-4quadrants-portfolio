@@ -35,7 +35,7 @@ LIVE_UNIVERSE: Dict[str, Dict[str, object]] = {
         "name": "Invesco Physical Gold ETC",
         "isin": "IE00B579F325",
         "sec_type": "STK",
-        "exchange": "SMART",
+        "exchange": "AEB",
         "primary_exchange": "AEB",
         "currency": "EUR",
         "ter": 0.0012,

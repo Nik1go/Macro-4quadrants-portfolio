@@ -242,7 +242,7 @@ def execute_strategy(
     # Send alert if there are failed orders
     if result.get('execution_result') and result['execution_result'].get('failed'):
         failed_count = len(result['execution_result']['failed'])
-        failed_assets = ", ".join([f["symbol"] for f in result['execution_result']['failed']])
+        failed_assets = ", ".join([str(f.get("symbol") or f.get("asset") or "UNKNOWN") for f in result['execution_result']['failed']])
         send_alert(f"<b>IBKR Orders Partially Failed</b>\n{failed_count} orders failed: {failed_assets}", severity="warning")
 
     # Save execution log

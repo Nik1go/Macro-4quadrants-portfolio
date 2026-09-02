@@ -396,32 +396,49 @@ class OrderManager:
         if not self.ib or not self.ib.isConnected():
             raise ConnectionError("Not connected to IBKR")
 
-        # FORCE CLEAN SLATE: Cancel everything and WAIT
+        # FORCE CLEAN SLATE: cancel genuinely active orders before placing a rebalance.
         if not dry_run:
             logger.info("Cleaning up all pending orders before rebalance...")
             self.ib.reqAllOpenOrders()
-            for _ in range(10): # Wait for sync
-                self.ib.sleep(0.2)
-                if self.ib.openTrades(): break
+            self.ib.sleep(2.0)
 
-            all_trades = self.ib.openTrades()
-            active_trades = [t for t in all_trades if not self.account_id or t.order.account == self.account_id]
+            def _account_matches(trade):
+                return not self.account_id or trade.order.account in ('', self.account_id)
+
+            def _is_active(trade):
+                status = trade.orderStatus.status or ''
+                return status not in FINAL_ORDER_STATUSES and _account_matches(trade)
+
+            active_trades = [t for t in self.ib.openTrades() if _is_active(t)]
 
             if active_trades:
                 for trade in active_trades:
-                    self.ib.cancelOrder(trade.order)
+                    try:
+                        self.ib.cancelOrder(trade.order)
+                    except Exception as exc:
+                        logger.warning(f"Cancel request failed for orderId={trade.order.orderId}: {exc}")
 
-                # HARD WAIT for confirmation
-                for i in range(15):
+                for i in range(20):
                     self.ib.sleep(0.5)
-                    self.ib.reqOpenOrders() # Force update
-                    still_open = [t for t in self.ib.openTrades() if not self.account_id or t.order.account == self.account_id]
+                    self.ib.reqOpenOrders()
+                    still_open = [t for t in self.ib.openTrades() if _is_active(t)]
                     if not still_open:
                         logger.info("Order book cleared and confirmed by IBKR.")
                         break
-                    if i == 14:
+                    if i == 19:
+                        details = []
+                        for trade in still_open:
+                            details.append({
+                                'asset': 'OPEN_ORDER',
+                                'symbol': getattr(trade.contract, 'symbol', None) or 'UNKNOWN',
+                                'action': trade.order.action,
+                                'shares': trade.order.totalQuantity,
+                                'status': trade.orderStatus.status,
+                                'order_id': trade.order.orderId,
+                                'error': 'Cancellation Timeout',
+                            })
                         logger.error("🛑 CRITICAL: Orders are still pending cancellation. Aborting execution to prevent double positions.")
-                        return {'executed': [], 'failed': [{'asset': 'ALL', 'error': 'Cancellation Timeout'}], 'skipped': [], 'dry_run': False}
+                        return {'executed': [], 'failed': details, 'skipped': [], 'dry_run': False}
 
         results = {
             'executed': [],
