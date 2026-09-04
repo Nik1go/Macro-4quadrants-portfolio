@@ -194,11 +194,18 @@ def build_live_compatible_backtest(
     out["ibkr_live_wealth"] = initial_capital * (1.0 + out["ibkr_live_return"]).cumprod()
 
     stats = _calc_stats(out["ibkr_live_return"], out["ibkr_live_wealth"])
+    missing_assets_unique = sorted(set(missing_assets))
+    missing_active_assets = [
+        asset for asset in missing_assets_unique
+        if f"{asset}_weight" in out.columns and out[f"{asset}_weight"].fillna(0.0).abs().max() > 1e-9
+    ]
+    inactive_missing_assets = sorted(set(missing_assets_unique) - set(missing_active_assets))
     stats.update({
         "base_currency": base_currency.upper(),
         "start_date": out.index.min().date().isoformat(),
         "end_date": out.index.max().date().isoformat(),
-        "missing_assets": ",".join(sorted(set(missing_assets))),
+        "missing_assets": ",".join(missing_active_assets),
+        "inactive_missing_assets": ",".join(inactive_missing_assets),
         "max_missing_weight": float(out["ibkr_live_missing_weight"].max()) if len(out) else 0.0,
         "cum_transaction_cost": float(out["ibkr_live_transaction_cost"].sum()),
         "cum_ter_cost": float(out["ibkr_live_ter_cost"].sum()),
@@ -245,6 +252,8 @@ def main() -> int:
     print(f"  Final wealth: {row['final_wealth']:.2f}")
     print(f"  Total return: {row.get('ibkr_live_total_return', 0.0) * 100:.2f}%")
     print(f"  Missing assets: {row.get('missing_assets') or 'none'}")
+    if row.get("inactive_missing_assets"):
+        print(f"  Inactive missing assets: {row.get('inactive_missing_assets')}")
     print(f"  Max missing weight: {row.get('max_missing_weight', 0.0) * 100:.2f}%")
     return 0
 

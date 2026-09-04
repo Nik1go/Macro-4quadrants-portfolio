@@ -770,6 +770,7 @@ with DAG(
             cd {PROJECT_ROOT} && \
             source {os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'activate')} && \
             python nlp_jobs/fetch_macro_news.py \
+                --provider auto \
                 --base-dir {base_dir} \
                 --start-date 2026-04-03 \
                 --chunk-days 45 \
@@ -788,7 +789,6 @@ with DAG(
             fi
 
             cd {PROJECT_ROOT} && \
-            set -a && [ -f .env ] && source .env && set +a && \
             source {os.path.join(PROJECT_ROOT, 'airflow_venv', 'bin', 'activate')} && \
             python nlp_jobs/generate_weekly_debriefs.py \
                 --base-dir {base_dir} \
@@ -800,6 +800,7 @@ with DAG(
 
     ibkr_execute_task = PythonOperator(
         task_id='ibkr_execute',
+        retries=0,
         python_callable=airflow_execute_strategy,
         op_kwargs={
             'backtest_output_dir': BACKTEST_OUTPUT,

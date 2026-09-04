@@ -29,7 +29,7 @@ def load_data():
     # Resolve paths reliably regardless of where Streamlit is run from
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(current_dir))
-    base_dir = os.path.join(project_root, "data", "US")
+    base_dir = os.environ.get("MACRO_US_DATA_DIR", os.path.join(project_root, "data", "US"))
     data = {}
 
     try:
@@ -195,7 +195,9 @@ def load_data():
                     log_data = json.load(f)
 
                 ts = pd.to_datetime(log_data.get('timestamp'))
-                p_val = log_data.get('portfolio_value')
+                p_val = log_data.get('post_execution_portfolio_value')
+                if p_val is None:
+                    p_val = log_data.get('portfolio_value')
                 current_quadrant = log_data.get('quadrant')
 
                 # NAV
@@ -223,10 +225,10 @@ def load_data():
 
                 # Last known positions/weights
                 # We update this even on failure if we managed to get weights during that attempt
-                weights = log_data.get('current_weights')
+                weights = log_data.get('post_execution_weights') or log_data.get('current_weights')
                 if weights:
                     last_positions = weights
-                    last_portfolio_val = log_data.get('portfolio_value')
+                    last_portfolio_val = p_val
                     last_update_ts = ts
 
                 if current_quadrant:

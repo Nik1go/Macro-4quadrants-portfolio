@@ -113,7 +113,12 @@ def parse_execution_logs(log_dir: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
         ts = pd.to_datetime(payload.get("timestamp"), errors="coerce")
         target = _as_weight_dict(payload.get("target_weights"))
         current = _as_weight_dict(payload.get("current_weights"))
-        drift = _l1_drift(current, target)
+        post_weights = _as_weight_dict(payload.get("post_execution_weights"))
+        tracking_weights = post_weights or current
+        pre_value = _safe_float(payload.get("portfolio_value"))
+        post_value = _safe_float(payload.get("post_execution_portfolio_value"))
+        tracking_value = post_value if post_value is not None else pre_value
+        drift = _l1_drift(tracking_weights, target)
 
         orders = payload.get("orders") or []
         if not isinstance(orders, list):
@@ -128,12 +133,14 @@ def parse_execution_logs(log_dir: str) -> Tuple[pd.DataFrame, pd.DataFrame]:
                 "error": payload.get("error"),
                 "dry_run": bool(payload.get("dry_run")),
                 "quadrant": payload.get("quadrant"),
-                "portfolio_value": _safe_float(payload.get("portfolio_value")),
-                "post_execution_portfolio_value": _safe_float(payload.get("post_execution_portfolio_value")),
+                "portfolio_value": pre_value,
+                "post_execution_portfolio_value": post_value,
+                "tracking_portfolio_value": tracking_value,
                 "base_currency": payload.get("base_currency"),
                 "target_weights": target,
                 "current_weights": current,
-                "post_execution_weights": _as_weight_dict(payload.get("post_execution_weights")),
+                "post_execution_weights": post_weights,
+                "tracking_weights": tracking_weights,
                 "weight_drift_l1": drift,
                 "orders_count": len(orders),
             }
@@ -182,10 +189,11 @@ def build_tracking_curve(
     return_col: str = "portfolio_return",
     model_source: str = "model_us_proxy",
 ) -> pd.DataFrame:
-    if backtest.empty or runs.empty or "portfolio_value" not in runs.columns or wealth_col not in backtest.columns:
+    value_col = "tracking_portfolio_value" if "tracking_portfolio_value" in runs.columns else "portfolio_value"
+    if backtest.empty or runs.empty or value_col not in runs.columns or wealth_col not in backtest.columns:
         return pd.DataFrame()
 
-    nav = runs.dropna(subset=["portfolio_value"]).copy()
+    nav = runs.dropna(subset=[value_col]).copy()
     if nav.empty:
         return pd.DataFrame()
 
@@ -198,7 +206,9 @@ def build_tracking_curve(
     bt["date"] = pd.to_datetime(bt["date"]).dt.normalize()
     bt = bt.rename(columns={wealth_col: "model_wealth", return_col: "model_period_return"})
 
-    merged = nav[["date", "timestamp", "portfolio_value", "quadrant", "weight_drift_l1"]].merge(
+    merged = nav[["date", "timestamp", value_col, "quadrant", "weight_drift_l1"]].rename(
+        columns={value_col: "live_nav"}
+    ).merge(
         bt,
         on="date",
         how="left",
@@ -207,11 +217,11 @@ def build_tracking_curve(
     if merged.empty:
         return merged
 
-    first_live = merged["portfolio_value"].iloc[0]
+    first_live = merged["live_nav"].iloc[0]
     first_bt = merged["model_wealth"].iloc[0]
-    merged["live_index"] = merged["portfolio_value"] / first_live * 1000.0
+    merged["live_index"] = merged["live_nav"] / first_live * 1000.0
     merged["model_index"] = merged["model_wealth"] / first_bt * 1000.0
-    merged["live_return"] = merged["portfolio_value"] / first_live - 1.0
+    merged["live_return"] = merged["live_nav"] / first_live - 1.0
     merged["model_return"] = merged["model_wealth"] / first_bt - 1.0
     merged["tracking_gap"] = merged["live_return"] - merged["model_return"]
     merged["model_source"] = model_source
@@ -303,7 +313,7 @@ def build_tracking_audit(base_dir: str) -> TrackingAudit:
         summary["latest_run_success"] = bool(latest.get("success"))
         summary["latest_run_error"] = latest.get("error")
         summary["latest_target_weights"] = _latest_dict(runs["target_weights"])
-        summary["latest_current_weights"] = _latest_dict(runs["current_weights"])
+        summary["latest_current_weights"] = _latest_dict(runs["tracking_weights"] if "tracking_weights" in runs.columns else runs["current_weights"])
         summary["latest_weight_drift_l1"] = _safe_float(latest.get("weight_drift_l1"))
 
     if not tracking.empty:
@@ -321,9 +331,11 @@ def build_tracking_audit(base_dir: str) -> TrackingAudit:
             }
         )
 
-    nav = runs.dropna(subset=["portfolio_value"]).copy() if not runs.empty else pd.DataFrame()
+    nav_value_col = "tracking_portfolio_value" if "tracking_portfolio_value" in runs.columns else "portfolio_value"
+    nav = runs.dropna(subset=[nav_value_col]).copy() if not runs.empty and nav_value_col in runs.columns else pd.DataFrame()
     if not nav.empty:
         nav = nav.sort_values("timestamp").drop_duplicates(subset=["date"], keep="last")
+        nav["live_nav"] = nav[nav_value_col]
 
     return TrackingAudit(
         summary=summary,

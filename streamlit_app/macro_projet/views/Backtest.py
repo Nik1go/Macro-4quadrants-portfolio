@@ -447,6 +447,12 @@ def render(data):
             legend=dict(orientation="h", y=1.08),
         )
         st.plotly_chart(fig, use_container_width=True)
+        if df_ibkr_live is not None and not df_ibkr_live.empty:
+            st.caption(
+                "Lecture: la courbe Modele Complet utilise l'univers de backtest/proxies. "
+                "La courbe IBKR live-compatible remplace ces proxies par les instruments tradables "
+                "du paper account et sert de reference pour comparer le live reel."
+            )
 
         live_mapping = data.get('backtest_ibkr_live_mapping')
         live_stats = data.get('backtest_ibkr_live_stats')

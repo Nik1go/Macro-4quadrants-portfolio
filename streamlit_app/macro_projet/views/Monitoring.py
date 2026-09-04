@@ -41,13 +41,26 @@ def _fmt_pct(value):
     return f"{value * 100:.2f}%"
 
 
+def _fmt_date(value):
+    if value is None or pd.isna(value):
+        return "N/A"
+    if hasattr(value, "date"):
+        return value.date().isoformat()
+    return str(value)
+
+
 def render_ibkr_tracking_audit(data):
     audit = data.get('ibkr_tracking_audit')
     if not audit:
         return
 
     summary = audit.summary
-    st.subheader("Audit Tracking IBKR vs Modele")
+    st.subheader("Audit Paper Trading IBKR")
+    if summary.get('first_nav_date') and summary.get('last_nav_date'):
+        st.caption(
+            f"Periode auditee: {summary.get('first_nav_date')} -> {summary.get('last_nav_date')}. "
+            "Comparaison indexee sur les dates de logs IBKR, pas sur toute la courbe 2009."
+        )
 
     latest_ok = summary.get('latest_run_success')
     latest_error = summary.get('latest_run_error')
@@ -57,10 +70,10 @@ def render_ibkr_tracking_audit(data):
         st.success("Derniere execution IBKR terminee sans erreur fonctionnelle detectee.")
 
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Live return", _fmt_pct(summary.get('live_return')))
-    m2.metric("Modele meme periode", _fmt_pct(summary.get('model_return')))
-    m3.metric("Tracking gap", _fmt_pct(summary.get('tracking_gap')))
-    m4.metric("Ordres non confirmes", f"{summary.get('unconfirmed_orders_count', 0)}")
+    m1.metric("Paper return", _fmt_pct(summary.get('live_return')))
+    m2.metric("Backtest meme periode", _fmt_pct(summary.get('model_return')))
+    m3.metric("Gap paper vs modele", _fmt_pct(summary.get('tracking_gap')))
+    m4.metric("Ordres a verifier", f"{summary.get('unconfirmed_orders_count', 0)}")
 
     tracking = audit.tracking
     if tracking is not None and not tracking.empty:
@@ -74,7 +87,7 @@ def render_ibkr_tracking_audit(data):
             mode='lines', name='Backtest modele meme dates'
         ))
         fig.update_layout(
-            title="Live IBKR vs Backtest sur les dates logguees",
+            title="Paper IBKR vs backtest sur les dates logguees",
             yaxis_title="Indice base 1000",
             xaxis_title="Date",
             height=320,
@@ -219,7 +232,7 @@ def render_ibkr_dashboard(data):
             st.info("Recherche de positions...")
 
     with c2:
-        st.subheader("Performance Historique")
+        st.subheader("Performance Paper Trading")
         if 'ibkr_nav' in data and not data['ibkr_nav'].empty:
             nav_df = data['ibkr_nav'].copy()
             nav_df.set_index('date', inplace=True)
@@ -234,7 +247,11 @@ def render_ibkr_dashboard(data):
             last_val = nav_df['nav'].iloc[-1]
             total_return = (last_val / first_val - 1) * 100 if first_val > 0 else 0
 
-            st.metric("Total Return (depuis 1er log)", f"{total_return:.2f}%")
+            st.caption(
+                f"Periode: {_fmt_date(nav_df.index[0])} -> {_fmt_date(nav_df.index[-1])}. "
+                "Rendement depuis le premier log IBKR, pas depuis 2009."
+            )
+            st.metric("Paper return", f"{total_return:.2f}%")
         else:
             st.info("Pas d'historique de NAV (Logs d'exécution introuvables)")
 
@@ -296,13 +313,7 @@ def _render_last_indicators(data):
 
 
 def render(data):
-    # === IBKR Paper Trading Dashboard ===
-    st.header("Compte IBKR Paper Trading")
-    render_ibkr_dashboard(data)
-    st.divider()
-
     st.header("Situation Macroeconomique Actuelle")
-
     # === 18-Day Trend (Last 18 days) ===
     st.subheader("Tendance Recente (18 derniers jours - Fenetre de Lissage)")
     if data['quadrants'] is not None:
@@ -327,7 +338,9 @@ def render(data):
         st.plotly_chart(fig_trend, use_container_width=True)
 
         dominant_q = q_counts.idxmax()
-    st.info(f"Le modele selectionne le **Mode (Valeur la plus frequente)** sur 5 jours glissants. Tendance actuelle : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts.max()} jours.")
+        st.info(f"Le modele selectionne le **Mode (Valeur la plus frequente)** sur 5 jours glissants. Tendance actuelle : **Q{dominant_q} {QUADRANT_NAMES.get(dominant_q)}** avec {q_counts.max()} jours.")
+    else:
+        st.warning("Donnees quadrants non disponibles")
 
     st.divider()
 
@@ -520,6 +533,10 @@ def render(data):
             recent = data['quadrants'].tail(20)[['date', 'assigned_quadrant', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']]
             recent['Regime'] = recent['assigned_quadrant'].map(QUADRANT_NAMES)
             st.dataframe(recent[['date', 'Regime', 'score_Q1', 'score_Q2', 'score_Q3', 'score_Q4']], use_container_width=True)
+
+    st.divider()
+    with st.expander("Compte IBKR Paper Trading - audit d'execution", expanded=False):
+        render_ibkr_dashboard(data)
 
 
 

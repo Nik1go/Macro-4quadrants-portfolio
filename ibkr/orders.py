@@ -143,16 +143,22 @@ class OrderManager:
                 logger.warning(f"No price data for {asset_name} ({ibkr_symbol}) from IBKR")
                 return self._get_fallback_price(asset_name)
 
-            # Request delayed market data
-            ticker = self.ib.reqMktData(contract, '', False, False)
-            self.ib.sleep(3)  # Wait for delayed data
+            if asset_name == "OBLIGATION":
+                fallback_price = self._get_fallback_price(asset_name)
+                if fallback_price:
+                    logger.info(
+                        f"{asset_name} ({ibkr_symbol}): using live-compatible fallback price = "
+                        f"{fallback_price:.4f}"
+                    )
+                    return fallback_price
+
+            # Request a delayed snapshot. This avoids leaving a streaming ticker
+            # alive when an exchange has no subscribed top-of-book data.
+            ticker = self.ib.reqMktData(contract, '', True, False)
+            self.ib.sleep(4)  # Wait for delayed snapshot data
 
             # Try market price first
             price = ticker.marketPrice()
-
-            # Only cancel if we actually got a valid ticker ID to prevent Error 300
-            # though skipping CASH should resolve the main cause.
-            self.ib.cancelMktData(contract)
 
             if price and price > 0 and not (price != price):  # Check for NaN
                 logger.info(f"{asset_name} ({ibkr_symbol}): IBKR price = €{price:.2f}")
