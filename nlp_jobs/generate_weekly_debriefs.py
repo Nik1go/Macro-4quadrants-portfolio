@@ -344,6 +344,45 @@ def build_week_payload(start, end, backtest, quadrants, indicators, strategy_sta
 
 
 
+def truncate_text(value, max_chars=360):
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "..."
+
+
+def compact_news_context(news_context, max_items=6):
+    if not isinstance(news_context, dict):
+        return {"available": False, "items": []}
+    items = news_context.get("items", [])
+    compact_items = []
+    if isinstance(items, list):
+        for item in items[:max_items]:
+            if not isinstance(item, dict):
+                continue
+            compact_items.append({
+                "date": item.get("date") or item.get("seen_at") or item.get("published_at"),
+                "theme": item.get("theme"),
+                "source_api": item.get("source_api"),
+                "source": item.get("source") or item.get("source_domain"),
+                "title": truncate_text(item.get("title"), 180),
+                "summary": truncate_text(item.get("summary"), 320),
+                "sentiment_score": item.get("overall_sentiment_score"),
+                "sentiment_label": item.get("overall_sentiment_label"),
+                "relevance_score": item.get("relevance_score"),
+                "related_assets": item.get("related_assets", [])[:6] if isinstance(item.get("related_assets"), list) else [],
+            })
+    return {
+        "available": bool(news_context.get("available")),
+        "source": news_context.get("source"),
+        "total_items_in_period": news_context.get("total_items_in_period", len(compact_items)),
+        "items": compact_items,
+        "note": news_context.get("note"),
+    }
+
+
 def compact_model_input(payload):
     metrics = payload["metrics"]
     return {
@@ -361,7 +400,7 @@ def compact_model_input(payload):
         "allocation": {"current": metrics.get("current_allocation", {}), "changes": metrics.get("allocation_changes", {})},
         "indicator_moves": metrics.get("top_indicator_moves", [])[:8],
         "indicator_scores": metrics.get("latest_indicator_scores", [])[:8],
-        "news_context": payload.get("news_context", {}),
+        "news_context": compact_news_context(payload.get("news_context", {})),
         "attribution_focus": {
             "explain_gold_if_abs_week_move_gt_2pct": True,
             "explain_strategy_gap_vs_sp500_and_gold": True,
@@ -412,7 +451,26 @@ def structured_schema():
 
 
 def structured_user_prompt(model_input):
-    return "Etape 1/2: analyse structuree. Retourne uniquement un objet JSON valide, sans markdown et sans texte autour.\nSchema:\n" + json.dumps(structured_schema(), ensure_ascii=False, indent=2) + "\n\nDonnees compactes:\n" + json.dumps(model_input, ensure_ascii=False, indent=2)
+    return (
+        "Etape 1/2: analyse structuree. Retourne uniquement un objet JSON valide, sans markdown et sans texte autour. "
+        "Garde toutes les valeurs redactionnelles courtes, sans puces markdown dans les strings. "
+        "Si une information manque, utilise une chaine vide ou une liste vide, mais garde toutes les cles du schema.\nSchema:\n"
+        + json.dumps(structured_schema(), ensure_ascii=False, indent=2)
+        + "\n\nDonnees compactes:\n"
+        + json.dumps(model_input, ensure_ascii=False, indent=2)
+    )
+
+
+def structured_retry_prompt(model_input):
+    return (
+        "Le precedent appel a produit un JSON non parseable. Recommence en version STRICTE et compacte. "
+        "Retourne seulement un objet JSON valide, aucune explication autour. "
+        "Toutes les strings doivent etre courtes. Aucun retour ligne non echappe dans les strings. "
+        "Respecte exactement les cles du schema.\nSchema:\n"
+        + json.dumps(structured_schema(), ensure_ascii=False, separators=(",", ":"))
+        + "\n\nDonnees compactes:\n"
+        + json.dumps(model_input, ensure_ascii=False, separators=(",", ":"))
+    )
 
 
 def markdown_user_prompt(model_input, structured_result):
@@ -435,10 +493,27 @@ def call_openrouter(api_key, model, messages, max_tokens=1800):
     data = response.json()
     return data["choices"][0]["message"]["content"], data.get("usage", {})
 
+def content_to_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                text = part.get("text") or part.get("content")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts)
+    return ""
+
+
 def parse_model_content(content):
     if isinstance(content, dict):
         return content
-    if not isinstance(content, str):
+    content = content_to_text(content)
+    if not content:
         return {}
     cleaned = strip_code_fence(content)
     parsed = parse_json_or_literal(cleaned)
@@ -679,6 +754,24 @@ def normalize_stored_record(record):
             elif is_empty_or_fallback(current):
                 normalized[key] = replacement
     normalized["markdown"] = clean_markdown(normalized.get("markdown"), normalized, normalized)
+    if structured_parse_failed(normalized):
+        local = build_local_structured_fallback(normalized)
+        for key in [
+            "title",
+            "macro_regime",
+            "strategy_status",
+            "available_information",
+            "nlp_signal",
+            "forward_view",
+            "key_points",
+            "risks",
+            "allocation_comment",
+            "performance_attribution",
+        ]:
+            if key == "title" and not is_empty_or_fallback(normalized.get(key)) and normalized.get(key) != "Debrief hebdomadaire":
+                continue
+            normalized[key] = local.get(key)
+        normalized["parse_diagnostics"] = {**as_dict(normalized.get("parse_diagnostics")), "local_repair_applied": True}
     return normalized
 
 
@@ -693,16 +786,117 @@ def merge_usage(*usages):
     return merged
 
 
+def build_local_structured_fallback(payload):
+    metrics = payload.get("metrics", {}) if isinstance(payload, dict) else {}
+    news_context = compact_news_context(payload.get("news_context", {})) if isinstance(payload, dict) else {"items": []}
+    news_items = news_context.get("items", []) if isinstance(news_context, dict) else []
+    news_titles = [item.get("title") for item in news_items if isinstance(item, dict) and item.get("title")]
+    news_themes = sorted({item.get("theme") for item in news_items if isinstance(item, dict) and item.get("theme")})
+
+    strategy_return = metrics.get("strategy_week_return")
+    sp500_return = metrics.get("sp500_week_return")
+    gold_return = metrics.get("gold_week_return")
+    drawdown = metrics.get("week_max_drawdown")
+    quadrant = metrics.get("current_quadrant_label") or "Regime non disponible"
+    scores = as_dict(metrics.get("latest_quadrant_scores"))
+
+    gap = None
+    if pd.notna(pd.to_numeric(strategy_return, errors="coerce")) and pd.notna(pd.to_numeric(sp500_return, errors="coerce")):
+        gap = float(strategy_return) - float(sp500_return)
+
+    growth_score = clamp_number(scores.get("MACRO_GROWTH_SCORE"), -1, 1, default=0.0)
+    inflation_score = clamp_number(scores.get("MACRO_INFLATION_SCORE"), -1, 1, default=0.0)
+    risk_on_score = clamp_number((gap or 0.0) * 8, -0.4, 0.4, default=0.0)
+    if "Q3" in quadrant or "Q4" in quadrant:
+        risk_on_score = clamp_number(risk_on_score - 0.15, -1, 1)
+    policy_risk_score = 0.25 if any(theme in {"monetary_policy", "politics_policy"} for theme in news_themes) else 0.0
+    confidence = 0.45 if news_titles else 0.25
+
+    performance_line = (
+        f"Strategie {format_pct_text(strategy_return)}, S&P 500 {format_pct_text(sp500_return)}, "
+        f"or {format_pct_text(gold_return)}, drawdown {format_pct_text(drawdown)}."
+    )
+    news_line = "News prises en compte: " + "; ".join(news_titles[:3]) if news_titles else "Aucune news externe exploitable pour cette semaine."
+    gap_line = "La strategie surperforme le S&P 500 cette semaine." if gap is not None and gap >= 0 else "La strategie sous-performe le S&P 500 cette semaine."
+
+    return {
+        "title": "Debrief hebdomadaire",
+        "macro_regime": quadrant,
+        "strategy_status": f"{gap_line} {performance_line}",
+        "available_information": {
+            "algo_data": [performance_line, f"Regime courant: {quadrant}"],
+            "news_data": news_titles[:5],
+            "missing_information": ["JSON structure OpenRouter non parseable; champs reconstruits localement."] if news_titles else ["News externe absente ou non exploitable.", "JSON structure OpenRouter non parseable; champs reconstruits localement."],
+        },
+        "nlp_signal": {
+            "risk_on_score": risk_on_score,
+            "growth_score": growth_score,
+            "inflation_pressure_score": inflation_score,
+            "policy_risk_score": policy_risk_score,
+            "confidence": confidence,
+            "suggested_use": "shadow_only",
+            "rationale": f"Signal reconstruit localement depuis le regime {quadrant}, les performances relatives, les indicateurs et les news disponibles. {news_line}",
+        },
+        "forward_view": {
+            "base_case_next_week": "Le scenario central reste conditionne par la confirmation des indicateurs macro et par la reaction des actifs defensifs.",
+            "bull_case": "Une detente des taux, du dollar ou du stress de marche ameliorerait le biais risque.",
+            "bear_case": "Une remontee du stress, des taux reels, du dollar ou du risque politique ferait pression sur les actifs risqués.",
+            "watchlist": ["VIX", "dollar US", "taux Treasury", "or", "inflation/politique Fed"],
+        },
+        "key_points": [performance_line, f"Regime courant: {quadrant}", news_line],
+        "risks": [
+            "Risque de remontee du stress de marche via VIX, spreads de credit ou baisse des actions.",
+            "Risque Fed/politique si les news de taux, fiscalite, tarifs ou geopolitique se deteriorent.",
+            "Risque de dollar ou taux reels defavorables aux expositions or, devises et actifs defensifs.",
+        ],
+        "allocation_comment": "L'allocation doit rester lue comme le resultat du modele quantitatif; le NLP reste en information shadow. Les changements doivent etre confirmes par les signaux de regime et les contraintes de risque.",
+        "performance_attribution": {
+            "gold_move_explanation": "Le mouvement de l'or doit etre lu avec les variations du dollar, des taux reels, du VIX et des news de risque politique/Fed disponibles.",
+            "strategy_vs_benchmark_gap": gap_line,
+            "model_miss_explanation": "L'ecart vient probablement d'un mix entre regime de marche, allocation courante et mouvements rapides des actifs defensifs; une attribution plus fine depend des details de contribution par actif.",
+            "what_to_monitor": ["Dollar US", "Taux Treasury", "VIX", "news Fed/politique", "or"],
+        },
+        "markdown": "",
+    }
+
+
+def structured_parse_failed(result):
+    return is_fallback_signal(result.get("nlp_signal")) and (
+        result.get("risks") == ["Reponse NLP non parseable en JSON strict."]
+        or is_empty_or_fallback(result.get("forward_view"))
+        or not result.get("key_points")
+    )
+
+
 def generate_model_result(api_key, model, payload, single_call=False):
     model_input = compact_model_input(payload)
+    diagnostics = {"structured_retry": False, "structured_parse_ok": True}
     if single_call:
-        content, usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": legacy_user_prompt(payload)}], max_tokens=1800)
-        return coerce_model_result(parse_model_content(content), payload), usage
-    structured_content, structured_usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": structured_user_prompt(model_input)}], max_tokens=1200)
+        content, usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": legacy_user_prompt(payload)}], max_tokens=2600)
+        result = coerce_model_result(parse_model_content(content), payload)
+        diagnostics["structured_parse_ok"] = not structured_parse_failed(result)
+        result["_parse_diagnostics"] = diagnostics
+        return result, usage
+
+    structured_content, structured_usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": structured_user_prompt(model_input)}], max_tokens=2400)
     structured_result = coerce_model_result(parse_model_content(structured_content), payload)
-    markdown_content, markdown_usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": markdown_user_prompt(model_input, structured_result)}], max_tokens=1400)
+    if structured_parse_failed(structured_result):
+        diagnostics["structured_retry"] = True
+        diagnostics["structured_parse_ok"] = False
+        retry_content, retry_usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": structured_retry_prompt(model_input)}], max_tokens=2400)
+        retry_result = coerce_model_result(parse_model_content(retry_content), payload)
+        structured_usage = merge_usage(structured_usage, retry_usage)
+        if not structured_parse_failed(retry_result):
+            structured_result = retry_result
+            diagnostics["structured_parse_ok"] = True
+        else:
+            diagnostics["local_structured_fallback"] = True
+            structured_result = coerce_model_result(build_local_structured_fallback(payload), payload)
+
+    markdown_content, markdown_usage = call_openrouter(api_key, model, [{"role": "system", "content": system_prompt()}, {"role": "user", "content": markdown_user_prompt(model_input, structured_result)}], max_tokens=1600)
     markdown_result = parse_model_content(markdown_content)
-    structured_result["markdown"] = clean_markdown(markdown_result.get("markdown", markdown_content), structured_result, payload)
+    structured_result["markdown"] = clean_markdown(markdown_result.get("markdown", content_to_text(markdown_content)), structured_result, payload)
+    structured_result["_parse_diagnostics"] = diagnostics
     return structured_result, merge_usage(structured_usage, markdown_usage)
 
 def load_dotenv_if_present(repo_root):
@@ -792,6 +986,7 @@ def main():
             "performance_attribution": model_result.get("performance_attribution", {}),
             "markdown": model_result.get("markdown", ""),
             "usage": usage,
+            "parse_diagnostics": model_result.get("_parse_diagnostics", {}),
         }
         generated += 1
         save_records(output_path, existing)
