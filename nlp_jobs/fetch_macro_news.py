@@ -3,16 +3,30 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+import xml.etree.ElementTree as ET
 
 DEFAULT_START_DATE = "2026-04-03"
 ALPHA_URL = "https://www.alphavantage.co/query"
-GDELT_DOC_URL = "http://api.gdeltproject.org/api/v2/doc/doc"
+GDELT_DOC_URL = "https://api.gdeltproject.org/api/v2/doc/doc"
+GOOGLE_NEWS_RSS_URL = "https://news.google.com/rss/search"
+
+GOOGLE_NEWS_QUERIES = {
+    "monetary_policy": '("Federal Reserve" OR FOMC OR "Fed interest rates" OR "US Treasury yields")',
+    "inflation_growth": '("US inflation" OR "US CPI" OR "US PCE" OR "US payrolls" OR "US GDP")',
+    "markets_sentiment": '("S&P 500" OR "Wall Street stocks" OR VIX OR "US stock market")',
+    "commodities_energy": '("oil prices" OR OPEC OR "gold prices" OR "copper prices")',
+    "politics_policy": '("US tariffs" OR "White House" OR "US sanctions" OR "Middle East war")',
+    "usd_fx": '("US dollar" OR DXY OR "dollar index" OR "dollar yen")',
+}
 
 THEMES = {
     "monetary_policy": {
@@ -96,7 +110,7 @@ def parse_args():
     parser.add_argument("--start-date", default=DEFAULT_START_DATE)
     parser.add_argument("--end-date", default=None)
     parser.add_argument("--output", default=None)
-    parser.add_argument("--provider", choices=["auto", "alpha", "gdelt", "all"], default="auto")
+    parser.add_argument("--provider", choices=["auto", "alpha", "gdelt", "google_rss", "all"], default="auto")
     parser.add_argument("--max-records-per-query", type=int, default=75)
     parser.add_argument("--alpha-limit", type=int, default=200)
     parser.add_argument("--chunk-days", type=int, default=45)
@@ -158,11 +172,44 @@ def alpha_datetime(day, end_of_day=False):
     return day.strftime("%Y%m%d") + suffix
 
 
+def request_bytes(url, timeout_seconds):
+    request = Request(url, headers={"User-Agent": "Macro4QuadrantsNewsFetcher/1.0"})
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=timeout_seconds) as response:
+                return response.read()
+        except HTTPError as exc:
+            if exc.code != 429 or attempt == 2:
+                raise
+            retry_after = exc.headers.get("Retry-After")
+            try:
+                delay = float(retry_after) if retry_after else 5 * (attempt + 1)
+            except ValueError:
+                delay = 5 * (attempt + 1)
+            time.sleep(min(max(delay, 5), 30))
+
+
 def request_json(url, params, timeout_seconds):
-    request_url = f"{url}?{urlencode(params)}"
-    request = Request(request_url, headers={"User-Agent": "Macro4QuadrantsNewsFetcher/1.0"})
-    with urlopen(request, timeout=timeout_seconds) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return json.loads(request_bytes(f"{url}?{urlencode(params)}", timeout_seconds).decode("utf-8"))
+
+
+def fetch_google_rss(query, start_day, end_day, timeout_seconds):
+    dated_query = (
+        f"{query} after:{(start_day - timedelta(days=1)).isoformat()}"
+        f" before:{(end_day + timedelta(days=1)).isoformat()}"
+    )
+    request_url = f"{GOOGLE_NEWS_RSS_URL}?{urlencode({'q': dated_query, 'hl': 'en-US', 'gl': 'US', 'ceid': 'US:en'})}"
+    root = ET.fromstring(request_bytes(request_url, timeout_seconds))
+    return root.findall("./channel/item")
+
+
+def friday_windows(start_day, end_day):
+    current = start_day
+    while current <= end_day:
+        friday = current + timedelta(days=(4 - current.weekday()) % 7)
+        week_end = min(friday, end_day)
+        yield current, week_end
+        current = week_end + timedelta(days=1)
 
 
 def fetch_gdelt(endpoint, query, start_day, end_day, max_records, timeout_seconds):
@@ -222,7 +269,7 @@ def relevance_score(title, theme, sentiment_score=None):
     text = (title or "").lower()
     score = THEME_BASE_SCORE.get(theme, 0.4)
     for keyword, boost in KEYWORD_BOOSTS.items():
-        if keyword in text:
+        if has_news_term(text, keyword):
             score += boost
     try:
         if sentiment_score is not None:
@@ -301,6 +348,62 @@ def normalize_alpha_article(article, theme, period_start):
     return record
 
 
+def has_news_term(text, term):
+    return re.search(r"(?<!\w)" + re.escape(term) + r"(?:s|es)?(?!\w)", text) is not None
+
+
+def infer_news_theme(title, default_theme):
+    text = title.lower()
+    markers = {
+        "monetary_policy": ("federal reserve", "fomc", "fed rate", "treasury yield"),
+        "inflation_growth": ("inflation", "cpi", "pce", "payroll", "jobs report", "unemployment", "gdp"),
+        "commodities_energy": ("oil", "opec", "crude", "gold price", "copper", "commodity", "commodities"),
+        "usd_fx": ("dollar", "dxy", "euro", "yen", "currency", "foreign exchange"),
+        "politics_policy": ("tariff", "sanction", "geopolitical", "white house", "congress"),
+    }
+    for theme, keywords in markers.items():
+        if any(has_news_term(text, keyword) for keyword in keywords):
+            return theme
+    return default_theme
+
+
+def normalize_google_article(item, default_theme, period_start, period_end):
+    title = (item.findtext("title") or "").strip()
+    url = (item.findtext("link") or "").strip()
+    source_element = item.find("source")
+    source_name = (source_element.text or "").strip() if source_element is not None else ""
+    source_url = source_element.attrib.get("url", "") if source_element is not None else ""
+    if source_name and title.endswith(f" - {source_name}"):
+        title = title[: -(len(source_name) + 3)].strip()
+    published = item.findtext("pubDate")
+    if not title or not url or not published:
+        return None
+    try:
+        published_at = parsedate_to_datetime(published).astimezone(timezone.utc)
+    except (TypeError, ValueError):
+        return None
+    if not (period_start <= published_at.date() <= period_end):
+        return None
+    theme = infer_news_theme(title, default_theme)
+    record = {
+        "date": published_at.date().isoformat(),
+        "seen_at": published_at.isoformat().replace("+00:00", "Z"),
+        "source_api": "google_news_rss",
+        "source": source_name,
+        "source_domain": source_url,
+        "language": "English",
+        "theme": theme,
+        "title": title,
+        "summary": title,
+        "url": url,
+        "market_impact_hint": THEMES[theme]["impact"],
+        "related_assets": THEMES[theme]["assets"],
+        "relevance_score": relevance_score(title, theme),
+    }
+    record["id"] = stable_id(record)
+    return record
+
+
 def to_float(value):
     try:
         return float(value)
@@ -368,9 +471,11 @@ def resolved_providers(requested_provider, api_key):
         return ["alpha"]
     if requested_provider == "gdelt":
         return ["gdelt"]
+    if requested_provider == "google_rss":
+        return ["google_rss"]
     if requested_provider == "all":
-        return ["alpha", "gdelt"] if api_key else ["gdelt"]
-    return ["alpha"] if api_key else ["gdelt"]
+        return ["alpha", "gdelt", "google_rss"] if api_key else ["gdelt", "google_rss"]
+    return ["alpha"] if api_key else ["google_rss"]
 
 
 def fetch_alpha_records(args, api_key, start_date, end_date):
@@ -418,6 +523,35 @@ def fetch_gdelt_records(args, start_date, end_date):
     return fetched, errors, stopped_early
 
 
+def fetch_google_rss_records(args, start_date, end_date):
+    fetched = []
+    errors = []
+    stopped_early = False
+    per_query_limit = max(1, min(int(args.max_records_per_query), 15))
+    for week_start, week_end in friday_windows(start_date, end_date):
+        for default_theme, query in GOOGLE_NEWS_QUERIES.items():
+            try:
+                items = fetch_google_rss(query, week_start, week_end, args.timeout_seconds)
+            except Exception as exc:
+                errors.append(f"{week_start}..{week_end} google_rss {default_theme}: {exc}")
+                if len(errors) >= args.max_errors:
+                    stopped_early = True
+                    break
+                continue
+            records = [
+                normalized
+                for item in items
+                if (normalized := normalize_google_article(item, default_theme, week_start, week_end))
+            ]
+            records.sort(key=lambda row: (row["relevance_score"], row["date"]), reverse=True)
+            fetched.extend(records[:per_query_limit])
+            if args.sleep_seconds > 0:
+                time.sleep(args.sleep_seconds)
+        if stopped_early:
+            break
+    return fetched, errors, stopped_early
+
+
 def main():
     args = parse_args()
     repo_root = Path(__file__).resolve().parents[1]
@@ -448,13 +582,13 @@ def main():
     for provider in providers:
         if provider == "alpha":
             provider_records, provider_errors, provider_stopped = fetch_alpha_records(args, api_key, fetch_start_date, end_date)
-        else:
+        elif provider == "gdelt":
             provider_records, provider_errors, provider_stopped = fetch_gdelt_records(args, fetch_start_date, end_date)
+        else:
+            provider_records, provider_errors, provider_stopped = fetch_google_rss_records(args, fetch_start_date, end_date)
         fetched.extend(provider_records)
         errors.extend(provider_errors)
         stopped_early = stopped_early or provider_stopped
-        if stopped_early:
-            break
 
     merged = dedupe(existing + fetched)
     new_count = len(dedupe(fetched))
@@ -479,6 +613,8 @@ def main():
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return
 
+    if not merged and errors:
+        raise SystemExit(f"No news records fetched; first error: {errors[0]}")
     write_jsonl(output, merged)
     print(f"Wrote {len(merged)} news records to {output} ({max(added_count, 0)} new). providers={','.join(providers)}")
     if stopped_early:

@@ -22,6 +22,7 @@ def render():
     with st.sidebar:
         if st.button("Back to Home", use_container_width=True):
             st.session_state.current_page = "Home"
+            st.query_params["page"] = "home"
             st.rerun()
 
     # --- THEME & DATA ---

@@ -18,9 +18,40 @@ if repo_root not in sys.path:
 # Existing path logic for local pages
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+PAGE_ROUTES = {
+    "Home": "home",
+    "Macro 4 seasons strategy": "macro4saisons",
+    "Crypto Momentum Trading": "crypto-momentum-trading",
+    "Monte Carlo Gambling": "monte-carlo-gambling",
+    "DCA Investment Strategy": "dca-investment-strategy",
+    "Pairs trading": "pairs-trading",
+    "Portfolio Optimizer": "portfolio-optimizer",
+    "Polymarket Arbitrage": "polymarket-arbitrage",
+    "CNR Hedge Transport": "hedgetransport",
+    "Mon Portefeuille": "mon-portefeuille",
+}
+ROUTE_PAGES = {slug: page for page, slug in PAGE_ROUTES.items()}
+ROUTE_ALIASES = {"macro-4-seasons-strategy": "Macro 4 seasons strategy"}
+
+
+def _get_query_page():
+    route = st.query_params.get("page")
+    if isinstance(route, list):
+        route = route[0] if route else None
+    return ROUTE_PAGES.get(route) or ROUTE_ALIASES.get(route)
+
+
+def _set_query_page(page_name):
+    st.query_params["page"] = PAGE_ROUTES.get(page_name, "home")
 # Initialize session state for routing
 if 'current_page' not in st.session_state:
-    st.session_state.current_page = "Home"
+    st.session_state.current_page = _get_query_page() or "Home"
+else:
+    st.session_state.current_page = _get_query_page() or st.session_state.current_page
+
+# Only a change of page should reset the user's scroll position.
+previous_page = st.session_state.get("_last_rendered_page")
+page_changed = previous_page is not None and previous_page != st.session_state.current_page
 
 
 try:
@@ -203,7 +234,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "DCA Investment Strategy", "Pairs trading", "Equity Research","Portfolio Optimizer", "Polymarket Arbitrage", "Mon Portefeuille"]
+        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Polymarket Arbitrage", "Mon Portefeuille"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -211,12 +242,13 @@ def render_sidebar():
             
         def on_menu_change(key):
             st.session_state.current_page = st.session_state[key]
+            _set_query_page(st.session_state.current_page)
             
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "hourglass-split", "arrows-expand", "robot", "bezier","activity", "wallet2"], 
-            #bootstrap icons (7 icons for 7 options)
+            icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "activity", "wallet2"], 
+            # Bootstrap icons, one per page.
             menu_icon="cast",
             default_index=default_idx,
             manual_select=default_idx,
@@ -241,19 +273,6 @@ def render_sidebar():
             }
         )
         
-        st.markdown("---")
-        st.markdown("### Tech Stack")
-        st.markdown("""
-        - Python 
-        - Streamlit 
-        - Pandas & NumPy 
-        - Plotly & Matplotlib 
-        - VectorBT 
-        - Apache Airflow 
-        - Scikit-learn 
-        """)
-        
-        st.markdown("---")
         st.caption("Developed by Leo")
         if st.button("Recharger les donnees"):
             st.cache_data.clear()
@@ -321,6 +340,7 @@ def render_home():
         if st.button("Voir le Projet", key="btn_macro", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Macro 4 seasons strategy"
+            _set_query_page("Macro 4 seasons strategy")
             st.rerun()
     
     with col2:
@@ -337,6 +357,7 @@ def render_home():
         if st.button("Voir le Projet", key="btn_crypto", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Crypto Momentum Trading"
+            _set_query_page("Crypto Momentum Trading")
             st.rerun()
 
     with col3:
@@ -353,12 +374,29 @@ def render_home():
         if st.button("Voir le Projet", key="btn_pairs", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Pairs trading"
+            _set_query_page("Pairs trading")
             st.rerun()
     
     
     col4, col5, col6 = st.columns(3)
     
     with col4:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
+            <h3><i class="bi bi-truck"></i> CNR Hedge Transport</h3>
+            <p><strong>Tech:</strong> Streamlit, Plotly, scenario analysis</p>
+            <p>Étude de couverture du coût gazole par le Brent : données CNR, décalage de facturation, régression et coefficient de hedge.</p>
+            <p><em>Parcours : exposition CNR, étude Brent, contrat et couverture mensuelle, résultats et roadmap.</em></p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_cnr", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "CNR Hedge Transport"
+            _set_query_page("CNR Hedge Transport")
+            st.rerun()
+
+    with col5:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-hourglass-split"></i> DCA Investment Strategy</h3>
@@ -371,10 +409,11 @@ def render_home():
         if st.button("Voir le Projet", key="btn_dca", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "DCA Investment Strategy"
+            _set_query_page("DCA Investment Strategy")
             st.rerun()
     
     
-    with col5:
+    with col6:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-dice-5"></i> Martingale Gambling</h3>
@@ -387,10 +426,12 @@ def render_home():
         if st.button("Voir le Projet", key="btn_mc", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Monte Carlo Gambling"
+            _set_query_page("Monte Carlo Gambling")
             st.rerun()
     
+    col7, col8, col9 = st.columns(3)
 
-    with col6:
+    with col7:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-bezier"></i> Portfolio Optimizer</h3>
@@ -403,12 +444,10 @@ def render_home():
         if st.button("Voir le Projet", key="btn_opti", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Portfolio Optimizer"
+            _set_query_page("Portfolio Optimizer")
             st.rerun()
-        
-    
-    col7, col8, col9 = st.columns(3)
 
-    with col7:
+    with col8:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-activity"></i> Polymarket Arbitrage</h3>
@@ -421,9 +460,10 @@ def render_home():
         if st.button("Voir le Projet", key="btn_poly", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Polymarket Arbitrage"
+            _set_query_page("Polymarket Arbitrage")
             st.rerun()
             
-    with col8:
+    with col9:
         st.markdown("""
         <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
             <h3><i class="bi bi-wallet2"></i> Mon Portefeuille</h3>
@@ -435,9 +475,9 @@ def render_home():
         if st.button("Voir le Projet", key="btn_portfolio", use_container_width=True):
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Mon Portefeuille"
+            _set_query_page("Mon Portefeuille")
             st.rerun()
     
-   
     st.markdown("---")
     
     # Contact Section
@@ -524,12 +564,14 @@ if __name__ == "__main__":
             st.error(f"Could not load the Polymarket Arbitrage app: {str(e)}")
             st.info("Check if polymarket_arbitrage_ui is correctly installed in streamlit_app/.")
 
-    elif st.session_state.current_page == "Equity Research":
-        _render_nav_sidebar("Equity Research")
-        st.title("Equity Research")
-        st.write("Page under construction...")
-    
-
+    elif st.session_state.current_page == "CNR Hedge Transport":
+        _render_nav_sidebar("CNR Hedge Transport")
+        try:
+            apply_home_css()
+            import cnr_hedge_transport.app_cnr_hedge as app_cnr_hedge
+            app_cnr_hedge.render()
+        except Exception as e:
+            st.error(f"Could not load the CNR Hedge Transport app: {str(e)}")
     elif st.session_state.current_page == "Mon Portefeuille":
         _render_nav_sidebar("Mon Portefeuille")
         try:
@@ -541,5 +583,21 @@ if __name__ == "__main__":
 
     else:
         st.session_state.current_page = "Home"
+        _set_query_page("Home")
         st.rerun()
 
+    if page_changed:
+        # Run after the destination page renders; leave widget reruns alone.
+        st.html(
+            """
+            <script>
+              requestAnimationFrame(() => {
+                const main = document.querySelector('section[data-testid="stMain"], section.main');
+                if (main) main.scrollTop = 0;
+                document.scrollingElement?.scrollTo(0, 0);
+              });
+            </script>
+            """,
+            unsafe_allow_javascript=True,
+        )
+    st.session_state._last_rendered_page = st.session_state.current_page

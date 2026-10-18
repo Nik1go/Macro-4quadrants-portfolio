@@ -188,3 +188,4 @@ ibapi
 ib_insync
 scikit-learn
 PyPortfolioOpt
+openpyxl>=3.1

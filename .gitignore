@@ -40,3 +40,9 @@ data/EU/*
 polymarket_arbitrage/data/*
 **/.streamlit/secrets.toml
 data/
+
+# CNR hedge app: publish open source inputs and tests, keep Bloomberg export local.
+!streamlit_app/cnr_hedge_transport/__init__.py
+!streamlit_app/cnr_hedge_transport/data/
+!streamlit_app/cnr_hedge_transport/data/*.csv
+streamlit_app/cnr_hedge_transport/data/*.xlsx

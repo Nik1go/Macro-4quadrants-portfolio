@@ -12,7 +12,7 @@ import pandas as pd
 
 
 DEFAULT_START_DATE = "2026-04-03"
-DEFAULT_MODEL = "google/gemini-2.5-flash-lite"
+DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 QUADRANT_LABELS = {
@@ -138,6 +138,19 @@ def item_date(value):
     return None
 
 
+def news_selection_score(item):
+    source = str(item.get("source") or "").lower()
+    preferred_sources = (
+        "reuters", "associated press", "ap news", "bloomberg", "financial times",
+        "wall street journal", "federal reserve", "bureau of labor statistics",
+        "bureau of economic analysis", "u.s. treasury", "international monetary fund",
+        "world bank", "cme group",
+    )
+    other_financial_sources = ("cnbc", "rbc", "politico", "nytimes", "new york times")
+    bonus = 0.16 if any(name in source for name in preferred_sources) else 0.08 if any(name in source for name in other_financial_sources) else 0.0
+    return float(item.get("relevance_score") or 0) + bonus
+
+
 def filter_news_context(news_context, start, end, max_items=8):
     if not news_context.get("available"):
         return news_context
@@ -152,8 +165,27 @@ def filter_news_context(news_context, start, end, max_items=8):
         if dt is None or not (start_ts <= dt <= end_ts):
             continue
         filtered.append(item)
-    filtered.sort(key=lambda row: (row.get("relevance_score", 0), str(row.get("date", ""))), reverse=True)
-    return {**news_context, "items": filtered[:max_items], "total_items_in_period": len(filtered)}
+    filtered.sort(key=lambda row: (news_selection_score(row), str(row.get("date", ""))), reverse=True)
+    selected = []
+    used_themes = set()
+    for item in filtered:
+        theme = item.get("theme")
+        if theme and theme not in used_themes:
+            selected.append(item)
+            used_themes.add(theme)
+            if len(selected) >= max_items:
+                break
+    for item in filtered:
+        if len(selected) >= max_items:
+            break
+        if item not in selected and sum(row.get("theme") == item.get("theme") for row in selected) < 2:
+            selected.append(item)
+    for item in filtered:
+        if len(selected) >= max_items:
+            break
+        if item not in selected:
+            selected.append(item)
+    return {**news_context, "items": selected, "total_items_in_period": len(filtered)}
 
 
 def load_existing(path):
@@ -425,6 +457,8 @@ def system_prompt():
         "Confidence n'est pas une probabilite de performance; c'est le degre de confiance dans la lecture narrative. "
         "Policy risk mesure le risque Fed/fiscal/reglementaire/geopolitique deduit des donnees fournies; 0 signifie neutre ou information insuffisante. "
         "Explique les ecarts de performance, surtout si l'or bouge fortement ou si la strategie sous-performe. "
+        "Les actualites RSS contiennent uniquement un titre, une source et une date; n'invente aucun detail de l'article ni causalite non demontree. "
+        "Cite la source et la date quand tu relies une actualite a un signal, et distingue les faits du marche des hypotheses. "
         "Si aucune news n'est fournie, dis-le sobrement et n'invente aucun evenement recent. "
         "Ne copie jamais les donnees sous forme de JSON dans les champs redactionnels."
     )
@@ -454,6 +488,7 @@ def structured_user_prompt(model_input):
     return (
         "Etape 1/2: analyse structuree. Retourne uniquement un objet JSON valide, sans markdown et sans texte autour. "
         "Garde toutes les valeurs redactionnelles courtes, sans puces markdown dans les strings. "
+        "Si des actualites existent, remplis news_data avec date, source et titre; indique lesquelles confirment ou contredisent les indicateurs et le comportement du modele. "
         "Si une information manque, utilise une chaine vide ou une liste vide, mais garde toutes les cles du schema.\nSchema:\n"
         + json.dumps(structured_schema(), ensure_ascii=False, indent=2)
         + "\n\nDonnees compactes:\n"
@@ -475,7 +510,7 @@ def structured_retry_prompt(model_input):
 
 def markdown_user_prompt(model_input, structured_result):
     schema = {"markdown": "clean Markdown debrief, no JSON, 350-550 words"}
-    return "Etape 2/2: redaction finale. Retourne uniquement un objet JSON valide avec la cle markdown. Le markdown doit etre une synthese lisible pour Streamlit, jamais le JSON brut. Sections: Synthese, Regime macro, Performance, Signal NLP, Allocation, Points de vigilance.\nSchema:\n" + json.dumps(schema, ensure_ascii=False, indent=2) + "\n\nAnalyse structuree validee:\n" + json.dumps(structured_result, ensure_ascii=False, indent=2) + "\n\nDonnees compactes:\n" + json.dumps(model_input, ensure_ascii=False, indent=2)
+    return "Etape 2/2: redaction finale. Retourne uniquement un objet JSON valide avec la cle markdown. Le markdown doit etre une synthese lisible pour Streamlit, jamais le JSON brut. Sections: Synthese, Regime macro, Actualites et comparaison au modele, Performance, Signal NLP, Allocation, Points de vigilance. Dans la section actualites, cite les dates et sources des titres utilises, puis explique ce qui confirme ou contredit les indicateurs et les allocations, sans attribuer de causalite non prouvee.\nSchema:\n" + json.dumps(schema, ensure_ascii=False, indent=2) + "\n\nAnalyse structuree validee:\n" + json.dumps(structured_result, ensure_ascii=False, indent=2) + "\n\nDonnees compactes:\n" + json.dumps(model_input, ensure_ascii=False, indent=2)
 
 
 def legacy_user_prompt(payload):
@@ -661,8 +696,14 @@ def clean_markdown(value, model_result, payload=None):
     if embedded:
         inner = embedded.get("markdown")
         if isinstance(inner, str) and inner.strip() and not parse_json_or_literal(strip_code_fence(inner.strip())):
-            return inner.strip()
-        return build_fallback_markdown({**embedded, **model_result}, payload)
+            stripped = inner.strip()
+        else:
+            return build_fallback_markdown({**embedded, **model_result}, payload)
+    news_section = build_news_section(model_result, payload)
+    if news_section and len(re.findall(r"(?m)^##\s+", stripped)) < 4:
+        return build_fallback_markdown(model_result, payload)
+    if news_section and not re.search(r"(?im)^##\s+actualit", stripped):
+        stripped += "\n\n" + news_section
     return stripped
 
 
@@ -680,6 +721,21 @@ def format_signal_text(value):
     return f"{numeric:+.2f}"
 
 
+def build_news_section(model_result, payload=None):
+    context = as_dict(payload.get("news_context")) if isinstance(payload, dict) else {}
+    items = [item for item in context.get("items", []) if isinstance(item, dict)][:6]
+    if not items:
+        return ""
+    lines = ["## Actualités et comparaison au modèle"]
+    for item in items:
+        lines.append(f"- {item.get('date') or 'Date inconnue'} · {item.get('source') or 'Source inconnue'} : {item.get('title') or 'Titre indisponible'}")
+    rationale = as_dict(model_result.get("nlp_signal")).get("rationale")
+    if rationale:
+        lines.extend(["", "Lecture du signal : " + str(rationale)])
+    lines.extend(["", "Ces titres ne suffisent pas à établir une causalité directe avec les marchés."])
+    return "\n".join(lines)
+
+
 def build_fallback_markdown(model_result, payload=None):
     metrics = payload.get("metrics", {}) if isinstance(payload, dict) else {}
     signal = as_dict(model_result.get("nlp_signal"))
@@ -692,6 +748,8 @@ def build_fallback_markdown(model_result, payload=None):
         "",
         "## Synthese",
         model_result.get("strategy_status") or "Synthese non disponible.",
+        "",
+        build_news_section(model_result, payload),
         "",
         "## Performance",
         f"Strategie: {format_pct_text(metrics.get('strategy_week_return'))} | S&P 500: {format_pct_text(metrics.get('sp500_week_return'))} | Or: {format_pct_text(metrics.get('gold_week_return'))} | Drawdown semaine: {format_pct_text(metrics.get('week_max_drawdown'))}.",
@@ -961,7 +1019,12 @@ def main():
         if payload is None:
             continue
         current = existing.get(payload["period_end"])
-        if current and current.get("input_digest") == payload["input_digest"] and not args.force:
+        if (
+            current
+            and current.get("input_digest") == payload["input_digest"]
+            and current.get("model") == model
+            and not args.force
+        ):
             skipped += 1
             continue
         if args.dry_run:

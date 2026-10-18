@@ -55,7 +55,7 @@ venv activate
 airflow dags trigger dag_us_macro
 """
 
-FRED_API_KEY = 'c4caaa1267e572ae636ff75a2a600f3d'
+FRED_API_KEY = os.environ.get('FRED_API_KEY')
 
 FRED_SERIES_MAPPING = {
     'INFLATION': 'CPIAUCSL',
@@ -139,6 +139,8 @@ def on_dag_failure(context):
 
 
 def fetch_and_save_data(**kwargs):
+    if not FRED_API_KEY:
+        raise RuntimeError('FRED_API_KEY doit être défini dans les variables d’environnement Airflow.')
     fred = Fred(api_key=FRED_API_KEY)
     base_dir = os.path.join(PROJECT_ROOT, 'data', 'US')
 
@@ -774,8 +776,8 @@ with DAG(
                 --base-dir {base_dir} \
                 --start-date 2026-04-03 \
                 --chunk-days 45 \
-                --timeout-seconds 6 \
-                --sleep-seconds 1 \
+                --timeout-seconds 20 \
+                --sleep-seconds 2 \
                 --max-errors 10
         """,
     )

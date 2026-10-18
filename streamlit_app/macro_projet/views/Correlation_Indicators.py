@@ -14,7 +14,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 
-@st.cache_data
 def load_weekly_debriefs():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
@@ -278,10 +277,7 @@ def render(data):
         "The NLP signal is stored as shadow information first, not as a live allocation override."
     )
 
-    nlp_df = data.get("weekly_nlp") if isinstance(data, dict) else None
-    nlp_path = None
-    if nlp_df is None:
-        nlp_df, nlp_path = load_weekly_debriefs()
+    nlp_df, nlp_path = load_weekly_debriefs()
 
     if nlp_df is None or nlp_df.empty:
         st.warning("No weekly NLP debrief has been generated yet.")
@@ -328,6 +324,19 @@ def render(data):
 
     st.divider()
     st.markdown(clean_display_markdown(record.get("markdown") or record.get("macro_regime"), record, metrics, signal, forward_view))
+
+    news_items = safe_list(safe_dict(record.get("news_context")).get("items"))
+    with st.expander(f"Actualités externes de la semaine ({len(news_items)})"):
+        st.caption("Titres, dates et sources du flux RSS ; le contenu intégral des articles n'est pas transmis au modèle.")
+        if not news_items:
+            st.caption("Aucune actualité externe disponible pour cette semaine.")
+        for index, item in enumerate(news_items):
+            if not isinstance(item, dict):
+                continue
+            st.write(f"{safe_text(item.get('date'))} · {safe_text(item.get('source'))} — {safe_text(item.get('title'))}")
+            url = item.get("url")
+            if isinstance(url, str) and url.startswith(("https://", "http://")):
+                st.link_button(f"Lire la source {index + 1}", url)
 
     col_left, col_right = st.columns(2)
     with col_left:
