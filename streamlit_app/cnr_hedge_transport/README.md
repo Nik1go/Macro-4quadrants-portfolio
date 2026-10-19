@@ -146,11 +146,10 @@ optimum garanti pour les P&L des échéances ICE. Le questionnaire **Contrat &
 couverture** conserve son scénario mensuel sur mini Brent ; le backtest ICE est
 un calcul distinct.
 
-L'application cherche `data/Brent Futures 2021.xlsx` dans son dossier local,
-puis accepte un fichier importé par l'utilisateur. Ce classeur est exclu du
-push public tant que les droits de redistribution de l'export Bloomberg ne sont
-pas confirmés. Il pèse environ 623 Ko : Git LFS n'est pas utile pour sa taille.
-Le déploiement public affiche donc un champ d'import. Le fichier est un proxy
+L'application charge automatiquement `data/Brent Futures 2021.xlsx`, suivi
+par Git et donc présent après `git pull` sur le VPS. Un fichier importé dans
+l'interface peut remplacer ce classeur pour une session. Il pèse environ
+623 Ko : Git LFS n'est pas nécessaire. Le fichier est un proxy
 de futures ICE fractionnaires : **0,1 ICE représente 100 barils de risque, mais
 ne reproduit pas le règlement mensuel du MBC**. Les coûts, la marge et la date
 effective de publication du CNR restent hors du modèle. Voir les spécifications

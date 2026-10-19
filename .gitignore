@@ -41,8 +41,9 @@ polymarket_arbitrage/data/*
 **/.streamlit/secrets.toml
 data/
 
-# CNR hedge app: publish open source inputs and tests, keep Bloomberg export local.
+# CNR hedge app: track the data needed by the deployed backtest.
 !streamlit_app/cnr_hedge_transport/__init__.py
 !streamlit_app/cnr_hedge_transport/data/
 !streamlit_app/cnr_hedge_transport/data/*.csv
 streamlit_app/cnr_hedge_transport/data/*.xlsx
+!streamlit_app/cnr_hedge_transport/data/Brent Futures 2021.xlsx
