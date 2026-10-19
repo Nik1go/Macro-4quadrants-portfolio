@@ -210,16 +210,17 @@ def render_backtest() -> None:
     with controls_c:
         convoy_type = st.selectbox("Type de convoi", list(CONVOY_LABELS), format_func=CONVOY_LABELS.get, key="backtest_convoy")
 
-    prior_months = [month for month in cnr.index if month < pd.Period(entry_date, freq="M")]
-    if not prior_months:
-        st.warning("Aucun mois CNR antérieur à la date d'achat.")
+    entry_month = pd.Period(entry_date, freq="M")
+    base_candidates = [month for month in cnr.index if month <= entry_month - 2]
+    if not base_candidates:
+        st.warning("Aucun mois CNR suffisamment ancien pour servir de référence connue à l'achat.")
         return
-    most_recent_base = prior_months[-1]
+    most_recent_base = base_candidates[-1]
     control_base, control_lag, control_weight, control_invoice = st.columns(4)
     with control_base:
         base_month = st.selectbox(
             "Mois CNR de référence du contrat",
-            list(reversed(prior_months[-24:])),
+            list(reversed(base_candidates[-24:])),
             format_func=str,
         )
     with control_lag:
@@ -237,7 +238,7 @@ def render_backtest() -> None:
     if base_month != most_recent_base:
         st.caption(f"Référence CNR choisie : {base_month}. La date effective de publication de cet indice n'est pas historisée.")
     else:
-        st.caption("Référence CNR : dernier mois antérieur à l'achat. Sa date effective de publication n'est pas historisée.")
+        st.caption("Référence CNR : deux mois avant l'achat, par prudence faute de dates historiques de publication.")
 
     invoice_months = [month for month in cnr.index if month.year == year and month >= pd.Period(entry_date, freq="M")]
     fx_mode = st.selectbox(

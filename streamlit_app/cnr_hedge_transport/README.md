@@ -138,10 +138,13 @@ de recul supplémentaire faute de dates de publication CNR historiques :
 
 `barils = facture initiale × poids gazole × β × EUR/USD à l'achat / prix ICE à l'achat`
 
-La quantité peut être remplacée par une saisie manuelle. Il s'agit d'une
-conversion indicative du β en risque financier, pas d'un optimum garanti pour
-les P&L des échéances ICE. Le questionnaire **Contrat & couverture** conserve
-son scénario mensuel sur mini Brent ; le backtest ICE est un calcul distinct.
+La quantité peut être remplacée par une saisie manuelle. Par défaut, le CNR
+de référence est celui de deux mois avant l'achat : les dates historiques de
+publication ne sont pas disponibles pour garantir que le mois précédent était
+connu. Il s'agit d'une conversion indicative du β en risque financier, pas d'un
+optimum garanti pour les P&L des échéances ICE. Le questionnaire **Contrat &
+couverture** conserve son scénario mensuel sur mini Brent ; le backtest ICE est
+un calcul distinct.
 
 L'application cherche `data/Brent Futures 2021.xlsx` dans son dossier local,
 puis accepte un fichier importé par l'utilisateur. Ce classeur est exclu du
