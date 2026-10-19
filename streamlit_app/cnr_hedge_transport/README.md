@@ -147,8 +147,7 @@ couverture** conserve son scénario mensuel sur mini Brent ; le backtest ICE est
 un calcul distinct.
 
 L'application charge automatiquement `data/Brent Futures 2021.xlsx`, suivi
-par Git et donc présent après `git pull` sur le VPS. Un fichier importé dans
-l'interface peut remplacer ce classeur pour une session. Il pèse environ
+par Git et donc présent après `git pull` sur le VPS. Il pèse environ
 623 Ko : Git LFS n'est pas nécessaire. Le fichier est un proxy
 de futures ICE fractionnaires : **0,1 ICE représente 100 barils de risque, mais
 ne reproduit pas le règlement mensuel du MBC**. Les coûts, la marge et la date

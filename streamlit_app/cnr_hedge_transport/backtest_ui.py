@@ -33,7 +33,6 @@ PALETTE = {
     "border": "#3d4263",
 }
 REPO_WORKBOOK = Path(__file__).with_name("data") / "Brent Futures 2021.xlsx"
-LOCAL_WORKBOOK = Path.home() / "Downloads" / "Brent Futures 2021.xlsx"
 
 
 @st.cache_data(show_spinner=False)
@@ -161,24 +160,12 @@ def render_backtest() -> None:
         "couverture théorique ; aucun contrat fractionnaire n'est négocié dans cette simulation. "
         "Le nombre de barils est calculé depuis le β connu avant l'achat, ou saisi manuellement."
     )
-    uploaded = st.file_uploader(
-        "Exporter Bloomberg : Brent ICE CO1 à CO12 (.xlsx)", type="xlsx", key="ice_backtest_upload"
-    )
-    if uploaded is not None:
-        content = uploaded.getvalue()
-        st.caption("Source : classeur Bloomberg chargé ici.")
-    elif REPO_WORKBOOK.is_file():
-        content = REPO_WORKBOOK.read_bytes()
-        st.caption("Source : classeur placé dans le dossier data du projet. Un fichier chargé ici le remplacera.")
-    elif LOCAL_WORKBOOK.is_file():
-        content = LOCAL_WORKBOOK.read_bytes()
-        st.caption("Source : classeur local détecté dans Downloads. Un fichier chargé ici le remplacera.")
-    else:
-        st.info("Charge le classeur Brent ICE pour lancer le backtest.")
+    if not REPO_WORKBOOK.is_file():
+        st.error("Historique Brent ICE introuvable dans les données du projet.")
         return
 
     try:
-        history = _cached_history(content)
+        history = _cached_history(REPO_WORKBOOK.read_bytes())
         cnr = load_cnr_monthly()
     except (ValueError, OSError, KeyError) as exc:
         st.error(f"Données impossibles à charger : {exc}")
