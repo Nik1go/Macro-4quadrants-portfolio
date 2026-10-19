@@ -183,7 +183,7 @@ WTForms==3.2.1
 yarl==1.22.0
 yfinance==1.0
 zipp==3.23.0
-statsmodels==0.16.2
+statsmodels==0.15.0
 ibapi
 ib_insync
 scikit-learn
