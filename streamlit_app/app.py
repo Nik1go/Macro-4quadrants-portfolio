@@ -26,6 +26,7 @@ PAGE_ROUTES = {
     "DCA Investment Strategy": "dca-investment-strategy",
     "Pairs trading": "pairs-trading",
     "Portfolio Optimizer": "portfolio-optimizer",
+    "Ant Colony Portfolio": "ant-colony-portfolio",
     "Polymarket Arbitrage": "polymarket-arbitrage",
     "CNR Hedge Transport": "hedgetransport",
     "Mon Portefeuille": "mon-portefeuille",
@@ -234,7 +235,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Polymarket Arbitrage", "Mon Portefeuille"]
+        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Ant Colony Portfolio", "Polymarket Arbitrage", "Mon Portefeuille"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -247,7 +248,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "activity", "wallet2"], 
+            icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "diagram-3", "activity", "wallet2"],
             # Bootstrap icons, one per page.
             menu_icon="cast",
             default_index=default_idx,
@@ -274,7 +275,9 @@ def render_sidebar():
         )
         
         st.caption("Developed by Leo")
-        if st.button("Recharger les donnees"):
+        if st.session_state.current_page == "Ant Colony Portfolio":
+            st.caption("Ce projet utilise des données figées.")
+        elif st.button("Recharger les donnees"):
             st.cache_data.clear()
             st.rerun()
 
@@ -480,6 +483,29 @@ def render_home():
     
     st.markdown("---")
     
+    # Metaheuristic stock-selection project.
+    aco_column, _, _ = st.columns(3)
+    with aco_column:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;">
+            <h3><i class="bi bi-diagram-3"></i> Ant Colony Portfolio</h3>
+            <p><strong>Tech :</strong> Python, NumPy, Yahoo Finance, Euronext</p>
+            <p>Optimisation par colonie de fourmis : choisir 10 actions équipondérées
+            dans le CAC 40 et le CAC Mid 60 pour minimiser la volatilité sous
+            une contrainte de rendement minimal.</p>
+            <p><strong>À explorer :</strong> méthode, pseudo-code commenté,
+            paramètres interactifs et notebook autonome depuis 2022.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_aco", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Ant Colony Portfolio"
+            _set_query_page("Ant Colony Portfolio")
+            st.rerun()
+
+    st.markdown("---")
+
     # Contact Section
     st.markdown("### Let's Connect")
     col1, col2 = st.columns(2)
@@ -553,6 +579,12 @@ if __name__ == "__main__":
         except Exception as e:
             st.error(f"Could not load the Portfolio Optimizer app: {str(e)}")
 
+
+    elif st.session_state.current_page == "Ant Colony Portfolio":
+        _render_nav_sidebar("Ant Colony Portfolio")
+        apply_home_css()
+        import ant_colony.app_aco as app_aco
+        app_aco.render()
 
     elif st.session_state.current_page == "Polymarket Arbitrage":
         _render_nav_sidebar("Polymarket Arbitrage")

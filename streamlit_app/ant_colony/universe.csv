@@ -1,0 +1,101 @@
+ticker,name,isin,index,exchange,snapshot_date,source
+AC.PA,ACCOR,FR0000120404,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+AI.PA,AIR LIQUIDE,FR0000120073,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+AIR.PA,AIRBUS,NL0000235190,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+MT.AS,ARCELORMITTAL SA,LU1598757687,CAC 40,Euronext Amsterdam,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+CS.PA,AXA,FR0000120628,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+BNP.PA,BNP PARIBAS ACT.A,FR0000131104,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+EN.PA,BOUYGUES,FR0000120503,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+BVI.PA,BUREAU VERITAS,FR0006174348,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+CAP.PA,CAPGEMINI,FR0000125338,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+CA.PA,CARREFOUR,FR0000120172,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ACA.PA,CREDIT AGRICOLE,FR0000045072,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+BN.PA,DANONE,FR0000120644,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+DSY.PA,DASSAULT SYSTEMES,FR0014003TT8,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+FGR.PA,EIFFAGE,FR0000130452,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ENGI.PA,ENGIE,FR0010208488,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+EL.PA,ESSILORLUXOTTICA,FR0000121667,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ERF.PA,EUROFINS SCIENT.,FR0014000MR3,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ENX.PA,EURONEXT,NL0006294274,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+RMS.PA,HERMES INTL,FR0000052292,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+KER.PA,KERING,FR0000121485,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+OR.PA,L'OREAL,FR0000120321,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+LR.PA,LEGRAND,FR0010307819,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+MC.PA,LVMH,FR0000121014,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ML.PA,MICHELIN,FR001400AJ45,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ORA.PA,ORANGE,FR0000133308,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+RI.PA,PERNOD RICARD,FR0000120693,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+PUB.PA,PUBLICIS GROUPE SA,FR0000130577,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+RNO.PA,RENAULT,FR0000131906,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+SAF.PA,SAFRAN,FR0000073272,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+SGO.PA,SAINT GOBAIN,FR0000125007,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+SAN.PA,SANOFI,FR0000120578,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+SU.PA,SCHNEIDER ELECTRIC,FR0000121972,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+GLE.PA,SOCIETE GENERALE,FR0000130809,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+STLAP.PA,STELLANTIS NV,NL00150001Q9,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+STMPA.PA,STMICROELECTRONICS,NL0000226223,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+HO.PA,THALES,FR0000121329,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+TTE.PA,TOTALENERGIES,FR0000120271,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+URW.PA,UNIBAIL-RODAMCO-WE,FR0013326246,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+VIE.PA,VEOLIA ENVIRON.,FR0000124141,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+DG.PA,VINCI,FR0000125486,CAC 40,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/FR0003500008-XPAR
+ADP.PA,ADP,FR0010340141,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+AF.PA,AIR FRANCE -KLM,FR001400J770,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ATE.PA,ALTEN,FR0000071946,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+APAM.AS,APERAM,LU0569974404,CAC Mid 60,Euronext Amsterdam,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ARG.PA,ARGAN,FR0010481960,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ATO.PA,ATOS GROUP,FR001400X2S4,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+AYV.PA,AYVENS,FR0013258662,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+BB.PA,BIC,FR0000120966,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+BOL.PA,BOLLORE,FR0000039299,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+CARM.PA,CARMILA,FR0010828137,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+CLARI.PA,CLARIANE,FR0010386334,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+COFA.PA,COFACE,FR0010667147,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+COV.PA,COVIVIO,FR0000064578,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+DBV.PA,DBV TECHNOLOGIES,FR0010417345,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+DBG.PA,DERICHEBOURG,FR0000053381,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ELIS.PA,ELIS,FR0012435121,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+EMEIS.PA,EMEIS,FR001400NLM4,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ERA.PA,ERAMET,FR0000131757,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+RF.PA,EURAZEO,FR0000121121,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ETL.PA,EUTELSAT COMMUNIC.,FR0010221234,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+EXA.PA,EXAIL TECHNOLOGIES,FR0000062671,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+EXENS.PA,EXOSENS,FR001400Q9V2,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+FDJU.PA,FDJ UNITED,FR0013451333,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+FRVIA.PA,FORVIA,FR0000121147,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+GFC.PA,GECINA,FR0010040865,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+GNFT.PA,GENFIT,FR0004163111,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+ICAD.PA,ICADE,FR0000035081,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+IDL.PA,ID LOGISTICS GROUP,FR0010929125,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+NK.PA,IMERYS,FR0000120859,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+IVA.PA,INVENTIVA,FR0013233012,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+IPS.PA,IPSOS,FR0000073298,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+DEC.PA,JCDECAUX,FR0000077919,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+FII.PA,LISI,FR0000050353,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+MAU.PA,MAUREL ET PROM,FR0000051070,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+MEDCL.PA,MEDINCELL,FR0004065605,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+MERY.PA,MERCIALYS,FR0010241638,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+MRN.PA,MERSEN,FR0000039620,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+MMT.PA,METROPOLE TV,FR0000053225,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+NANO.PA,NANOBIOTIX,FR0011341205,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+OPM.PA,OPMOBILITY,FR0000124570,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+PLX.PA,PLUXEE,NL0015001W49,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+RCO.PA,REMY COINTREAU,FR0000130395,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+RUI.PA,RUBIS,FR0013269123,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+SK.PA,S.E.B.,FR0000121709,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+SESG.PA,SES,LU0088087324,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+SOLB.BR,SOLVAY,BE0003470755,CAC Mid 60,Euronext Brussels,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+SOP.PA,SOPRA STERIA GROUP,FR0000050809,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+TFI.PA,TF1,FR0000054900,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+TRI.PA,TRIGANO,FR0005691656,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+UBI.PA,UBISOFT ENTERTAIN,FR0000054470,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+FR.PA,VALEO,FR0013176526,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VK.PA,VALLOUREC,FR0013506730,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VLA.PA,VALNEVA,FR0004056851,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VCT.PA,VICAT,FR0000031775,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VIRP.PA,VIRBAC,FR0000031577,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VIRI.PA,VIRIDIEN,FR001400PVN6,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VIV.PA,VIVENDI SE,FR0000127771,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+VU.PA,Vusion,FR0010282822,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+MF.PA,WENDEL,FR0000121204,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR
+WLN.PA,WORLDLINE,FR00140182K6,CAC Mid 60,Euronext Paris,2026-10-23,https://live.euronext.com/en/product/indices/QS0010989117-XPAR

@@ -47,3 +47,7 @@ data/
 !streamlit_app/cnr_hedge_transport/data/*.csv
 streamlit_app/cnr_hedge_transport/data/*.xlsx
 !streamlit_app/cnr_hedge_transport/data/Brent Futures 2021.xlsx
+
+# Ant colony portfolio: local market-data cache and public package sources.
+streamlit_app/ant_colony/cache/
+!streamlit_app/ant_colony/__init__.py
