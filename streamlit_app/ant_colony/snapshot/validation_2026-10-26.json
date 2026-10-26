@@ -1,0 +1,209 @@
+{
+  "snapshot_last_session": "2026-10-22",
+  "eligible_assets": 96,
+  "sessions": 1230,
+  "tickers": [
+    "CA.PA",
+    "BN.PA",
+    "ENX.PA",
+    "ORA.PA",
+    "SAN.PA",
+    "HO.PA",
+    "TTE.PA",
+    "BB.PA",
+    "BOL.PA",
+    "FDJU.PA"
+  ],
+  "metrics": {
+    "cagr": 0.06510865899932235,
+    "volatility": 0.10674726697142257,
+    "total_return": 0.35355464546789883,
+    "max_drawdown": -0.1284118745490781
+  },
+  "ratios_rf_0": {
+    "sharpe": 0.6349943814446005,
+    "sortino": 0.8861239880705193
+  },
+  "benchmark_stats": {
+    "CAC 40": {
+      "cagr": 0.016616842798965803,
+      "volatility": 0.16260227957171047,
+      "total_return": 0.0823086358871905,
+      "max_drawdown": -0.2303978749710568
+    },
+    "CAC Mid 60": {
+      "cagr": -0.034309144898155584,
+      "volatility": 0.1642246170202124,
+      "total_return": -0.15427090383569197,
+      "max_drawdown": -0.2680313804871478
+    }
+  },
+  "target": 0.016616842798965803,
+  "winner": "CAC 40",
+  "unique_evaluated": 2212,
+  "first_final_best_iteration": 30,
+  "new_baskets_last_iteration": 13,
+  "pheromones_at_max": 7,
+  "pheromones_at_min": 86,
+  "other_seeds": {
+    "1": {
+      "same_basket": true,
+      "tickers": [
+        "CA.PA",
+        "BN.PA",
+        "ENX.PA",
+        "ORA.PA",
+        "SAN.PA",
+        "HO.PA",
+        "TTE.PA",
+        "BB.PA",
+        "BOL.PA",
+        "FDJU.PA"
+      ],
+      "metrics": {
+        "cagr": 0.06510865899932235,
+        "volatility": 0.10674726697142257,
+        "total_return": 0.35355464546789883,
+        "max_drawdown": -0.1284118745490781
+      }
+    },
+    "2": {
+      "same_basket": true,
+      "tickers": [
+        "CA.PA",
+        "BN.PA",
+        "ENX.PA",
+        "ORA.PA",
+        "SAN.PA",
+        "HO.PA",
+        "TTE.PA",
+        "BB.PA",
+        "BOL.PA",
+        "FDJU.PA"
+      ],
+      "metrics": {
+        "cagr": 0.06510865899932235,
+        "volatility": 0.10674726697142257,
+        "total_return": 0.35355464546789883,
+        "max_drawdown": -0.1284118745490781
+      }
+    },
+    "3": {
+      "same_basket": true,
+      "tickers": [
+        "CA.PA",
+        "BN.PA",
+        "ENX.PA",
+        "ORA.PA",
+        "SAN.PA",
+        "HO.PA",
+        "TTE.PA",
+        "BB.PA",
+        "BOL.PA",
+        "FDJU.PA"
+      ],
+      "metrics": {
+        "cagr": 0.06510865899932235,
+        "volatility": 0.10674726697142257,
+        "total_return": 0.35355464546789883,
+        "max_drawdown": -0.1284118745490781
+      }
+    },
+    "7": {
+      "same_basket": true,
+      "tickers": [
+        "CA.PA",
+        "BN.PA",
+        "ENX.PA",
+        "ORA.PA",
+        "SAN.PA",
+        "HO.PA",
+        "TTE.PA",
+        "BB.PA",
+        "BOL.PA",
+        "FDJU.PA"
+      ],
+      "metrics": {
+        "cagr": 0.06510865899932235,
+        "volatility": 0.10674726697142257,
+        "total_return": 0.35355464546789883,
+        "max_drawdown": -0.1284118745490781
+      }
+    },
+    "123": {
+      "same_basket": true,
+      "tickers": [
+        "CA.PA",
+        "BN.PA",
+        "ENX.PA",
+        "ORA.PA",
+        "SAN.PA",
+        "HO.PA",
+        "TTE.PA",
+        "BB.PA",
+        "BOL.PA",
+        "FDJU.PA"
+      ],
+      "metrics": {
+        "cagr": 0.06510865899932235,
+        "volatility": 0.10674726697142257,
+        "total_return": 0.35355464546789883,
+        "max_drawdown": -0.1284118745490781
+      }
+    },
+    "2026": {
+      "same_basket": true,
+      "tickers": [
+        "CA.PA",
+        "BN.PA",
+        "ENX.PA",
+        "ORA.PA",
+        "SAN.PA",
+        "HO.PA",
+        "TTE.PA",
+        "BB.PA",
+        "BOL.PA",
+        "FDJU.PA"
+      ],
+      "metrics": {
+        "cagr": 0.06510865899932235,
+        "volatility": 0.10674726697142257,
+        "total_return": 0.35355464546789883,
+        "max_drawdown": -0.1284118745490781
+      }
+    }
+  },
+  "without_return_floor": {
+    "same_basket": true,
+    "tickers": [
+      "CA.PA",
+      "BN.PA",
+      "ENX.PA",
+      "ORA.PA",
+      "SAN.PA",
+      "HO.PA",
+      "TTE.PA",
+      "BB.PA",
+      "BOL.PA",
+      "FDJU.PA"
+    ],
+    "metrics": {
+      "cagr": 0.06510865899932235,
+      "volatility": 0.10674726697142257,
+      "total_return": 0.35355464546789883,
+      "max_drawdown": -0.1284118745490781
+    }
+  },
+  "local_swaps": {
+    "1_for_1": {
+      "tested": 860,
+      "lower_risk": 0,
+      "lower_risk_and_feasible": 0
+    },
+    "2_for_2": {
+      "tested": 164475,
+      "lower_risk": 0,
+      "lower_risk_and_feasible": 0
+    }
+  }
+}

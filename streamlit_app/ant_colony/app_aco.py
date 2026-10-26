@@ -13,13 +13,17 @@ import streamlit as st
 
 from .core import (ACOConfig, BENCHMARKS, START, benchmark_target, calendar_years,
                    optimize_aco, prepare_data, return_metrics, wealth_curves)
-from .guide import INTRO, CONVENTIONS, PARAMETERS, PSEUDOCODE, SOURCES
+from .guide import INTRO, CONVENTIONS, METHOD_NOTES, PARAMETERS, PSEUDOCODE, SOURCES
 from .snapshot import SNAPSHOT_PATH, read_snapshot
-from .ratios import portfolio_ratios
+from .ratios import RISK_FREE_RATE, portfolio_ratios
 
 HERE = Path(__file__).parent
 NOTEBOOK = HERE / "optimisation_portefeuille_fourmis.ipynb"
 COLORS = ["#50e3c2", "#f4c677", "#829bff"]
+
+
+def french_integer(value):
+    return f"{value:,}".replace(",", "\u202f")
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
@@ -63,6 +67,7 @@ def render_results(prices, benchmarks, universe, result, winner, stats):
     fig.add_hline(y=100, line_dash="dot", line_color="#65728e")
     st.plotly_chart(style_chart(fig), width="stretch")
     st.caption("10 % maintenus dans chaque action par rééquilibrage quotidien théorique ; indices prix, dividendes non réinvestis et frais exclus.")
+    st.caption("CAC Mid 60 : le point erroné du 28/11/2023 est estimé entre les deux séances voisines ; cette valeur n'est pas une clôture officielle certifiée.")
 
     left,right = st.columns([1.15, 1])
     with left:
@@ -84,13 +89,15 @@ def render_results(prices, benchmarks, universe, result, winner, stats):
 
         st.markdown("#### Rendement ajusté du risque · portefeuille")
         daily_returns = prices[result["tickers"]].pct_change(fill_method=None).iloc[1:].mean(axis=1)
-        ratios = portfolio_ratios(daily_returns)
+        ratios = portfolio_ratios(daily_returns, risk_free_rate=RISK_FREE_RATE)
         sharpe, sortino = st.columns(2)
         sharpe.metric("Ratio de Sharpe", f"{ratios['sharpe']:.2f}" if np.isfinite(ratios["sharpe"]) else "N/D")
         sortino.metric("Ratio de Sortino", f"{ratios['sortino']:.2f}" if np.isfinite(ratios["sortino"]) else "N/D")
-        st.caption("Ratios annualisés · 252 séances/an · taux sans risque  "
-                   "Sortino : écarts sous 0 % rapportés à toutes les séances. "
+        st.caption(f"Ratios annualisés · 252 séances/an · taux sans risque : {RISK_FREE_RATE:.0%} par an. "
+                   f"Sortino : écarts sous la cible de {RISK_FREE_RATE:.0%}, rapportés à toutes les séances. "
                    "Même historique et rééquilibrage quotidien que ci-dessus ; N/D si le risque mesuré est nul.")
+        st.caption(f"Marge au-dessus du seuil de CAGR : {100 * (metrics['cagr'] - target):.2f} points. "
+                   "Une marge positive ne prouve pas que la contrainte n'influence jamais d'autres recherches.")
 
     st.markdown("#### Comment la colonie progresse")
     risk,feasibility = st.columns(2)
@@ -106,7 +113,16 @@ def render_results(prices, benchmarks, universe, result, winner, stats):
     with feasibility:
         fig = px.line(history, x="iteration", y="feasible_ants", labels={"iteration":"Itération", "feasible_ants":"Fourmis respectant le seuil"}, color_discrete_sequence=[COLORS[1]])
         st.plotly_chart(style_chart(fig,300), width="stretch")
-        st.caption(f"{result['unique_evaluated']:,} paniers distincts évalués sur {result['config']['n_ants'] * result['config']['n_iterations']:,} tirages.")
+        st.caption(f"{french_integer(result['unique_evaluated'])} paniers distincts évalués sur "
+                   f"{french_integer(result['config']['n_ants'] * result['config']['n_iterations'])} tirages.")
+    tau = result["pheromones"]
+    first_best = history.loc[np.isclose(history["volatility"], metrics["volatility"], rtol=0, atol=1e-12), "iteration"].iloc[0]
+    new_last = int(history["unique_evaluated"].diff().fillna(history["unique_evaluated"]).iloc[-1])
+    st.caption(f"Meilleur risque final atteint à l'itération {first_best}. À la fin : "
+               f"{int(np.isclose(tau, result['config']['tau_max']).sum())} traces à τ max et "
+               f"{int(np.isclose(tau, result['config']['tau_min']).sum())} à τ min ; "
+               f"{new_last} nouveaux paniers lors de la dernière itération. "
+               "Les bornes maintiennent des probabilités non nulles, sans empêcher les répétitions.")
     st.download_button("Exporter les trajectoires base 100", curves.to_csv(index_label="Date"), "trajectoires_fourmis.csv", "text/csv")
 
 
@@ -183,9 +199,10 @@ def render():
         st.latex(r"p_i(S)=\frac{\tau_i^\alpha\eta_i^\beta}{\sum_{j\notin S}\tau_j^\alpha\eta_j^\beta}\quad(i\notin S)")
         st.latex(r"\tau_i\leftarrow\operatorname{clip}\left((1-\rho)\tau_i+\sum_{S\ni i}\Delta\tau(S),\tau_{min},\tau_{max}\right)")
         st.caption("Exemple : avant dépôt, τ = 1 et ρ = 0,20 donnent τ = 0,80. Dans cette adaptation, les traces sont attachées aux actions, et non aux arêtes d'un parcours.")
+        st.markdown(METHOD_NOTES)
     with notebook:
         st.markdown("### Lire, exécuter et transmettre le projet")
-        st.markdown("Le notebook contient les explications, le snapshot de l'univers, toutes les fonctions Python, le téléchargement des données et les graphiques. Il fonctionne sans importer de module de ce dépôt et conserve les résultats de son exécution de validation.")
+        st.markdown("Le notebook contient les explications, les cours corrigés, l'univers, toutes les fonctions Python et les graphiques. Il reproduit le snapshot sans téléchargement et sans importer de module de ce dépôt. Une option explicite permet d'acquérir de nouvelles données. Les sorties de validation sont enregistrées.")
         if NOTEBOOK.is_file():
             st.download_button("Télécharger le notebook autonome · .ipynb", NOTEBOOK.read_bytes(), NOTEBOOK.name,
                                "application/x-ipynb+json", type="primary", key="aco_notebook_download")
@@ -216,7 +233,7 @@ def render():
         st.info(f"Données figées · dernière clôture : {prices.index[-1]:%d/%m/%Y}. Vous pouvez relancer la colonie sur ce même historique ; la mise à jour des cours est réservée au propriétaire du projet.")
         target,winner,stats = benchmark_target(benchmarks)
         fingerprint = hashlib.sha256(pd.util.hash_pandas_object(pd.concat([prices,benchmarks],axis=1),index=True).values.tobytes()).hexdigest()
-        st.caption(f"Période effective : {prices.index[0]:%d/%m/%Y} → {prices.index[-1]:%d/%m/%Y} · {len(prices):,} clôtures communes · {len(prices.columns)}/100 actions éligibles.")
+        st.caption(f"Période effective : {prices.index[0]:%d/%m/%Y} → {prices.index[-1]:%d/%m/%Y} · {french_integer(len(prices))} clôtures communes · {len(prices.columns)}/100 actions éligibles.")
         with st.form("aco_parameters"):
             first,second,third = st.columns(3)
             ants = first.slider("Nombre de fourmis", 10, 150, 40, 10)
@@ -241,9 +258,19 @@ def render():
         render_results(prices,benchmarks,universe,result,winner,stats)
     with data:
         st.markdown("### Traçabilité du jeu chargé")
+        st.info("Contrôles du 26/10/2026 : Atos et Emeis exclus pour incohérences d'échelle ; "
+                "Vivendi reconstruit avec l'historique Euronext ajusté de la scission du 16/12/2024 ; "
+                "URW réintégré depuis Euronext après contrôle du chevauchement Yahoo. "
+                "CAC Mid 60 : une estimation ponctuelle remplace le point erroné du 28/11/2023. "
+                "Les sources et méthodes figurent dans les métadonnées.")
+        if metadata.get("data_corrections"):
+            st.dataframe(pd.DataFrame(metadata["data_corrections"]), hide_index=True, width="stretch")
         st.json(metadata)
+        audit = audit.copy()
+        audit["price_source"] = audit["ticker"].map(metadata.get("stock_sources", {})).fillna("Yahoo Finance · Close")
         if audit["large_moves"].sum():
-            st.warning("Certaines actions présentent des variations de plus de 50 % sur une séance. L'audit les signale pour contrôler les restructurations et opérations sur titres ; elles ne sont pas automatiquement corrigées.")
+            st.warning("L'audit conserve les mouvements de plus de 50 % et leur contexte documenté, sans écrêtage automatique. "
+                       "Les causes non confirmées sont indiquées ; les séries exclues restent visibles pour la traçabilité.")
         st.dataframe(audit, hide_index=True, width="stretch")
         st.download_button("Télécharger l'audit des 100 actions", audit.to_csv(index=False).encode("utf-8-sig"), "audit_univers_fourmis.csv", "text/csv")
         st.download_button("Exporter les clôtures utilisées", pd.concat([prices,benchmarks],axis=1).to_csv(index_label="Date"), "clotures_fourmis.csv", "text/csv")

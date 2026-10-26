@@ -24,12 +24,26 @@ Euronext de l'indice prix exact (QS0010989117). Aucun ETF proxy.
 Le parseur Euronext lit le format public utilisé par le JavaScript de la page.
 Il est utilisé uniquement par l'outil local d'acquisition et le notebook.
 Si ce format change ou si un indice reste incomplet, l'acquisition est bloquée.
-Le parseur `Date,Close` du moteur permet une correction locale si nécessaire. Aucun cours n'est rempli
-artificiellement. Les actions sans historique complet sont exclues explicitement.
+Le parseur `Date,Close` du moteur permet une correction locale si nécessaire. Aucun cours manquant n'est rempli.
+Exception ponctuelle : la valeur erronée du CAC Mid 60 du 28/11/2023 est remplacée
+par 13 420,89, moyenne des séances voisines (estimation, pas une clôture certifiée).
+La correction ne s'applique qu'à la valeur erronée connue et reste idempotente.
+Atos et Emeis sont exclus pour incohérences d'échelle pendant leurs restructurations.
+Vivendi est reconstruit depuis le graphique public Euronext ajusté de la scission
+du 16/12/2024 ; ses cours concordent avec Yahoo après l'opération. URW est réintégré
+avec l'historique Euronext de même ISIN, après validation de tout le chevauchement
+Yahoo (901 séances). La source unique Euronext fournit chaque série entière.
+Le graphique public ne doit pas être présenté comme un export de clôtures certifiées.
+Les actions sans historique complet sont exclues explicitement.
 Le snapshot `universe.csv` contient 100 membres officiels vérifiés le 23/10/2026,
 leurs ISIN et les correspondances Yahoo. Il n'est pas actualisé automatiquement :
 réviser ce snapshot pour une nouvelle composition. Les restructurations et
 variations de plus de 50 % sont signalées dans l'audit et restent à contrôler.
+Les événements documentés figurent dans le guide et l'audit ; les causes précises
+non confirmées (Eutelsat en mars 2025 et Atos le 19/06/2024) ne sont pas affirmées.
+
+Voir [la note reçue](issues_2026-10-26.md) et [le compte rendu de correction](audit_2026-10-26.md)
+pour les chiffres à reporter dans la présentation. La période reste le 03/01/2022–22/10/2026.
 
 L'instantané ZIP contient les clôtures, les métadonnées et l'univers utilisé.
 Il doit être conservé avec les sources lors du déploiement. Il ne contient que
@@ -65,6 +79,8 @@ depuis Streamlit.
 - Équipondération maintenue par rééquilibrage quotidien théorique.
 - Positions acheteuses, investissement intégral, aucun coût ni fiscalité.
 - Volatilité : écart-type empirique quotidien multiplié par √252.
+- Sharpe et Sortino : excès quotidiens, taux sans risque et cible fixés à 0 % par an.
+  La semi-déviation Sortino est calculée sur toutes les séances, pas seulement les pertes.
 - CAGR : rendement composé annualisé par la durée calendaire / 365,25.
 - Un admissible est toujours préféré à un non-admissible ; entre admissibles,
   on minimise le risque. Sans admissible trouvé, on minimise le déficit et on
@@ -82,8 +98,10 @@ airflow_venv/bin/python -m streamlit run streamlit_app/app.py --server.port 8502
 airflow_venv/bin/python -m unittest discover -s streamlit_app/ant_colony/tests -v
 ```
 
-Le notebook `optimisation_portefeuille_fourmis.ipynb` contient tout le code et le
-snapshot, sans import du dépôt. Ses sorties sont enregistrées sur données réelles.
+Le notebook `optimisation_portefeuille_fourmis.ipynb` contient tout le code et les
+cours corrigés dans une archive CSV/JSON embarquée, sans import du dépôt.
+L'exécution par défaut reproduit le snapshot sans réseau. `REFRESH_DATA = True`
+active explicitement une nouvelle acquisition. Ses sorties sont enregistrées sur données réelles.
 Il peut être partagé seul et exécuté dans Jupyter ou VS Code avec les dépendances
 indiquées dans sa première cellule. Il est aussi téléchargeable depuis la page.
 

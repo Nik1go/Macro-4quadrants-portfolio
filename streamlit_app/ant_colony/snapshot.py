@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
-from .core import prepare_data
+from .core import DATA_QUALITY_VERSION, correct_known_prices, prepare_data
 
 SNAPSHOT_PATH = Path(__file__).parent / "snapshot" / "market_data.zip"
 MEMBERS = {"prices.csv", "metadata.json", "universe.csv"}
@@ -42,8 +42,13 @@ def write_snapshot(prices: pd.DataFrame, metadata: dict, universe: pd.DataFrame,
     Une acquisition incomplète ne doit pas écraser le dernier fichier exploitable.
     Les cours et les métadonnées sont publiés ensemble dans une seule archive.
     """
+    prices, corrections = correct_known_prices(prices)
     eligible, _, _ = prepare_data(prices, universe)
+    previous = metadata.get("data_corrections", [])
+    corrections = previous + [entry for entry in corrections if entry not in previous]
     metadata = {**metadata,
+                "data_quality_version": DATA_QUALITY_VERSION,
+                "data_corrections": corrections,
                 "snapshot_schema": 1,
                 "snapshot_created_at": datetime.now(ZoneInfo("Europe/Paris")).isoformat(),
                 "snapshot_first_session": eligible.index[0].date().isoformat(),

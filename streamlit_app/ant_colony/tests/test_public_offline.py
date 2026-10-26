@@ -28,6 +28,12 @@ class PublicOfflineTests(unittest.TestCase):
             self.assertNotIn('Recharger les donnees', labels)
             self.assertEqual(len(app.get('file_uploader')), 0)
             self.assertTrue(app.session_state['aco_result']['result']['feasible'])
+            metrics = {metric.label: metric.value for metric in app.metric}
+            self.assertEqual(metrics['Ratio de Sharpe'], '0.63')
+            self.assertEqual(metrics['Ratio de Sortino'], '0.89')
+            self.assertTrue(any('taux sans risque : 0% par an' in caption.value for caption in app.caption))
+            self.assertTrue(any('1\u202f230 clôtures communes' in caption.value for caption in app.caption))
+            self.assertFalse(any('1,230' in caption.value or '3,200' in caption.value for caption in app.caption))
             # Effacer le cache ne doit pas transformer la lecture locale en fetch.
             st.cache_data.clear()
             app.slider[0].set_value(20)

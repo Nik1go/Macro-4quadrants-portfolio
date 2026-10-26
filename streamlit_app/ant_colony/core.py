@@ -25,6 +25,20 @@ START = "2022-01-01"
 BENCHMARKS = {"^FCHI": "CAC 40", "^CM100": "CAC Mid 60"}
 MID60_PAGE = "https://live.euronext.com/en/product/indices/QS0010989117-XPAR"
 MID60_CHART = "https://live.euronext.com/intraday_chart/getChartData/QS0010989117-XPAR/max"
+DATA_QUALITY_VERSION = "2026-10-26"
+EXCLUDED_ASSETS = {
+    "ATO.PA": "Exclu : échelles Yahoo incohérentes pendant la restructuration 2024 et le regroupement 2025 ; historique non reconstruit.",
+    "EMEIS.PA": "Exclu : échelles Yahoo incohérentes pendant la restructuration 2023 ; historique non reconstruit.",
+}
+LARGE_MOVE_NOTES = {
+    "ETL.PA": "Mars 2025 : mouvements conservés ; attribution précise à Starlink non confirmée par une source primaire.",
+    "WLN.PA": "25/10/2023 : objectifs annuels revus lors des résultats T3 ; mouvement conservé.",
+    "VU.PA": "23/06/2023 : après le rapport Gotham du 22/06, contesté par SES-imagotag ; mouvement conservé.",
+    "NANO.PA": "05/05/2023 : annonce de négociations finales pour une licence NBTXR3 ; mouvement conservé.",
+    "IVA.PA": "14/10/2024 : annonce d'un financement conditionnel jusqu'à 348 M€ ; mouvement conservé.",
+    "DBV.PA": "09/01/2025 : après les résultats positifs EPITOPE publiés le 08/01 ; mouvement conservé.",
+    "ATO.PA": "19/06/2024 : contexte de restructuration documenté, cause exacte de la hausse non confirmée ; série exclue pour incohérences ultérieures.",
+}
 
 
 def paris_today() -> str:
@@ -49,25 +63,67 @@ def decode_public_euronext(payload: dict, public_format_key: str):
     return json.loads(plain[:-plain[-1]])
 
 
-def fetch_official_mid60(start: str, end: str) -> pd.Series:
-    """Historique de l'indice prix CAC Mid 60 exact (aucun ETF de substitution)."""
+def fetch_euronext_chart(product: str, category: str, start: str, end: str) -> pd.Series:
+    """Graphique public de l'instrument exact ; ce n'est pas un export de clôtures certifiées."""
     with requests.Session() as session:
-        page = session.get(MID60_PAGE, timeout=40)
+        page = session.get(f"https://live.euronext.com/en/product/{category}/{product}", timeout=40)
         page.raise_for_status()
         soup = BeautifulSoup(page.text, "html.parser")
         node = soup.select_one('script[data-drupal-selector="drupal-settings-json"]')
         if node is None:
             raise ValueError("Format Euronext modifié : importer un CSV Date,Close de l'indice exact.")
         settings = json.loads(node.string)
-        response = session.get(MID60_CHART, timeout=40)
+        response = session.get(f"https://live.euronext.com/intraday_chart/getChartData/{product}/max", timeout=40)
         response.raise_for_status()
         payload = response.json()
         rows = decode_public_euronext(payload, settings["ajax_secure"]["kye"]) if isinstance(payload, dict) and "ct" in payload else payload
     frame = pd.DataFrame(rows)
     dates = pd.to_datetime(frame["time"]).dt.normalize()
-    series = pd.Series(pd.to_numeric(frame["price"]).to_numpy(), index=dates, name="^CM100")
+    series = pd.Series(pd.to_numeric(frame["price"]).to_numpy(), index=dates)
     series = series[~series.index.duplicated(keep="last")].sort_index()
     return series.loc[(series.index >= pd.Timestamp(start)) & (series.index < pd.Timestamp(end))]
+
+
+def fetch_official_mid60(start: str, end: str) -> pd.Series:
+    """Indice prix exact ; source graphique public Euronext, sans ETF proxy."""
+    return fetch_euronext_chart("QS0010989117-XPAR", "indices", start, end).rename("^CM100")
+
+
+def correct_known_prices(prices: pd.DataFrame) -> tuple[pd.DataFrame, list[dict]]:
+    """Correction bornée au point erroné identifié, sans filtrage des mouvements extrêmes.
+
+    Idempotente : une clôture différente de la valeur erronée n'est jamais remplacée.
+    L'interpolation est une estimation explicitement tracée, pas une clôture officielle.
+    """
+    corrected = prices.copy()
+    changes = []
+    day = pd.Timestamp("2023-11-28")
+    if "^CM100" in corrected and day in corrected.index:
+        original = corrected.at[day, "^CM100"]
+        if np.isfinite(original) and np.isclose(original, 14749.16, rtol=0, atol=.005):
+            adjacent = corrected["^CM100"].reindex(pd.to_datetime(["2023-11-27", "2023-11-29"]))
+            if adjacent.isna().any() or not np.isfinite(adjacent).all() or (adjacent <= 0).any():
+                raise ValueError("Correction CAC Mid 60 impossible sans les deux séances adjacentes valides.")
+            replacement = float(adjacent.mean())
+            corrected.at[day, "^CM100"] = replacement
+            changes.append({"ticker": "^CM100", "date": day.date().isoformat(),
+                            "original": float(original), "replacement": replacement,
+                            "method": "Estimation : interpolation linéaire entre les séances du 27 et du 29/11/2023 ; non certifiée."})
+    return corrected, changes
+
+
+def validate_euronext_replacement(yahoo: pd.Series, replacement: pd.Series,
+                                  calendar: pd.DatetimeIndex, overlap_start: str | None = None):
+    """Accepter une source complète seulement après contrôle de son échelle sur le chevauchement."""
+    replacement = replacement.reindex(calendar)
+    if replacement.isna().any() or not np.isfinite(replacement).all() or (replacement <= 0).any():
+        raise ValueError("Historique Euronext incomplet ou non positif.")
+    overlap = pd.concat([yahoo.reindex(calendar), replacement], axis=1).dropna()
+    if overlap_start:
+        overlap = overlap.loc[overlap_start:]
+    if len(overlap) < 20 or not np.allclose(overlap.iloc[:, 0], overlap.iloc[:, 1], rtol=1e-5, atol=1e-5):
+        raise ValueError("Raccord Euronext/Yahoo refusé : chevauchement insuffisant ou échelles différentes.")
+    return replacement
 
 
 def read_mid60_csv(content: str) -> pd.Series:
@@ -124,18 +180,38 @@ def fetch_market_data(universe: pd.DataFrame, end: str | None = None) -> tuple[p
             notes.append("Yahoo ^CM100 incomplet : historique exact complété par Euronext, sans proxy.")
         except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
             notes.append(f"Complément Euronext indisponible ({type(exc).__name__}) : importer Date,Close.")
+    stock_sources = {}
+    # Vivendi : la série Yahoo mélange les échelles les 6–9/12/2024.
+    # Une source Euronext unique, ajustée de la scission, évite de neutraliser un rendement réel.
+    if "VIV.PA" in universe["ticker"].values:
+        vivendi = fetch_euronext_chart("FR0000127771-XPAR", "equities", START, end)
+        replacement = validate_euronext_replacement(prices["VIV.PA"], vivendi, calendar, "2024-12-16")
+        prices["VIV.PA"] = replacement.reindex(prices.index)
+        stock_sources["VIV.PA"] = "Euronext · graphique public FR0000127771-XPAR, historique ajusté de la scission du 16/12/2024."
+    # Ancienne cotation Amsterdam : Yahoo URW.AS n'est plus téléchargeable.
+    # Utiliser l'instrument Paris de même ISIN, vérifié sur tout le chevauchement.
+    if "URW.PA" in universe["ticker"].values and prices["URW.PA"].reindex(calendar).isna().any():
+        try:
+            urw = fetch_euronext_chart("FR0013326246-XPAR", "equities", START, end)
+            replacement = validate_euronext_replacement(prices["URW.PA"], urw, calendar)
+            prices["URW.PA"] = replacement.reindex(prices.index)
+            stock_sources["URW.PA"] = "Euronext · graphique public FR0013326246-XPAR ; échelle validée sur le chevauchement Yahoo."
+        except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+            notes.append(f"URW : complément Euronext indisponible ({type(exc).__name__}) ; exclusion si incomplet.")
+    prices, corrections = correct_known_prices(prices)
     metadata = {"requested_start": START, "end_exclusive": end,
                 "fetched_at": datetime.now(ZoneInfo("Europe/Paris")).isoformat(),
                 "price_basis": "Close Yahoo sans dividendes réinvestis ; indices prix",
-                "mid60_source": source, "notes": notes}
+                "mid60_source": source, "notes": notes, "stock_sources": stock_sources,
+                "data_quality_version": DATA_QUALITY_VERSION, "data_corrections": corrections}
     return prices, metadata
 
 
 def prepare_data(prices: pd.DataFrame, universe: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Même calendrier et même période ; aucun remplissage des cours manquants."""
+    """Même calendrier ; exclusions qualité explicites et correction ponctuelle tracée."""
     if not isinstance(prices.index, pd.DatetimeIndex) or prices.index.has_duplicates or not prices.columns.is_unique:
         raise ValueError("Dates et colonnes doivent être uniques.")
-    prices = prices.sort_index()
+    prices, _ = correct_known_prices(prices.sort_index())
     if any(symbol not in prices for symbol in BENCHMARKS):
         raise ValueError("Les deux indices exacts sont obligatoires.")
     reference = prices["^FCHI"].dropna()
@@ -149,12 +225,19 @@ def prepare_data(prices: pd.DataFrame, universe: pd.DataFrame) -> tuple[pd.DataF
     for row in universe.to_dict("records"):
         series = prices.reindex(calendar).get(row["ticker"], pd.Series(index=calendar, dtype=float))
         missing = int(series.isna().sum())
-        valid = missing == 0 and np.isfinite(series).all() and (series > 0).all()
+        reason = EXCLUDED_ASSETS.get(row["ticker"])
+        # Une ancienne archive/import ne doit pas réintroduire le décrochage Yahoo de Vivendi.
+        if row["ticker"] == "VIV.PA":
+            discontinuity = series.pct_change(fill_method=None).get(pd.Timestamp("2024-12-09"), 0.)
+            if discontinuity < -.5:
+                reason = "Exclu : échelles Vivendi incohérentes avant la scission ; reconstruire depuis Euronext."
+        valid = reason is None and missing == 0 and np.isfinite(series).all() and (series > 0).all()
         observed = series.dropna()
         audit.append({**row, "eligible": bool(valid), "missing_sessions": missing,
                       "first_quote": str(observed.index.min().date()) if len(observed) else "—",
-                      "reason": "Historique complet" if valid else "Cours absent, non positif ou historique incomplet",
-                      "large_moves": int((series.pct_change(fill_method=None).abs() > .5).sum())})
+                      "reason": reason or ("Historique complet" if valid else "Cours absent, non positif ou historique incomplet"),
+                      "large_moves": int((series.pct_change(fill_method=None).abs() > .5).sum()),
+                      "large_moves_note": LARGE_MOVE_NOTES.get(row["ticker"], "")})
         if valid:
             eligible.append(row["ticker"])
     if len(eligible) < 10:
@@ -268,6 +351,7 @@ def optimize_aco(returns: pd.DataFrame, target: float, years: float,
         if best_rank[0] == 0:
             elites = [entry for entry in elites if entry[0][0] == 0]
         # Le meilleur global renforce aussi la mémoire de la recherche.
+        # Choix délibéré : s'il figure parmi les élites, il reçoit deux dépôts.
         deposits = [(best_rank, best[0], best[1])] + elites
         normalizer = len(deposits) * (len(deposits) + 1) / 2
         for rank_number, (_, selection, _) in enumerate(deposits):

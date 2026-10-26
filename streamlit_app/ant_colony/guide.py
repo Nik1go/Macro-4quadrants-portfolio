@@ -32,14 +32,24 @@ CONVENTIONS = """
   théorique**, sans frais, fiscalité, contraintes de liquidité ni arrondis de titres.
 - **Base de comparaison :** cours `Close` Yahoo (`auto_adjust=False`), sans
   réinvestissement des dividendes, comparés aux **indices prix** CAC 40 et CAC Mid 60.
-  Les prix suivent les ajustements du fournisseur ; les opérations sur titres
-  complexes doivent être contrôlées. `Adj Close` inclurait notamment des ajustements
+  Vivendi utilise le graphique Euronext ajusté de la scission du **16/12/2024**,
+  cohérent avec Yahoo après cette date. URW utilise Euronext, dont les cours
+  concordent avec Yahoo sur le chevauchement disponible. `Adj Close` inclurait notamment des ajustements
   de dividendes et appellerait des indices de rendement total comparables.
 - **Sources :** actions et CAC 40 via Yahoo Finance ; CAC Mid 60 via Yahoo, ou
   complément Euronext exact si l'historique Yahoo est incomplet. Aucun ETF proxy.
 - **Qualité :** même calendrier que le CAC 40 ; une action sans historique complet
-  est exclue avec un motif. Aucun remplissage artificiel des prix. Si l'un des
+  est exclue avec un motif. **Atos et Emeis sont exclus** pour échelles incohérentes
+  pendant leurs restructurations. Exception tracée : le point erroné du CAC Mid 60
+  du **28/11/2023** (14 749,16) est remplacé par **13 420,89**, moyenne des deux
+  séances voisines. C'est une **estimation**, pas une clôture officielle certifiée.
+  Aucun cours manquant n'est rempli. Si l'un des
   indices manque, le calcul est arrêté jusqu'à une correction locale de l'instantané.
+- **Ratios :** taux sans risque et cible du Sortino fixés à **0 % par an**.
+  Sharpe = moyenne des excès quotidiens / écart-type empirique × √252 ;
+  Sortino = moyenne des excès / racine de la moyenne des excès négatifs au carré
+  (toutes les séances au dénominateur) × √252. Ces ratios utilisent une moyenne
+  arithmétique ; le CAGR mesure la croissance composée.
 - **Univers :** composition officielle figée au 23/10/2026, conservée avec ISIN,
   source et symbole Yahoo. Ce n'est pas une reconstitution des compositions de 2022.
 - **Interprétation :** sélection et mesure sur la même période, benchmark gagnant
@@ -56,6 +66,7 @@ CONSTANTE : K = 10 ; chaque poids vaut 1 / K = 10 %
    # Application : instantané local, préparé manuellement hors interface publique.
    Garder les mêmes dates pour les actions et les deux indices exacts.
    Exclure et signaler toute action dont l'historique est incomplet.
+   Appliquer les exclusions qualité et la correction ponctuelle documentées.
    Calculer les rendements quotidiens et la durée Y en années calendaires.
    cible ← maximum(CAGR du CAC 40, CAGR du CAC Mid 60)
 
@@ -87,10 +98,11 @@ CONSTANTE : K = 10 ; chaque poids vaut 1 / K = 10 %
    élites ← les n_elite meilleurs paniers de cette itération
    Si le meilleur global est admissible : retirer les élites non admissibles
    dépôts ← [meilleur global] + élites
+   # Choix délibéré : le meilleur global reçoit deux dépôts s'il est aussi élite.
    Pour chaque panier de dépôts, de rang r allant de 0 à L - 1 :
        delta ← Q × (L - r) / (L × (L + 1) / 2)              # dépôt décroissant
        Pour chaque action i du panier : tau[i] ← tau[i] + delta
-   tau ← borner(tau, tau_min, tau_max)                      # évite la stagnation
+   tau ← borner(tau, tau_min, tau_max)                      # probabilités non nulles
    Conserver CAGR, risque, déficit et nombre de solutions admissibles.
 
 4. RESTITUER
@@ -98,6 +110,19 @@ CONSTANTE : K = 10 ; chaque poids vaut 1 / K = 10 %
    Sinon : afficher « aucune solution admissible trouvée », avec son déficit.
    Afficher les 10 titres, leurs poids, la convergence et les courbes base 100.
    Ne jamais présenter cette recherche approchée comme une preuve d'optimalité.
+"""
+
+METHOD_NOTES = """
+- **Contrainte de rendement :** sur le snapshot corrigé du 26/10/2026, la recherche
+  par défaut retrouve le même panier lorsque le seuil est supprimé. La contrainte
+  n'est pas active pour ce résultat. Un seuil plus élevé peut modifier la sélection.
+- **Convergence :** les traces peuvent saturer et des paniers être tirés de nouveau.
+  Les résultats affichent le nombre de paniers distincts et les traces aux bornes.
+- **Dépôts :** le meilleur global figure en tête des dépôts et peut aussi être élite ;
+  son double renforcement est intentionnel dans cette adaptation.
+- **Optimalité :** l'audit du snapshot corrigé vérifie six autres graines et les
+  échanges de un ou deux titres autour du panier retenu. Ces contrôles apportent
+  des éléments de stabilité et d'optimalité locale ; aucune preuve globale.
 """
 
 PARAMETERS = [
@@ -128,6 +153,16 @@ SOURCES = """
 - [Documentation yfinance.download](https://ranaroussi.github.io/yfinance/reference/api/yfinance.download.html)
 - [CAC 40 · composition Euronext](https://live.euronext.com/en/product/indices/FR0003500008-XPAR)
 - [CAC Mid 60 · composition et historique Euronext](https://live.euronext.com/en/product/indices/QS0010989117-XPAR)
+- [Vivendi · historique ajusté Euronext](https://live.euronext.com/en/product/equities/FR0000127771-XPAR)
+- [Vivendi · titres distribués lors de la scission du 16/12/2024](https://www.vivendi.com/en/press-release/information-regarding-the-listings-of-canal-havas-and-louis-hachette-group/)
+- [URW · historique Euronext](https://live.euronext.com/en/product/equities/FR0013326246-XPAR)
+- [URW · changement de marché de référence au 14/04/2023](https://www.globenewswire.com/news-release/2023/03/02/2618922/0/en/euronext-listing.html)
+- [Worldline · objectifs 2023 revus en octobre, rappel dans les comptes 2024](https://investors.worldline.com/content/dam/investors-worldline-com/assets/documents/regulated-information/worldline_financials_2024.pdf)
+- [Vusion · chronologie du rapport Gotham de juin 2023 et réponse de la société](https://investor.vusion.com/French/assemblee-generale/default.aspx)
+- [Nanobiotix · annonce du 5 mai 2023 rappelée dans les résultats semestriels](https://nanobiotix.gcs-web.com/fr/news-releases/news-release-details/nanobiotix-fait-le-point-sur-ses-activites-et-publie-ses-6)
+- [Inventiva · financement annoncé le 14/10/2024, rapport annuel 2024](https://inventivapharma.com/wp-content/uploads/inventiva-documents/Inventiva-S.A._20-F-2024-04-15-2025-AsFiled.pdf)
+- [DBV · résultats EPITOPE publiés le 08/01/2025, déclaration SEC](https://www.sec.gov/Archives/edgar/data/1613780/000119312525003574/d861550d8k.htm)
+- [Atos · restructuration de juin 2024](https://www.atosgroup.com/en/press/market-update-june-11-2024)
 - [Règles de la famille CAC · indices prix, NR et GR](https://live.euronext.com/sites/default/files/documentation/index-rules2/CAC_Index_Family_Rulebook.pdf)
 
 L'adaptation à une sélection de titres (trace par action, heuristique inverse de la
