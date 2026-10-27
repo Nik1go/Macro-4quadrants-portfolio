@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Greeks Revision · Finance Portfolio</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    :host { display: block; min-width: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #0a0e27; }
+    .greeks-app {
+      --panel: #1e2139; --border: #3d4263; --muted: #a9b2d3; --cyan: #00d4ff;
+      color: #e8e8e8; background: #0a0e27;
+      font: 14px/1.5 "Source Sans Pro", system-ui, sans-serif;
+      color-scheme: dark; width: 100%; min-width: 0;
+    }
+    .greeks-app h2, .greeks-app h3, .greeks-app p { margin: 0; }
+    .greeks-app button, .greeks-app input { font: inherit; }
+    .greeks-app button { cursor: pointer; transition: background .2s, border-color .2s; }
+    .greeks-app button:focus-visible, .greeks-app input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
+    .intro { padding: 22px 24px; border: 1px solid var(--border); border-radius: 12px; background: linear-gradient(135deg, #1e2139, #252b4d); margin-bottom: 20px; }
+    .eyebrow { color: var(--cyan); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin-bottom: 8px; }
+    .intro h2 { font-size: 22px; color: #f1f5ff; margin-bottom: 6px; }
+    .intro p { color: var(--muted); max-width: 900px; }
+    .panel { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); margin-bottom: 20px; overflow: hidden; }
+    .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 22px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .panel-heading h2 { font-size: 16px; color: var(--cyan); }
+    .section-number { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 7px; color: var(--cyan); background: #00d4ff14; margin-right: 8px; font-size: 12px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 20px 22px; }
+    .field-stack { display: grid; gap: 16px; }
+    .field label { display: flex; justify-content: space-between; color: #d0d6f7; font-weight: 600; font-size: 12px; margin-bottom: 7px; gap: 8px; }
+    .field output { color: var(--cyan); font-variant-numeric: tabular-nums; }
+    .segmented { display: flex; gap: 4px; background: #11162f; padding: 4px; border: 1px solid var(--border); border-radius: 8px; }
+    .segment-button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 7px 12px; border-radius: 5px; font-weight: 600; }
+    .segment-button:hover { background: #2a2d4a; }
+    .segment-button.active { background: #00d4ff24; color: var(--cyan); }
+    input[type=number] { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; background: #11162f; color: #e8e8e8; }
+    input[type=range] { width: 100%; accent-color: var(--cyan); cursor: pointer; margin: 8px 0; }
+    .form-footer { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 0 22px 20px; align-items: end; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+    .button { border: 1px solid var(--border); background: #252b4a; color: #e8e8e8; border-radius: 8px; padding: 10px 15px; font-weight: 600; }
+    .button:hover { border-color: var(--cyan); }
+    .button.primary { background: #00d4ff; border-color: #00d4ff; color: #081426; }
+    .button.primary:hover { background: #60e4ff; }
+    .button.danger { color: #fda4af; }
+    .button.danger:hover { background: #f43f5e14; border-color: #f43f5e; }
+    .table-wrap { overflow-x: auto; padding: 8px 20px 16px; }
+    .empty-state { color: var(--muted); text-align: center; padding: 22px 10px; }
+    .hidden { display: none !important; }
+    table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+    th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+    th, td { padding: 10px 8px; text-align: left; border-bottom: 1px solid #3d426370; }
+    tbody tr:hover { background: #252b4a; }
+    .text-right { text-align: right; }
+    .text-emerald-600 { color: #34d399; }
+    .text-red-500 { color: #fb7185; }
+    .btn-remove { border: 0; background: transparent; color: #fda4af; padding: 5px; font-size: 12px; }
+    .btn-remove:hover { color: #fff; }
+    .position-count { color: var(--muted); font-size: 12px; font-weight: 400; }
+    .chart-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin: 4px 0 14px; }
+    .greek-selector { display: flex; flex-wrap: wrap; gap: 8px; }
+    .greek-sel { border: 1px solid var(--border); border-radius: 8px; background: var(--panel); color: #d0d6f7; padding: 8px 16px; font-weight: 600; }
+    .norm-control { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .norm-control input { accent-color: #00d4ff; width: 16px; height: 16px; }
+    .chart-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+    .chart-panel { min-width: 0; border: 1px solid var(--border); border-radius: 12px; background: #151a33; padding: 16px; }
+    .chart-panel h3 { color: #d0d6f7; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+    .chart { width: 100%; height: 370px; position: relative; overflow: hidden; }
+    .chart svg { display: block; overflow: visible; }
+    .chart svg text { fill: var(--muted); }
+    .chart .domain, .chart .tick line { stroke: #626c91; }
+    .chart .grid-x line, .chart .grid-y line { stroke: var(--border); stroke-opacity: .5; shape-rendering: crispEdges; }
+    .grid-x path, .grid-y path { stroke-width: 0; }
+    .line { fill: none; stroke-width: 2.5px; }
+    .zero-line { stroke: #929dc4; stroke-width: 1.2px; stroke-dasharray: 4 4; }
+    .chart-legend { position: absolute; top: 6px; left: 54px; background: #11162fe8; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; }
+    .legend-label { color: #c8d0ed; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .legend-dot { width: 14px; height: 3px; border-radius: 2px; display: inline-block; flex-shrink: 0; }
+    .chart-note { color: var(--muted); font-size: 12px; margin-top: 12px !important; }
+    .revision-notes { margin-top: 20px; padding: 16px 20px; border: 1px solid var(--border); border-radius: 10px; color: var(--muted); font-size: 12px; }
+    .revision-notes summary { color: var(--cyan); font-size: 14px; cursor: pointer; font-weight: 600; }
+    .revision-notes ul { padding-left: 20px; margin-bottom: 8px; }
+    .revision-notes strong { color: #d0d6f7; }
+    @media (max-width: 850px) { .chart-grid { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 560px) {
+      .form-grid, .form-footer { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+      .intro, .panel-heading { padding: 16px; }
+      .actions { justify-content: stretch; }
+      .actions .button { flex: 1; }
+      .greek-sel { padding: 8px 12px; }
+      .chart-panel { padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+<div class="greeks-app" id="greeks-app">
+  <section class="intro">
+    <div class="eyebrow">Options · Black–Scholes · Révision interactive</div>
+    <h2>Explorez les sensibilités de votre portefeuille</h2>
+    <p>Combinez des calls et des puts, achetés ou vendus, puis comparez Delta, Gamma, Vega et Theta selon le prix du sous-jacent.</p>
+  </section>
+  <section class="panel">
+    <div class="panel-heading"><h2><span class="section-number">01</span>Créer une position</h2></div>
+    <div class="form-grid">
+      <div class="field-stack">
+        <div class="field"><label>Type d’option</label><div class="segmented" role="group" aria-label="Type d’option"><button id="btn-call" class="segment-button active" aria-pressed="true">Call</button><button id="btn-put" class="segment-button" aria-pressed="false">Put</button></div></div>
+        <div class="field"><label>Direction</label><div class="segmented" role="group" aria-label="Direction"><button id="btn-long" class="segment-button active" aria-pressed="true">Long</button><button id="btn-short" class="segment-button" aria-pressed="false">Short</button></div></div>
+        <div class="field"><label for="input-qty">Quantité (contrats)</label><input type="number" id="input-qty" value="1" min="1" max="10000" step="1"></div>
+      </div>
+      <div class="field-stack">
+        <div class="field"><label for="slider-t">Échéance T (années)<output id="val-t" for="slider-t">1.00</output></label><input type="range" id="slider-t" min="0.01" max="3.0" step="0.01" value="1.0"></div>
+        <div class="field"><label for="slider-k">Strike K<output id="val-k" for="slider-k">100</output></label><input type="range" id="slider-k" min="50" max="150" step="1" value="100"></div>
+        <div class="field"><label for="slider-sigma">Volatilité σ<output id="val-sigma" for="slider-sigma">0.20</output></label><input type="range" id="slider-sigma" min="0.05" max="1.0" step="0.01" value="0.20"></div>
+      </div>
+    </div>
+    <div class="form-footer">
+      <div class="field"><label for="slider-r">Taux sans risque r<output id="val-r" for="slider-r">0.05</output></label><input type="range" id="slider-r" min="0.0" max="0.20" step="0.01" value="0.05"></div>
+      <div class="actions"><button id="btn-add" class="button primary">+ Ajouter la position</button><button id="btn-clear" class="button danger">Tout effacer</button></div>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="panel-heading"><h2><span class="section-number">02</span>Portefeuille <span id="pos-count" class="position-count" aria-live="polite">(0 position)</span></h2></div>
+    <div class="table-wrap" id="portfolio-container">
+      <p id="portfolio-empty" class="empty-state">Aucune position. Ajoutez une option pour tracer ses sensibilités.</p>
+      <table id="portfolio-table" class="hidden" aria-label="Positions du portefeuille"><thead><tr><th></th><th>Type</th><th>Dir.</th><th>Strike</th><th>T</th><th>σ</th><th class="text-right">Qté</th><th></th></tr></thead><tbody id="portfolio-body"></tbody></table>
+    </div>
+  </section>
+  <div class="chart-toolbar">
+    <div class="greek-selector" role="group" aria-label="Sensibilité à afficher">
+      <button id="greeksel-delta" class="greek-sel" aria-pressed="true" style="background:#6366f1;color:white;border-color:#6366f1">Δ Delta</button>
+      <button id="greeksel-gamma" class="greek-sel" aria-pressed="false">Γ Gamma</button>
+      <button id="greeksel-vega" class="greek-sel" aria-pressed="false">ν Vega</button>
+      <button id="greeksel-theta" class="greek-sel" aria-pressed="false">Θ Theta</button>
+    </div>
+    <label class="norm-control" title="Chaque courbe individuelle est divisée par son maximum absolu. Le total reste en valeurs brutes."><input type="checkbox" id="toggle-norm" checked>Normaliser les courbes individuelles</label>
+  </div>
+  <div class="chart-grid">
+    <section class="chart-panel"><h3 id="title-individual">Delta par position</h3><div id="chart-individual" class="chart" role="img" aria-labelledby="title-individual"></div></section>
+    <section class="chart-panel"><h3 id="title-aggregate">Delta net du portefeuille</h3><div id="chart-aggregate" class="chart" role="img" aria-labelledby="title-aggregate"></div></section>
+  </div>
+  <p class="chart-note">Normalisation : chaque courbe individuelle est ramenée à un maximum absolu de 1. Le portefeuille net reste toujours en valeurs brutes.</p>
+  <details class="revision-notes"><summary>Repères de révision et conventions</summary><ul><li><strong>Delta Δ</strong> : variation du prix de l’option pour une variation du sous-jacent.</li><li><strong>Gamma Γ</strong> : variation du Delta lorsque le sous-jacent varie.</li><li><strong>Vega ν</strong> : sensibilité à la volatilité, exprimée ici pour une variation de 1,00 (diviser par 100 pour un point de volatilité).</li><li><strong>Theta Θ</strong> : effet du passage du temps, exprimé par année (diviser par 365 pour une approximation quotidienne).</li></ul><p>Options européennes, modèle Black–Scholes sans dividende. Taux et volatilité en décimal : 0,05 = 5 %. Les sensibilités sont multipliées par la quantité et le sens de la position ; multiplicateur de contrat égal à 1.</p></details>
+</div>
+<script>
+// ============================================================
+//  MATH UTILITIES (Black-Scholes)
+// ============================================================
+
+function cdfNormal(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp(-x * x / 2);
+  const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x > 0 ? 1 - prob : prob;
+}
+
+function pdfNormal(x) {
+  return (1.0 / Math.sqrt(2 * Math.PI)) * Math.exp(-0.5 * x * x);
+}
+
+// ============================================================
+//  STATE
+// ============================================================
+
+const state = {
+  form: {
+    isCall: true,
+    isLong: true,
+    T: 1.0,
+    K: 100,
+    sigma: 0.20,
+    quantity: 1
+  },
+  positions: [],
+  selectedGreek: 'delta',
+  normalized: true,
+  r: 0.05,
+  nextId: 0
+};
+
+const greekMeta = {
+  delta: { label: 'Delta', symbol: '\u0394', color: '#6366f1', bg: '#6366f1' },
+  gamma: { label: 'Gamma', symbol: '\u0393', color: '#10b981', bg: '#10b981' },
+  vega: { label: 'Vega', symbol: '\u03bd', color: '#f59e0b', bg: '#f59e0b' },
+  theta: { label: 'Theta', symbol: '\u0398', color: '#f43f5e', bg: '#f43f5e' }
+};
+
+const positionColors = [
+  '#6366f1', '#10b981', '#f59e0b', '#f43f5e',
+  '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16',
+  '#f97316', '#14b8a6'
+];
+
+const margin = { top: 20, right: 20, bottom: 35, left: 50 };
+
+// ============================================================
+//  GREEK CALCULATION
+// ============================================================
+
+function calculateGreeks(S, pos) {
+  const { isCall, isLong, T, K, sigma, quantity } = pos;
+  const r = state.r;
+  const dir = isLong ? 1 : -1;
+  const mult = dir * quantity;
+
+  const d1 = (Math.log(S / K) + (r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
+  const d2 = d1 - sigma * Math.sqrt(T);
+
+  const Nd1 = cdfNormal(d1);
+  const Nd2 = cdfNormal(d2);
+  const N_minus_d2 = cdfNormal(-d2);
+  const pdf_d1 = pdfNormal(d1);
+
+  const g = pdf_d1 / (S * sigma * Math.sqrt(T));
+  const v = S * Math.sqrt(T) * pdf_d1;
+
+  let d, t;
+  if (isCall) {
+    d = Nd1;
+    t = -(S * pdf_d1 * sigma) / (2 * Math.sqrt(T)) - r * K * Math.exp(-r * T) * Nd2;
+  } else {
+    d = Nd1 - 1;
+    t = -(S * pdf_d1 * sigma) / (2 * Math.sqrt(T)) + r * K * Math.exp(-r * T) * N_minus_d2;
+  }
+
+  return { delta: d * mult, gamma: g * mult, vega: v * mult, theta: t * mult };
+}
+
+function calculateAggregate(S) {
+  const agg = { delta: 0, gamma: 0, vega: 0, theta: 0 };
+  for (const pos of state.positions) {
+    const g = calculateGreeks(S, pos);
+    agg.delta += g.delta;
+    agg.gamma += g.gamma;
+    agg.vega += g.vega;
+    agg.theta += g.theta;
+  }
+  return agg;
+}
+
+// ============================================================
+//  D3 CHART SETUP
+// ============================================================
+
+let chart1 = null, chart2 = null;
+
+function createChart(containerId) {
+  const container = document.getElementById(containerId);
+  d3.select(container).selectAll('svg, .chart-legend').remove();
+
+  const w = container.clientWidth - margin.left - margin.right;
+  const h = container.clientHeight - margin.top - margin.bottom;
+
+  const svg = d3.select(container)
+    .append('svg')
+    .attr('width', w + margin.left + margin.right)
+    .attr('height', h + margin.top + margin.bottom)
+    .append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([50, 150]).range([0, w]);
+  const y = d3.scaleLinear().domain([-1, 1]).range([h, 0]);
+
+  svg.append('g')
+    .attr('class', 'grid-x')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).tickSize(-h).tickFormat(''));
+
+  svg.append('g')
+    .attr('class', 'grid-y')
+    .call(d3.axisLeft(y).tickSize(-w).tickFormat(''));
+
+  svg.append('g')
+    .attr('class', 'x-axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x));
+
+  svg.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('x', w / 2)
+    .attr('y', h + margin.bottom - 5)
+    .text('Prix du sous-jacent (S)')
+    .attr('class', 'text-sm font-medium fill-slate-600');
+
+  svg.append('g').attr('class', 'y-axis').call(d3.axisLeft(y));
+
+  svg.append('line')
+    .attr('class', 'zero-line')
+    .attr('x1', 0).attr('x2', w)
+    .attr('y1', y(0)).attr('y2', y(0));
+
+  return { container, width: w, height: h, svg, x, y };
+}
+
+function initCharts() {
+  chart1 = createChart('chart-individual');
+  chart2 = createChart('chart-aggregate');
+}
+
+// ============================================================
+//  CHART 1: INDIVIDUAL LEGS
+// ============================================================
+
+function updateChartIndividual() {
+  if (!chart1) return;
+  const greek = state.selectedGreek;
+  const { svg, width, height, x, y } = chart1;
+  const meta = greekMeta[greek];
+
+  // Clear previous data paths + legend
+  svg.selectAll('.position-line').remove();
+  svg.selectAll('.position-line-label').remove();
+  svg.selectAll('.chart1-legend-group').remove();
+  document.querySelectorAll('#chart-individual .chart-legend').forEach(el => el.remove());
+
+  if (state.positions.length === 0) {
+    y.domain([-1, 1]);
+    svg.select('.y-axis').transition().duration(200).call(d3.axisLeft(y));
+    svg.select('.grid-y').transition().duration(200)
+      .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+    svg.select('.zero-line').transition().duration(200)
+      .attr('y1', y(0)).attr('y2', y(0));
+    return;
+  }
+
+  // Build series
+  const series = state.positions.map((pos, i) => {
+    const pts = [];
+    for (let S = 50; S <= 150; S++) {
+      const g = calculateGreeks(S, pos);
+      pts.push({ S, val: g[greek] });
+    }
+    const labelParts = [
+      `#${i + 1}`,
+      pos.isCall ? 'Call' : 'Put',
+      pos.isLong ? 'Long' : 'Short',
+      `K=${pos.K}`,
+      `q=${pos.quantity}`
+    ];
+    return {
+      id: pos.id,
+      label: labelParts.join(' '),
+      color: positionColors[i % positionColors.length],
+      data: pts
+    };
+  });
+
+  // Normalize
+  if (state.normalized) {
+    for (const s of series) {
+      const maxAbs = d3.max(s.data, d => Math.abs(d.val));
+      if (maxAbs > 0) s.data.forEach(d => d.val /= maxAbs);
+    }
+  }
+
+  // Y domain
+  let yMin = 0, yMax = 0;
+  for (const s of series) {
+    const ext = d3.extent(s.data, d => d.val);
+    yMin = Math.min(yMin, ext[0]);
+    yMax = Math.max(yMax, ext[1]);
+  }
+  const pad = Math.max((yMax - yMin) * 0.1, 0.01);
+  y.domain([yMin - pad, yMax + pad]);
+
+  // Update axes
+  svg.select('.grid-y')
+    .transition().duration(200)
+    .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+  svg.select('.y-axis')
+    .transition().duration(200)
+    .call(d3.axisLeft(y));
+  svg.select('.zero-line')
+    .transition().duration(200)
+    .attr('y1', y(0)).attr('y2', y(0));
+
+  // Draw lines
+  const lineGen = d3.line()
+    .x(d => x(d.S))
+    .y(d => y(d.val))
+    .curve(d3.curveMonotoneX);
+
+  svg.selectAll('.position-line')
+    .data(series, d => d.id)
+    .join('path')
+    .attr('class', 'position-line line')
+    .attr('stroke', d => d.color)
+    .attr('d', d => lineGen(d.data));
+
+  // HTML legend overlay
+  const legendDiv = document.createElement('div');
+  legendDiv.className = 'chart-legend';
+  legendDiv.style.maxHeight = '90%';
+  legendDiv.style.overflowY = 'auto';
+  for (const s of series) {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<span class="legend-dot" style="background:${s.color}"></span><span class="legend-label" style="max-width:180px">${s.label}</span>`;
+    legendDiv.appendChild(item);
+  }
+  document.getElementById('chart-individual').appendChild(legendDiv);
+}
+
+// ============================================================
+//  CHART 2: PORTFOLIO AGGREGATE
+// ============================================================
+
+function updateChartAggregate() {
+  if (!chart2) return;
+  const greek = state.selectedGreek;
+  const meta = greekMeta[greek];
+  const { svg, width, height, x, y } = chart2;
+
+  svg.selectAll('.agg-line, .agg-line-label').remove();
+
+  if (state.positions.length === 0) {
+    y.domain([-1, 1]);
+    svg.select('.y-axis').transition().duration(200).call(d3.axisLeft(y));
+    svg.select('.grid-y').transition().duration(200)
+      .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+    svg.select('.zero-line').transition().duration(200)
+      .attr('y1', y(0)).attr('y2', y(0));
+    return;
+  }
+
+  const data = [];
+  for (let S = 50; S <= 150; S++) {
+    const agg = calculateAggregate(S);
+    data.push({ S, val: agg[greek] });
+  }
+
+  const yMin = d3.min(data, d => d.val);
+  const yMax = d3.max(data, d => d.val);
+  const pad = Math.max((yMax - yMin) * 0.1, 0.01);
+  y.domain([yMin - pad, yMax + pad]);
+
+  svg.select('.grid-y')
+    .transition().duration(200)
+    .call(d3.axisLeft(y).tickSize(-width).tickFormat(''));
+  svg.select('.y-axis')
+    .transition().duration(200)
+    .call(d3.axisLeft(y));
+  svg.select('.zero-line')
+    .transition().duration(200)
+    .attr('y1', y(0)).attr('y2', y(0));
+
+  const lineGen = d3.line()
+    .x(d => x(d.S))
+    .y(d => y(d.val))
+    .curve(d3.curveMonotoneX);
+
+  svg.append('path')
+    .attr('class', 'agg-line line')
+    .attr('stroke', meta.color)
+    .attr('stroke-width', 3)
+    .attr('d', lineGen(data));
+}
+
+// ============================================================
+//  PORTFOLIO MANAGEMENT
+// ============================================================
+
+function addPosition() {
+  const f = state.form;
+  const pos = {
+    id: state.nextId++,
+    isCall: f.isCall,
+    isLong: f.isLong,
+    T: f.T,
+    K: f.K,
+    sigma: f.sigma,
+    quantity: f.quantity
+  };
+  state.positions.push(pos);
+  updateAll();
+}
+
+function removePosition(id) {
+  state.positions = state.positions.filter(p => p.id !== id);
+  updateAll();
+}
+
+function clearPortfolio() {
+  state.positions = [];
+  updateAll();
+}
+
+// ============================================================
+//  UI UPDATES
+// ============================================================
+
+function renderPortfolioTable() {
+  const tbody = document.getElementById('portfolio-body');
+  const empty = document.getElementById('portfolio-empty');
+  const table = document.getElementById('portfolio-table');
+  const count = document.getElementById('pos-count');
+
+  tbody.innerHTML = '';
+  const n = state.positions.length;
+  count.textContent = `(${n} position${n > 1 ? 's' : ''})`;
+
+  if (n === 0) {
+    empty.classList.remove('hidden');
+    table.classList.add('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  table.classList.remove('hidden');
+
+  state.positions.forEach((pos, i) => {
+    const color = positionColors[i % positionColors.length];
+    const tr = document.createElement('tr');
+    tr.className = 'position-row';
+    tr.innerHTML = `
+      <td class="px-2 py-1.5"><span class="legend-dot" style="background:${color}"></span></td>
+      <td class="px-2 py-1.5 text-slate-700">${pos.isCall ? 'Call' : 'Put'}</td>
+      <td class="px-2 py-1.5"><span class="text-xs font-medium ${pos.isLong ? 'text-emerald-600' : 'text-red-500'}">${pos.isLong ? 'Long' : 'Short'}</span></td>
+      <td class="px-2 py-1.5 text-slate-700">${pos.K}</td>
+      <td class="px-2 py-1.5 text-slate-700">${pos.T.toFixed(2)}</td>
+      <td class="px-2 py-1.5 text-slate-700">${pos.sigma.toFixed(2)}</td>
+      <td class="px-2 py-1.5 text-right text-slate-700 font-medium">${pos.quantity}</td>
+      <td class="px-2 py-1.5 text-right">
+        <button data-id="${pos.id}" class="btn-remove text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Supprimer</button>
+      </td>
+    `;
+    tr.querySelector('.btn-remove').addEventListener('click', () => removePosition(pos.id));
+    tbody.appendChild(tr);
+  });
+}
+
+function updateChartTitles() {
+  const meta = greekMeta[state.selectedGreek];
+  document.getElementById('title-individual').textContent = `${meta.label} par position`;
+  document.getElementById('title-aggregate').textContent = `${meta.label} net du portefeuille`;
+}
+
+function updateCharts() {
+  updateChartIndividual();
+  updateChartAggregate();
+}
+
+function updateAll() {
+  renderPortfolioTable();
+  updateChartTitles();
+  updateCharts();
+}
+
+// ============================================================
+//  EVENT HANDLERS
+// ============================================================
+
+// --- Call/Put buttons ---
+const btnCall = document.getElementById('btn-call');
+const btnPut = document.getElementById('btn-put');
+
+function setCallPut(isCall) {
+  state.form.isCall = isCall;
+  btnCall.className = 'segment-button' + (isCall ? ' active' : '');
+  btnPut.className = 'segment-button' + (isCall ? '' : ' active');
+  btnCall.setAttribute('aria-pressed', String(isCall));
+  btnPut.setAttribute('aria-pressed', String(!isCall));
+}
+btnCall.addEventListener('click', () => setCallPut(true));
+btnPut.addEventListener('click', () => setCallPut(false));
+
+// --- Long/Short buttons ---
+const btnLong = document.getElementById('btn-long');
+const btnShort = document.getElementById('btn-short');
+
+function setLongShort(isLong) {
+  state.form.isLong = isLong;
+  btnLong.className = 'segment-button' + (isLong ? ' active' : '');
+  btnShort.className = 'segment-button' + (isLong ? '' : ' active');
+  btnLong.setAttribute('aria-pressed', String(isLong));
+  btnShort.setAttribute('aria-pressed', String(!isLong));
+}
+btnLong.addEventListener('click', () => setLongShort(true));
+btnShort.addEventListener('click', () => setLongShort(false));
+
+// --- Form sliders ---
+const formBindings = [
+  { id: 't', key: 'T', fmt: v => Number(v).toFixed(2) },
+  { id: 'k', key: 'K', fmt: v => Number(v).toFixed(0) },
+  { id: 'sigma', key: 'sigma', fmt: v => Number(v).toFixed(2) }
+];
+
+for (const b of formBindings) {
+  const slider = document.getElementById(`slider-${b.id}`);
+  const display = document.getElementById(`val-${b.id}`);
+  slider.addEventListener('input', (e) => {
+    state.form[b.key] = parseFloat(e.target.value);
+    display.textContent = b.fmt(e.target.value);
+  });
+}
+
+// --- r slider (global) ---
+const sliderR = document.getElementById('slider-r');
+const valR = document.getElementById('val-r');
+sliderR.addEventListener('input', (e) => {
+  state.r = parseFloat(e.target.value);
+  valR.textContent = Number(state.r).toFixed(2);
+  updateCharts();
+});
+
+// --- Quantity input ---
+const inputQty = document.getElementById('input-qty');
+inputQty.addEventListener('input', (e) => {
+  state.form.quantity = Math.min(10000, Math.max(1, parseInt(e.target.value) || 1));
+});
+
+// --- Add button ---
+document.getElementById('btn-add').addEventListener('click', addPosition);
+
+// --- Clear button ---
+document.getElementById('btn-clear').addEventListener('click', clearPortfolio);
+
+// --- Enter key on qty input ---
+inputQty.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addPosition();
+});
+
+// --- Normalized toggle ---
+document.getElementById('toggle-norm').addEventListener('change', (e) => {
+  state.normalized = e.target.checked;
+  updateCharts();
+});
+
+// --- Greek selector ---
+const greekColors = { delta: '#6366f1', gamma: '#10b981', vega: '#f59e0b', theta: '#f43f5e' };
+const greekSelBtns = {};
+
+function setSelectedGreek(greek) {
+  state.selectedGreek = greek;
+  for (const [g, btn] of Object.entries(greekSelBtns)) {
+    btn.setAttribute('aria-pressed', String(g === greek));
+    if (g === greek) {
+      btn.style.background = greekColors[g];
+      btn.style.color = 'white';
+      btn.style.borderColor = greekColors[g];
+    } else {
+      btn.style.background = '#1e2139';
+      btn.style.color = '#d0d6f7';
+      btn.style.borderColor = '#3d4263';
+    }
+  }
+  updateAll();
+}
+
+for (const g of ['delta', 'gamma', 'vega', 'theta']) {
+  const btn = document.getElementById(`greeksel-${g}`);
+  greekSelBtns[g] = btn;
+  btn.addEventListener('click', () => setSelectedGreek(g));
+}
+
+// Resizing is managed by the Streamlit component wrapper.
+
+// ============================================================
+//  BOOT
+// ============================================================
+
+initCharts();
+updateAll();
+</script>
+</body>
+</html>

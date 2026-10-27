@@ -7,7 +7,7 @@ from streamlit_option_menu import option_menu
 st.set_page_config(
     layout="wide",
     page_title="Quantitative Finance Portfolio",
-    initial_sidebar_state="auto"
+    initial_sidebar_state="expanded"
 )
 
 # Add project root to path for core logic imports (bot, models, etc.)
@@ -29,6 +29,7 @@ PAGE_ROUTES = {
     "Ant Colony Portfolio": "ant-colony-portfolio",
     "Polymarket Arbitrage": "polymarket-arbitrage",
     "CNR Hedge Transport": "hedgetransport",
+    "Greeks Revision": "greeks",
     "Mon Portefeuille": "mon-portefeuille",
 }
 ROUTE_PAGES = {slug: page for page, slug in PAGE_ROUTES.items()}
@@ -235,7 +236,7 @@ def render_sidebar():
         st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
         st.markdown("---")
         
-        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Ant Colony Portfolio", "Polymarket Arbitrage", "Mon Portefeuille"]
+        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Ant Colony Portfolio", "Polymarket Arbitrage", "Greeks Revision"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -248,7 +249,7 @@ def render_sidebar():
         selected = option_menu(
             menu_title=None,
             options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "diagram-3", "activity", "wallet2"],
+            icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "diagram-3", "activity", "graph-up"],
             # Bootstrap icons, one per page.
             menu_icon="cast",
             default_index=default_idx,
@@ -468,25 +469,6 @@ def render_home():
             
     with col9:
         st.markdown("""
-        <div class="project-card" style="margin-bottom: 0px; border-bottom-left-radius: 0; border-bottom-right-radius: 0;">
-            <h3><i class="bi bi-wallet2"></i> Mon Portefeuille</h3>
-            <p><strong>Tech:</strong> Python, Streamlit, yFinance</p>
-            <p>Portfolio tracker. Live price tracking and performance calculations.</p>
-            <hr>
-        </div>
-        """, unsafe_allow_html=True)
-        if st.button("Voir le Projet", key="btn_portfolio", use_container_width=True):
-            st.session_state.pop("main_menu", None)
-            st.session_state.current_page = "Mon Portefeuille"
-            _set_query_page("Mon Portefeuille")
-            st.rerun()
-    
-    st.markdown("---")
-    
-    # Metaheuristic stock-selection project.
-    aco_column, _, _ = st.columns(3)
-    with aco_column:
-        st.markdown("""
         <div class="project-card" style="margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;">
             <h3><i class="bi bi-diagram-3"></i> Ant Colony Portfolio</h3>
             <p><strong>Tech :</strong> Python, NumPy, Yahoo Finance, Euronext</p>
@@ -502,6 +484,27 @@ def render_home():
             st.session_state.pop("main_menu", None)
             st.session_state.current_page = "Ant Colony Portfolio"
             _set_query_page("Ant Colony Portfolio")
+            st.rerun()
+
+    st.markdown("---")
+
+    greeks_column, _, _ = st.columns(3)
+    with greeks_column:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;">
+            <h3><i class="bi bi-graph-up"></i> Greeks Revision</h3>
+            <p><strong>Tech :</strong> Black–Scholes, JavaScript, D3.js, Streamlit</p>
+            <p>Révision interactive des sensibilités d’options : Delta, Gamma,
+            Vega et Theta selon le prix du sous-jacent.</p>
+            <p><strong>À explorer :</strong> calls et puts, positions longues ou
+            courtes, portefeuille multi-legs et exposition nette agrégée.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_greeks", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Greeks Revision"
+            _set_query_page("Greeks Revision")
             st.rerun()
 
     st.markdown("---")
@@ -604,6 +607,12 @@ if __name__ == "__main__":
             app_cnr_hedge.render()
         except Exception as e:
             st.error(f"Could not load the CNR Hedge Transport app: {str(e)}")
+    elif st.session_state.current_page == "Greeks Revision":
+        _render_nav_sidebar("Greeks Revision")
+        apply_home_css()
+        import greeks_revision.app_greeks as app_greeks
+        app_greeks.render()
+
     elif st.session_state.current_page == "Mon Portefeuille":
         _render_nav_sidebar("Mon Portefeuille")
         try:
