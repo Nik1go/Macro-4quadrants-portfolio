@@ -51,3 +51,9 @@ streamlit_app/cnr_hedge_transport/data/*.xlsx
 # Ant colony portfolio: local market-data cache and public package sources.
 streamlit_app/ant_colony/cache/
 !streamlit_app/ant_colony/__init__.py
+
+# Risk: keep the supplied dataset and integration tests deployable.
+!streamlit_app/portfolio_risk/data/
+!streamlit_app/portfolio_risk/data/*.csv
+!streamlit_app/portfolio_risk/data/*.json
+!tests/test_risk_integration.py

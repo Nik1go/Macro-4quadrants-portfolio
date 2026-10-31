@@ -1,0 +1,17 @@
+{
+  "source": "Yahoo Finance chart API (query1.finance.yahoo.com/v8/finance/chart), adjusted close (adjclose), daily",
+  "downloaded": "2026-10-09",
+  "start": "2019-01-01",
+  "end": "2026-10-08",
+  "currencies": {
+    "AAPL": "USD",
+    "NVDA": "USD",
+    "MC.PA": "EUR",
+    "SPY": "USD",
+    "TLT": "USD",
+    "GLD": "USD",
+    "VNQ": "USD",
+    "BTC-USD": "USD",
+    "EURUSD=X": "USD"
+  }
+}

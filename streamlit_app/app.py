@@ -6,7 +6,8 @@ from streamlit_option_menu import option_menu
 # --- PAGE CONFIG (only once) ---
 st.set_page_config(
     layout="wide",
-    page_title="Quantitative Finance Portfolio",
+    page_title="Finance Portfolio",
+    page_icon=os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "portfolio-brand.png"),
     initial_sidebar_state="expanded"
 )
 
@@ -17,6 +18,8 @@ if repo_root not in sys.path:
 
 # Existing path logic for local pages
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from portfolio_brand import render_portfolio_brand
 
 PAGE_ROUTES = {
     "Home": "home",
@@ -31,6 +34,7 @@ PAGE_ROUTES = {
     "CNR Hedge Transport": "hedgetransport",
     "Greeks Revision": "greeks",
     "Mon Portefeuille": "mon-portefeuille",
+    "Portfolio Risk Engine": "risk",
 }
 ROUTE_PAGES = {slug: page for page, slug in PAGE_ROUTES.items()}
 ROUTE_ALIASES = {"macro-4-seasons-strategy": "Macro 4 seasons strategy"}
@@ -220,23 +224,43 @@ def apply_home_css():
         </style>
     """, unsafe_allow_html=True)
 
+def _render_project_menu(options, default_idx, on_menu_change):
+    return option_menu(
+        menu_title=None,
+        options=options,
+        icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "diagram-3", "activity", "graph-up", "shield-exclamation"],
+        # Bootstrap icons, one per page.
+        menu_icon="cast",
+        default_index=default_idx,
+        manual_select=default_idx,
+        on_change=on_menu_change,
+        key="main_menu",
+        styles={
+            "container": {
+                "padding": "0!important",
+                "background-color": "#0a0e27",
+                "border-radius": "0"
+            },
+            "icon": {"color": "#00d4ff", "font-size": "20px"},
+            "nav-link": {
+                "color": "#e8e8e8",
+                "font-size": "16px",
+                "text-align": "left",
+                "margin": "5px",
+                "padding": "10px",
+                "--hover-color": "#1e2139",
+            },
+            "nav-link-selected": {"background-color": "#00d4ff", "color": "white"},
+        }
+    )
+
+
 def render_sidebar():
     with st.sidebar:
-        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "images", "logo.png")
-        if os.path.exists(logo_path):
-            import base64
-            with open(logo_path, "rb") as image_file:
-                encoded_string = base64.b64encode(image_file.read()).decode()
-            st.markdown(
-                f'<div style="text-align: center;">\n'
-                f'    <img src="data:image/png;base64,{encoded_string}" style="width: 110px; max-width: 100%; margin-bottom: 20px;">\n'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-        st.markdown("<h3 style='text-align: center; margin-top: -10px;'>Finance Portfolio</h3>", unsafe_allow_html=True)
+        render_portfolio_brand()
         st.markdown("---")
         
-        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Ant Colony Portfolio", "Polymarket Arbitrage", "Greeks Revision"]
+        options = ["Home", "Macro 4 seasons strategy", "Crypto Momentum Trading", "Monte Carlo Gambling", "CNR Hedge Transport", "DCA Investment Strategy", "Pairs trading", "Portfolio Optimizer", "Ant Colony Portfolio", "Polymarket Arbitrage", "Greeks Revision", "Portfolio Risk Engine"]
         try:
             default_idx = options.index(st.session_state.current_page)
         except ValueError:
@@ -246,39 +270,43 @@ def render_sidebar():
             st.session_state.current_page = st.session_state[key]
             _set_query_page(st.session_state.current_page)
             
-        selected = option_menu(
-            menu_title=None,
-            options=options,
-            icons=["house-fill", "safe", "coin", "dice-5", "truck", "hourglass-split", "arrows-expand", "bezier", "diagram-3", "activity", "graph-up"],
-            # Bootstrap icons, one per page.
-            menu_icon="cast",
-            default_index=default_idx,
-            manual_select=default_idx,
-            on_change=on_menu_change,
-            key="main_menu",
-            styles={
-                "container": {
-                    "padding": "0!important", 
-                    "background-color": "#0a0e27",
-                    "border-radius": "0"
-                },
-                "icon": {"color": "#00d4ff", "font-size": "20px"},
-                "nav-link": {
-                    "color": "#e8e8e8",
-                    "font-size": "16px",
-                    "text-align": "left",
-                    "margin": "5px",
-                    "padding": "10px",
-                    "--hover-color": "#1e2139",
-                },
-                "nav-link-selected": {"background-color": "#00d4ff", "color": "white"},
+        if st.session_state.current_page == "Portfolio Risk Engine":
+            if st.button("Retour au portfolio", key="risk_home", use_container_width=True):
+                st.session_state.pop("main_menu", None)
+                st.session_state.current_page = "Home"
+                _set_query_page("Home")
+                st.rerun()
+        if st.session_state.current_page == "Portfolio Risk Engine":
+            # One frame, scoped to this menu; the native details owns its border.
+            st.markdown("""<style>
+            html body section[data-testid="stSidebar"][aria-expanded="false"] {
+                transform:translateX(-100%) !important;
             }
-        )
-        
+            .st-key-risk_project_navigation [data-testid="stExpander"] {
+                border:0 !important;background:transparent !important;padding:0 !important;
+            }
+            .st-key-risk_project_navigation [data-testid="stExpander"] > details {
+                border:1px solid #3d4263 !important;border-radius:12px !important;
+                background:#0a0e27 !important;
+            }
+            .st-key-risk_project_navigation [data-testid="stExpander"] summary {
+                background:transparent !important;padding:12px 14px !important;
+            }
+            .st-key-risk_project_navigation [data-testid="stExpanderDetails"] {
+                border:0 !important;background:#0a0e27 !important;padding:8px !important;
+            }
+            .st-key-risk_project_navigation iframe {border:0 !important;}
+            </style>""", unsafe_allow_html=True)
+            with st.container(key="risk_project_navigation"):
+                with st.expander("Projets du portfolio", expanded=False):
+                    selected = _render_project_menu(options, default_idx, on_menu_change)
+        else:
+            selected = _render_project_menu(options, default_idx, on_menu_change)
+
         st.caption("Developed by Leo")
         if st.session_state.current_page == "Ant Colony Portfolio":
             st.caption("Ce projet utilise des données figées.")
-        elif st.button("Recharger les donnees"):
+        elif st.button("Recharger les donnees", help="Vide le cache de données Streamlit puis relance la page. Les fichiers locaux sont conservés ; le téléchargement dépend du projet."):
             st.cache_data.clear()
             st.rerun()
 
@@ -287,7 +315,7 @@ def render_sidebar():
 def render_home():
     apply_home_css()
     
-    st.title("Quantitative Finance Portfolio")
+    st.title("Finance Portfolio")
     st.markdown("### Quantitative Analyst | Data Engineer")
     st.markdown("---")
     
@@ -488,7 +516,7 @@ def render_home():
 
     st.markdown("---")
 
-    greeks_column, _, _ = st.columns(3)
+    greeks_column, risk_column, _ = st.columns(3)
     with greeks_column:
         st.markdown("""
         <div class="project-card" style="margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;">
@@ -508,6 +536,24 @@ def render_home():
             st.rerun()
 
     st.markdown("---")
+
+    with risk_column:
+        st.markdown("""
+        <div class="project-card" style="margin-bottom:0;border-bottom-left-radius:0;border-bottom-right-radius:0;">
+            <h3><i class="bi bi-shield-exclamation"></i> Portfolio Risk Engine</h3>
+            <p><strong>Tech :</strong> Python, NumPy, SciPy, Plotly</p>
+            <p>Multi-asset portfolio risk in euros: historical, parametric and Monte Carlo
+            VaR &amp; Expected Shortfall.</p>
+            <p><strong>Explore :</strong> rolling backtests, stress scenarios,
+            risk contributions and notebook exports.</p>
+            <hr>
+        </div>
+        """, unsafe_allow_html=True)
+        if st.button("Voir le Projet", key="btn_risk", use_container_width=True):
+            st.session_state.pop("main_menu", None)
+            st.session_state.current_page = "Portfolio Risk Engine"
+            _set_query_page("Portfolio Risk Engine")
+            st.rerun()
 
     # Contact Section
     st.markdown("### Let's Connect")
@@ -612,6 +658,12 @@ if __name__ == "__main__":
         apply_home_css()
         import greeks_revision.app_greeks as app_greeks
         app_greeks.render()
+
+    elif st.session_state.current_page == "Portfolio Risk Engine":
+        _render_nav_sidebar("Portfolio Risk Engine")
+        apply_home_css()
+        import portfolio_risk.integration as app_risk
+        app_risk.render()
 
     elif st.session_state.current_page == "Mon Portefeuille":
         _render_nav_sidebar("Mon Portefeuille")
