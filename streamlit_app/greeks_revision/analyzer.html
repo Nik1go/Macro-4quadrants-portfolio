@@ -31,6 +31,7 @@
     .field-stack { display: grid; gap: 16px; }
     .field label { display: flex; justify-content: space-between; color: #d0d6f7; font-weight: 600; font-size: 12px; margin-bottom: 7px; gap: 8px; }
     .field output { color: var(--cyan); font-variant-numeric: tabular-nums; }
+    .field-help { color: var(--muted); font-size: 12px; margin-top: 6px !important; }
     .segmented { display: flex; gap: 4px; background: #11162f; padding: 4px; border: 1px solid var(--border); border-radius: 8px; }
     .segment-button { flex: 1; border: 0; background: transparent; color: var(--muted); padding: 7px 12px; border-radius: 5px; font-weight: 600; }
     .segment-button:hover { background: #2a2d4a; }
@@ -73,6 +74,13 @@
     .chart .grid-x line, .chart .grid-y line { stroke: var(--border); stroke-opacity: .5; shape-rendering: crispEdges; }
     .grid-x path, .grid-y path { stroke-width: 0; }
     .line { fill: none; stroke-width: 2.5px; }
+    .payoff-position-line { stroke-width: 2px; stroke-dasharray: 6 3; opacity: .85; }
+    .payoff-total-line { stroke: #ef4444; stroke-width: 4.5px; stroke-linejoin: round; }
+    .payoff-panel { margin-top: 20px; }
+    .payoff-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; max-height: 144px; overflow-y: auto; font-size: 12px; }
+    .payoff-legend .legend-label { white-space: normal; }
+    .payoff-legend .legend-total { font-weight: 700; }
+    .payoff-legend .legend-total .legend-dot { height: 5px; }
     .zero-line { stroke: #929dc4; stroke-width: 1.2px; stroke-dasharray: 4 4; }
     .chart-legend { position: absolute; top: 6px; left: 54px; background: #11162fe8; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 11px; }
     .legend-item { display: flex; align-items: center; gap: 6px; }
@@ -99,7 +107,7 @@
   <section class="intro">
     <div class="eyebrow">Options · Black–Scholes · Révision interactive</div>
     <h2>Explorez les sensibilités de votre portefeuille</h2>
-    <p>Combinez des calls et des puts, achetés ou vendus, puis comparez Delta, Gamma, Vega et Theta selon le prix du sous-jacent.</p>
+    <p>Combinez des calls et des puts, achetés ou vendus, puis comparez leurs sensibilités et le payoff de votre stratégie selon le prix du sous-jacent.</p>
   </section>
   <section class="panel">
     <div class="panel-heading"><h2><span class="section-number">01</span>Créer une position</h2></div>
@@ -108,11 +116,13 @@
         <div class="field"><label>Type d’option</label><div class="segmented" role="group" aria-label="Type d’option"><button id="btn-call" class="segment-button active" aria-pressed="true">Call</button><button id="btn-put" class="segment-button" aria-pressed="false">Put</button></div></div>
         <div class="field"><label>Direction</label><div class="segmented" role="group" aria-label="Direction"><button id="btn-long" class="segment-button active" aria-pressed="true">Long</button><button id="btn-short" class="segment-button" aria-pressed="false">Short</button></div></div>
         <div class="field"><label for="input-qty">Quantité (contrats)</label><input type="number" id="input-qty" value="1" min="1" max="10000" step="1"></div>
+        <div class="field"><label for="input-spot">Prix actuel du sous-jacent S₀</label><input type="number" id="input-spot" value="100" min="0.01" max="1000000" step="0.01" required><p class="field-help">Commun à toutes les positions ; sert au calcul des primes.</p></div>
       </div>
       <div class="field-stack">
         <div class="field"><label for="slider-t">Échéance T (années)<output id="val-t" for="slider-t">1.00</output></label><input type="range" id="slider-t" min="0.01" max="3.0" step="0.01" value="1.0"></div>
         <div class="field"><label for="slider-k">Strike K<output id="val-k" for="slider-k">100</output></label><input type="range" id="slider-k" min="50" max="150" step="1" value="100"></div>
         <div class="field"><label for="slider-sigma">Volatilité σ<output id="val-sigma" for="slider-sigma">0.20</output></label><input type="range" id="slider-sigma" min="0.05" max="1.0" step="0.01" value="0.20"></div>
+        <div class="field"><label for="preview-premium">Prime théorique / option<output id="preview-premium" aria-live="polite"></output></label><p class="field-help">Black–Scholes selon S₀, le strike K, T, σ et r.</p></div>
       </div>
     </div>
     <div class="form-footer">
@@ -123,8 +133,8 @@
   <section class="panel">
     <div class="panel-heading"><h2><span class="section-number">02</span>Portefeuille <span id="pos-count" class="position-count" aria-live="polite">(0 position)</span></h2></div>
     <div class="table-wrap" id="portfolio-container">
-      <p id="portfolio-empty" class="empty-state">Aucune position. Ajoutez une option pour tracer ses sensibilités.</p>
-      <table id="portfolio-table" class="hidden" aria-label="Positions du portefeuille"><thead><tr><th></th><th>Type</th><th>Dir.</th><th>Strike</th><th>T</th><th>σ</th><th class="text-right">Qté</th><th></th></tr></thead><tbody id="portfolio-body"></tbody></table>
+      <p id="portfolio-empty" class="empty-state">Aucune position. Ajoutez une option pour tracer ses sensibilités et son payoff.</p>
+      <table id="portfolio-table" class="hidden" aria-label="Positions du portefeuille"><thead><tr><th></th><th>Type</th><th>Dir.</th><th>Strike</th><th>T</th><th>σ</th><th class="text-right">Qté</th><th class="text-right">Prime / option</th><th></th></tr></thead><tbody id="portfolio-body"></tbody></table>
     </div>
   </section>
   <div class="chart-toolbar">
@@ -141,6 +151,14 @@
     <section class="chart-panel"><h3 id="title-aggregate">Delta net du portefeuille</h3><div id="chart-aggregate" class="chart" role="img" aria-labelledby="title-aggregate"></div></section>
   </div>
   <p class="chart-note">Normalisation : chaque courbe individuelle est ramenée à un maximum absolu de 1. Le portefeuille net reste toujours en valeurs brutes.</p>
+  <section class="chart-panel payoff-panel">
+    <h3 id="title-payoff">Payoff net à l’échéance · primes incluses</h3>
+    <div id="chart-payoff" class="chart" role="img" aria-labelledby="title-payoff" aria-describedby="payoff-note"></div>
+    <div id="payoff-legend" class="payoff-legend" role="list" aria-label="Légende du payoff"></div>
+    <p id="premium-summary" class="chart-note" aria-live="polite"></p>
+    <p id="payoff-note" class="chart-note">Gain / perte net = (valeur intrinsèque − prime par option) × quantité × sens (Long + / Short −). Chaque prime théorique Black–Scholes dépend du strike, de T et de σ de la position, ainsi que de S₀ et r communs. Modifier S₀ ou r recalcule toutes les primes. Primes non capitalisées, frais exclus, multiplicateur de contrat : 1. Positions en pointillés colorés ; total en rouge épais, sans normalisation.</p>
+    <p id="payoff-expiry-note" class="chart-note hidden">Échéances différentes : chaque position est évaluée à sa propre échéance, au même prix final du sous-jacent. Le total ne représente pas une valorisation à une date commune.</p>
+  </section>
   <details class="revision-notes"><summary>Repères de révision et conventions</summary><ul><li><strong>Delta Δ</strong> : variation du prix de l’option pour une variation du sous-jacent.</li><li><strong>Gamma Γ</strong> : variation du Delta lorsque le sous-jacent varie.</li><li><strong>Vega ν</strong> : sensibilité à la volatilité, exprimée ici pour une variation de 1,00 (diviser par 100 pour un point de volatilité).</li><li><strong>Theta Θ</strong> : effet du passage du temps, exprimé par année (diviser par 365 pour une approximation quotidienne).</li></ul><p>Options européennes, modèle Black–Scholes sans dividende. Taux et volatilité en décimal : 0,05 = 5 %. Les sensibilités sont multipliées par la quantité et le sens de la position ; multiplicateur de contrat égal à 1.</p></details>
 </div>
 <script>
@@ -175,6 +193,7 @@ const state = {
   positions: [],
   selectedGreek: 'delta',
   normalized: true,
+  spot: 100,
   r: 0.05,
   nextId: 0
 };
@@ -187,10 +206,19 @@ const greekMeta = {
 };
 
 const positionColors = [
-  '#6366f1', '#10b981', '#f59e0b', '#f43f5e',
+  '#6366f1', '#10b981', '#f59e0b', '#38bdf8',
   '#8b5cf6', '#06b6d4', '#ec4899', '#84cc16',
   '#f97316', '#14b8a6'
 ];
+
+// Keep each position's color when other legs are removed; reserve red for the total.
+function positionColor(pos) {
+  return positionColors[pos.id] ?? d3.hsl(40 + (pos.id * 137.508) % 280, .7, .65).formatHex();
+}
+
+function positionLabel(pos, index) {
+  return `#${index + 1} ${pos.isCall ? 'Call' : 'Put'} ${pos.isLong ? 'Long' : 'Short'} K=${pos.K} T=${pos.T.toFixed(2)} q=${pos.quantity}`;
+}
 
 const margin = { top: 20, right: 20, bottom: 35, left: 50 };
 
@@ -239,13 +267,38 @@ function calculateAggregate(S) {
   return agg;
 }
 
+function calculatePayoff(S, pos) {
+  const intrinsic = Math.max(pos.isCall ? S - pos.K : pos.K - S, 0);
+  return (intrinsic - calculatePremium(pos)) * pos.quantity * (pos.isLong ? 1 : -1);
+}
+
+// Positive unit premium, priced separately for each strike at the common entry spot.
+function calculatePremium(pos) {
+  const { isCall, K, T, sigma } = pos;
+  const S0 = state.spot;
+  if (T <= 0) return Math.max(isCall ? S0 - K : K - S0, 0);
+  const discountedStrike = K * Math.exp(-state.r * T);
+  if (sigma <= 0) return Math.max(isCall ? S0 - discountedStrike : discountedStrike - S0, 0);
+  const d1 = (Math.log(S0 / K) + (state.r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
+  const d2 = d1 - sigma * Math.sqrt(T);
+  const premium = isCall
+    ? S0 * cdfNormal(d1) - discountedStrike * cdfNormal(d2)
+    : discountedStrike * cdfNormal(-d2) - S0 * cdfNormal(-d1);
+  return Math.max(0, premium);
+}
+
+const amountFormatter = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function formatAmount(value) {
+  return amountFormatter.format(value);
+}
+
 // ============================================================
 //  D3 CHART SETUP
 // ============================================================
 
-let chart1 = null, chart2 = null;
+let chart1 = null, chart2 = null, chartPayoff = null;
 
-function createChart(containerId) {
+function createChart(containerId, xLabel = 'Prix du sous-jacent (S)') {
   const container = document.getElementById(containerId);
   d3.select(container).selectAll('svg, .chart-legend').remove();
 
@@ -280,7 +333,7 @@ function createChart(containerId) {
     .attr('text-anchor', 'middle')
     .attr('x', w / 2)
     .attr('y', h + margin.bottom - 5)
-    .text('Prix du sous-jacent (S)')
+    .text(xLabel)
     .attr('class', 'text-sm font-medium fill-slate-600');
 
   svg.append('g').attr('class', 'y-axis').call(d3.axisLeft(y));
@@ -296,6 +349,7 @@ function createChart(containerId) {
 function initCharts() {
   chart1 = createChart('chart-individual');
   chart2 = createChart('chart-aggregate');
+  chartPayoff = createChart('chart-payoff', 'Prix du sous-jacent à l’échéance');
 }
 
 // ============================================================
@@ -331,17 +385,10 @@ function updateChartIndividual() {
       const g = calculateGreeks(S, pos);
       pts.push({ S, val: g[greek] });
     }
-    const labelParts = [
-      `#${i + 1}`,
-      pos.isCall ? 'Call' : 'Put',
-      pos.isLong ? 'Long' : 'Short',
-      `K=${pos.K}`,
-      `q=${pos.quantity}`
-    ];
     return {
       id: pos.id,
-      label: labelParts.join(' '),
-      color: positionColors[i % positionColors.length],
+      label: positionLabel(pos, i),
+      color: positionColor(pos),
       data: pts
     };
   });
@@ -458,10 +505,92 @@ function updateChartAggregate() {
 }
 
 // ============================================================
+//  NET PAYOFF: INDIVIDUAL LEGS AND STRATEGY AT EXPIRY, INCLUDING PREMIUMS
+// ============================================================
+
+function updateChartPayoff() {
+  if (!chartPayoff) return;
+  const { svg, width, height, x, y } = chartPayoff;
+  const legend = document.getElementById('payoff-legend');
+  legend.replaceChildren();
+  svg.selectAll('.payoff-position-line, .payoff-total-line, .payoff-empty').remove();
+
+  const hasPositions = state.positions.length > 0;
+  const strikes = state.positions.map(pos => pos.K);
+  const xMax = Math.max(200, state.spot * 2, ...strikes.map(K => K * 1.5));
+  x.domain([0, xMax]);
+
+  // Include every strike exactly so linear interpolation preserves all payoff kinks.
+  const prices = [...new Set([0, xMax, ...d3.range(0, xMax, xMax / 300), ...strikes])]
+    .sort((a, b) => a - b);
+  const series = state.positions.map((pos, i) => ({
+    id: pos.id,
+    label: `${positionLabel(pos, i)} · prime=${formatAmount(calculatePremium(pos))}`,
+    color: positionColor(pos),
+    data: prices.map(S => ({ S, val: calculatePayoff(S, pos) }))
+  }));
+  const total = prices.map((S, i) => ({
+    S, val: d3.sum(series, leg => leg.data[i].val)
+  }));
+
+  let yMin = 0, yMax = 0;
+  for (const data of [...series.map(leg => leg.data), total]) {
+    for (const point of data) {
+      yMin = Math.min(yMin, point.val);
+      yMax = Math.max(yMax, point.val);
+    }
+  }
+  const pad = Math.max((yMax - yMin) * .1, 1);
+  y.domain([yMin - pad, yMax + pad]);
+
+  svg.select('.x-axis').call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(width / 80))));
+  svg.select('.grid-x').call(d3.axisBottom(x).ticks(Math.max(2, Math.floor(width / 80)))
+    .tickSize(-height).tickFormat(''));
+  svg.select('.y-axis').call(d3.axisLeft(y).ticks(6).tickFormat(d3.format('~s')));
+  svg.select('.grid-y').call(d3.axisLeft(y).ticks(6).tickSize(-width).tickFormat(''));
+  svg.select('.zero-line').attr('y1', y(0)).attr('y2', y(0));
+
+  document.getElementById('payoff-expiry-note').classList.toggle('hidden', new Set(state.positions.map(pos => pos.T)).size < 2);
+  const netPremium = state.positions.reduce((sum, pos) => sum + calculatePremium(pos) * pos.quantity * (pos.isLong ? 1 : -1), 0);
+  document.getElementById('premium-summary').textContent = hasPositions
+    ? `Primes nettes de la stratégie : ${formatAmount(Math.abs(netPremium))} ${netPremium < 0 ? 'encaissées' : 'payées'} · S₀ = ${formatAmount(state.spot)}.`
+    : '';
+  if (!hasPositions) {
+    svg.append('text').attr('class', 'payoff-empty')
+      .attr('x', width / 2).attr('y', height / 2 - 16).attr('text-anchor', 'middle')
+      .text('Ajoutez une position.');
+    return;
+  }
+
+  const line = d3.line().x(d => x(d.S)).y(d => y(d.val)).curve(d3.curveLinear);
+  // Thin dashed legs remain visible over the wider red total when curves coincide.
+  svg.append('path').attr('class', 'line payoff-total-line')
+    .attr('stroke', '#ef4444').attr('d', line(total));
+  svg.selectAll('.payoff-position-line').data(series, d => d.id).join('path')
+    .attr('class', 'line payoff-position-line')
+    .attr('stroke', d => d.color).attr('d', d => line(d.data));
+
+  for (const entry of [{ label: 'Total de la stratégie', color: '#ef4444', total: true }, ...series]) {
+    const item = document.createElement('div');
+    item.className = 'legend-item' + (entry.total ? ' legend-total' : '');
+    item.setAttribute('role', 'listitem');
+    const swatch = document.createElement('span');
+    swatch.className = 'legend-dot';
+    swatch.style.background = entry.color;
+    const label = document.createElement('span');
+    label.className = 'legend-label';
+    label.textContent = entry.label;
+    item.append(swatch, label);
+    legend.appendChild(item);
+  }
+}
+
+// ============================================================
 //  PORTFOLIO MANAGEMENT
 // ============================================================
 
 function addPosition() {
+  if (!inputSpot.reportValidity()) return;
   const f = state.form;
   const pos = {
     id: state.nextId++,
@@ -509,7 +638,7 @@ function renderPortfolioTable() {
   table.classList.remove('hidden');
 
   state.positions.forEach((pos, i) => {
-    const color = positionColors[i % positionColors.length];
+    const color = positionColor(pos);
     const tr = document.createElement('tr');
     tr.className = 'position-row';
     tr.innerHTML = `
@@ -520,6 +649,7 @@ function renderPortfolioTable() {
       <td class="px-2 py-1.5 text-slate-700">${pos.T.toFixed(2)}</td>
       <td class="px-2 py-1.5 text-slate-700">${pos.sigma.toFixed(2)}</td>
       <td class="px-2 py-1.5 text-right text-slate-700 font-medium">${pos.quantity}</td>
+      <td class="position-premium text-right">${formatAmount(calculatePremium(pos))}</td>
       <td class="px-2 py-1.5 text-right">
         <button data-id="${pos.id}" class="btn-remove text-red-400 hover:text-red-600 text-xs font-medium transition-colors">Supprimer</button>
       </td>
@@ -538,9 +668,15 @@ function updateChartTitles() {
 function updateCharts() {
   updateChartIndividual();
   updateChartAggregate();
+  updateChartPayoff();
+}
+
+function updatePremiumPreview() {
+  document.getElementById('preview-premium').textContent = formatAmount(calculatePremium(state.form));
 }
 
 function updateAll() {
+  updatePremiumPreview();
   renderPortfolioTable();
   updateChartTitles();
   updateCharts();
@@ -560,6 +696,7 @@ function setCallPut(isCall) {
   btnPut.className = 'segment-button' + (isCall ? '' : ' active');
   btnCall.setAttribute('aria-pressed', String(isCall));
   btnPut.setAttribute('aria-pressed', String(!isCall));
+  updatePremiumPreview();
 }
 btnCall.addEventListener('click', () => setCallPut(true));
 btnPut.addEventListener('click', () => setCallPut(false));
@@ -591,6 +728,7 @@ for (const b of formBindings) {
   slider.addEventListener('input', (e) => {
     state.form[b.key] = parseFloat(e.target.value);
     display.textContent = b.fmt(e.target.value);
+    updatePremiumPreview();
   });
 }
 
@@ -600,7 +738,15 @@ const valR = document.getElementById('val-r');
 sliderR.addEventListener('input', (e) => {
   state.r = parseFloat(e.target.value);
   valR.textContent = Number(state.r).toFixed(2);
-  updateCharts();
+  updateAll();
+});
+
+// --- Common spot for theoretical entry premiums; expiry prices remain the X axis. ---
+const inputSpot = document.getElementById('input-spot');
+inputSpot.addEventListener('input', () => {
+  if (!inputSpot.validity.valid) return;
+  state.spot = inputSpot.valueAsNumber;
+  updateAll();
 });
 
 // --- Quantity input ---

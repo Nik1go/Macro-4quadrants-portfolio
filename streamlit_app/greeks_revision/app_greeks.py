@@ -1,4 +1,4 @@
-"""The supplied Greeks analyzer embedded in the portfolio's native navigation."""
+"""Per-position Greeks and expiry P&L including strike-dependent option premiums."""
 from pathlib import Path
 import re
 
@@ -41,5 +41,5 @@ analyzer = st.components.v2.component(
 
 def render():
     st.title('Greeks Revision')
-    st.caption('Options européennes · Portefeuille multi-legs · Sensibilités individuelles et agrégées')
+    st.caption('Options européennes · Portefeuille multi-legs · Sensibilités et payoff net, primes incluses')
     analyzer(key='greeks_revision_analyzer', height='content')
